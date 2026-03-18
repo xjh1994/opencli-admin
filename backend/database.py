@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -15,6 +16,13 @@ engine = create_async_engine(
     echo=settings.debug,
     connect_args=connect_args,
 )
+
+if settings.is_sqlite:
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(conn, _):
+        # WAL mode: allows concurrent readers + one writer, avoids "database is locked"
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

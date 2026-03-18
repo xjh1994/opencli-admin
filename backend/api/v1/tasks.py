@@ -56,6 +56,8 @@ async def trigger_task(
         parameters=body.parameters,
         priority=body.priority,
     )
+    # Commit before dispatching so the background runner's new session can find the task
+    await db.commit()
 
     from backend.executor import get_executor
     result = await get_executor().dispatch_collection(task.id, body.parameters)

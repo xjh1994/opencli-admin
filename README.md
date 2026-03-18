@@ -24,7 +24,6 @@
 ### 前置要求
 
 - Docker & Docker Compose
-- [opencli](https://github.com/jackwener/opencli) 已安装在宿主机（用于 opencli 渠道）
 
 ### 启动
 
@@ -43,6 +42,19 @@ open http://localhost:8030
 # API 文档
 open http://localhost:8031/docs
 ```
+
+### 登录采集账号（opencli 渠道必须）
+
+opencli 渠道依赖浏览器登录态采集数据，首次使用需通过内置 Chrome 手动登录各平台账号：
+
+```bash
+# 打开浏览器远程操作界面（noVNC）
+open http://localhost:3010
+```
+
+在 noVNC 界面中，打开对应平台网址并完成登录。登录状态会持久化保存在 Chrome 容器的 Profile 中，后续采集任务无需重复登录。
+
+> **需要登录的平台**：小红书、Bilibili、知乎、微博、Twitter/X、LinkedIn、YouTube 等需要账号的渠道。Hacker News、BBC、Reuters、RSS 等公开内容无需登录。
 
 ### 停止
 
