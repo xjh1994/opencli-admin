@@ -1,0 +1,44 @@
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.database import get_db
+from backend.schemas.common import ApiResponse, PaginationMeta
+from backend.schemas.record import CollectedRecordRead
+from backend.services import record_service
+
+router = APIRouter(prefix="/records", tags=["records"])
+
+
+@router.get("", response_model=ApiResponse[list[CollectedRecordRead]])
+async def list_records(
+    source_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    records, total = await record_service.list_records(
+        db,
+        source_id=source_id,
+        task_id=task_id,
+        status=status,
+        page=page,
+        limit=limit,
+    )
+    return ApiResponse.ok(
+        data=[CollectedRecordRead.model_validate(r) for r in records],
+        meta=PaginationMeta(total=total, page=page, limit=limit, pages=max(1, -(-total // limit))),
+    )
+
+
+@router.get("/{record_id}", response_model=ApiResponse[CollectedRecordRead])
+async def get_record(
+    record_id: str, db: AsyncSession = Depends(get_db)
+) -> ApiResponse:
+    record = await record_service.get_record(db, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    return ApiResponse.ok(CollectedRecordRead.model_validate(record))

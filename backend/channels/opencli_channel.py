@@ -1,0 +1,149 @@
+"""OpenCLI channel: invokes opencli CLI tool and parses its output."""
+
+import asyncio
+import csv
+import io
+import json
+import os
+import re
+import shutil
+from typing import Any
+
+import yaml
+
+from backend.channels.base import AbstractChannel, ChannelResult
+from backend.channels.registry import register_channel
+
+
+def _parse_json(raw: str) -> list[dict]:
+    json_start = next((i for i, ch in enumerate(raw) if ch in ("{", "[")), None)
+    if json_start is None:
+        raise ValueError(f"No JSON found in output: {raw[:200]!r}")
+    data = json.loads(raw[json_start:])
+    return data if isinstance(data, list) else [data]
+
+
+def _parse_yaml(raw: str) -> list[dict]:
+    data = yaml.safe_load(raw)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return [data]
+    return [{"content": str(data)}]
+
+
+def _parse_csv(raw: str) -> list[dict]:
+    reader = csv.DictReader(io.StringIO(raw.strip()))
+    return [row for row in reader]
+
+
+def _parse_table(raw: str) -> list[dict]:
+    """Parse cli-table3 Unicode box-drawing table into list of dicts."""
+    lines = raw.splitlines()
+    # Keep only lines that start with │ (data/header rows)
+    data_lines = [l for l in lines if l.strip().startswith("│")]
+    if not data_lines:
+        return [{"content": raw}]
+
+    def split_row(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip().strip("│").split("│")]
+
+    headers = split_row(data_lines[0])
+    rows = []
+    for line in data_lines[1:]:
+        cells = split_row(line)
+        if len(cells) == len(headers):
+            rows.append(dict(zip(headers, cells)))
+    return rows if rows else [{"content": raw}]
+
+
+def _parse_markdown(raw: str) -> list[dict]:
+    """Parse markdown table into list of dicts."""
+    lines = [l.strip() for l in raw.splitlines() if l.strip().startswith("|")]
+    if len(lines) < 2:
+        return [{"content": raw}]
+
+    def split_row(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+    headers = split_row(lines[0])
+    rows = []
+    for line in lines[2:]:  # skip separator line (|---|---|)
+        cells = split_row(line)
+        if len(cells) == len(headers):
+            rows.append(dict(zip(headers, cells)))
+    return rows if rows else [{"content": raw}]
+
+
+_PARSERS = {
+    "json":  _parse_json,
+    "yaml":  _parse_yaml,
+    "csv":   _parse_csv,
+    "table": _parse_table,
+    "md":    _parse_markdown,
+}
+
+
+@register_channel
+class OpenCLIChannel(AbstractChannel):
+    """Collect data by running the opencli CLI tool."""
+
+    channel_type = "opencli"
+
+    async def collect(
+        self, config: dict[str, Any], parameters: dict[str, Any]
+    ) -> ChannelResult:
+        site = config.get("site", "")
+        command = config.get("command", "")
+        args: dict = {**config.get("args", {}), **parameters}
+        output_format = config.get("format", "json")
+
+        cmd = ["opencli", site, command]
+        for key, value in args.items():
+            cmd.extend([f"--{key}", str(value)])
+        cmd.extend(["-f", output_format])
+
+        env = os.environ.copy()
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            return ChannelResult.fail("opencli command timed out after 60s")
+        except FileNotFoundError:
+            return ChannelResult.fail("opencli binary not found in PATH")
+        except Exception as exc:
+            return ChannelResult.fail(f"Failed to run opencli: {exc}")
+
+        if proc.returncode != 0:
+            return ChannelResult.fail(
+                f"opencli exited with code {proc.returncode}: {stderr.decode()}"
+            )
+
+        raw = stdout.decode()
+        parser = _PARSERS.get(output_format, _PARSERS["json"])
+
+        try:
+            items = parser(raw)
+        except Exception as exc:
+            return ChannelResult.fail(
+                f"Failed to parse opencli {output_format} output: {exc}"
+            )
+
+        return ChannelResult.ok(items, site=site, command=command)
+
+    async def validate_config(self, config: dict[str, Any]) -> list[str]:
+        errors: list[str] = []
+        if not config.get("site"):
+            errors.append("'site' is required for opencli channel")
+        if not config.get("command"):
+            errors.append("'command' is required for opencli channel")
+        return errors
+
+    async def health_check(self) -> bool:
+        return shutil.which("opencli") is not None
