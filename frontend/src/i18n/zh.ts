@@ -144,6 +144,7 @@ const zh = {
     quickPreset: '快速预设',
     quickPresetHint: '选择预设后仍可修改参数',
     customOption: '— 自定义 —',
+    noArgs: '该命令无需参数',
     feedUrl: 'Feed URL *',
     maxEntries: '最大条数',
     maxEntriesHint: '默认 50',

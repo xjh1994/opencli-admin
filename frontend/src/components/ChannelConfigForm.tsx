@@ -490,85 +490,238 @@ type Preset = {
   site: string
   command: string
   args: Record<string, string>
+  /** Placeholder/description shown for each arg value input */
+  argHints?: Record<string, string>
 }
 
 const OPENCLI_PRESETS: Preset[] = [
+  // ── 国内 (Chinese, login required) ───────────────────────────────────────
+  // Fields: rank, title, author, likes, url
+  { group: '🇨🇳 国内', label: '小红书 · 搜索', site: 'xiaohongshu', command: 'search',
+    args: { query: '', limit: '20' },
+    argHints: { query: '搜索关键词（必填）', limit: '返回条数（默认 20）' } },
+  // Fields: id, title, type, likes, url
+  { group: '🇨🇳 国内', label: '小红书 · 用户笔记', site: 'xiaohongshu', command: 'user',
+    args: { id: '', limit: '20' },
+    argHints: { id: '用户 ID（从主页 URL 获取，必填）', limit: '返回条数（默认 20）' } },
+  // Fields: rank, title, author, play, danmaku
+  { group: '🇨🇳 国内', label: 'Bilibili · 热门视频', site: 'bilibili', command: 'hot',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: rank, title, author, score, url
+  { group: '🇨🇳 国内', label: 'Bilibili · 排行榜', site: 'bilibili', command: 'ranking',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: id, author, text, likes, url
+  { group: '🇨🇳 国内', label: 'Bilibili · 关注动态', site: 'bilibili', command: 'dynamic',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: rank, title, author, plays, url
+  { group: '🇨🇳 国内', label: 'Bilibili · 收藏夹', site: 'bilibili', command: 'favorite',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: rank, title, plays, likes, date, url
+  { group: '🇨🇳 国内', label: 'Bilibili · 用户视频', site: 'bilibili', command: 'user-videos',
+    args: { uid: '', limit: '20' },
+    argHints: { uid: 'UP 主 UID（从个人主页 URL 获取，必填）', limit: '返回条数（默认 20）' } },
+  // Fields: rank, title, heat, answers, url
+  { group: '🇨🇳 国内', label: '知乎 · 热榜', site: 'zhihu', command: 'hot',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: rank, author, votes, content
+  { group: '🇨🇳 国内', label: '知乎 · 问题回答', site: 'zhihu', command: 'question',
+    args: { id: '', limit: '10' },
+    argHints: { id: '问题 ID（从 URL 中获取，如 /question/123456789）', limit: '返回答案数（默认 10）' } },
+  // Fields: rank, word(→title), hot_value, category, label, url
+  { group: '🇨🇳 国内', label: '微博 · 热搜', site: 'weibo', command: 'hot',
+    args: {},
+    argHints: {} },
+  // Fields: rank, title, score, author, url
+  { group: '🇨🇳 国内', label: 'V2EX · 热门话题', site: 'v2ex', command: 'hot',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: rank, title, score, author, url
+  { group: '🇨🇳 国内', label: 'V2EX · 最新话题', site: 'v2ex', command: 'latest',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: rank, author, text(→content), likes, url
+  { group: '🇨🇳 国内', label: '雪球 · 动态', site: 'xueqiu', command: 'hot',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
+  // Fields: rank, symbol, name(→title), price, changePercent, heat
+  { group: '🇨🇳 国内', label: '雪球 · 热门股票', site: 'xueqiu', command: 'hot-stock',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20，最大 50）' } },
+  // Fields: name(→title), symbol, price, changePercent, marketCap
+  { group: '🇨🇳 国内', label: '雪球 · 股票行情', site: 'xueqiu', command: 'stock',
+    args: { symbol: '601318' },
+    argHints: { symbol: 'A 股代码（如 601318 中国平安）或港股（如 00700 腾讯）' } },
+  // Fields: rank, title, price, mall, comments, url
+  { group: '🇨🇳 国内', label: '什么值得买 · 搜索', site: 'smzdm', command: 'search',
+    args: { keyword: '', limit: '20' },
+    argHints: { keyword: '搜索关键词（必填）', limit: '返回条数（默认 20）' } },
+  // Fields: name(→title), salary, company, area, experience, degree, skills, boss, url
+  { group: '🇨🇳 国内', label: 'Boss直聘 · 职位搜索', site: 'boss', command: 'search',
+    args: { keyword: '', city: '101010100', limit: '20' },
+    argHints: { keyword: '职位名称或关键词（必填，如 "前端工程师"）', city: '城市代码（101010100=北京，101020100=上海，101280100=广州，101280600=深圳）', limit: '返回条数（默认 20）' } },
+  // Fields: rank, name(→title), type, score, price, url
+  { group: '🇨🇳 国内', label: '携程 · 目的地搜索', site: 'ctrip', command: 'search',
+    args: { query: '', limit: '15' },
+    argHints: { query: '目的地或景点名称（必填，如 "三亚"）', limit: '返回条数（默认 15）' } },
+  // Fields: title, author, description(→content), subscribers, episodes, updated
+  { group: '🇨🇳 国内', label: '小宇宙 · 播客信息', site: 'xiaoyuzhou', command: 'podcast',
+    args: { id: '' },
+    argHints: { id: '播客 ID（从 URL 获取，如 5e280fbd418a84a0463d3e3b）' } },
+  // Fields: eid, title, duration, plays, date
+  { group: '🇨🇳 国内', label: '小宇宙 · 单集列表', site: 'xiaoyuzhou', command: 'podcast-episodes',
+    args: { id: '', limit: '15' },
+    argHints: { id: '播客 ID（同上）', limit: '返回集数（最多 15，受 SSR 限制）' } },
+
   // ── Public (no login required) ────────────────────────────────────────────
   // Fields: rank, title, score, author, comments, url
-  { group: '🌐 Public', label: 'Hacker News · top stories',       site: 'hackernews',    command: 'top',              args: { limit: '20' } },
+  { group: '🌐 Public', label: 'Hacker News · top stories', site: 'hackernews', command: 'top',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（1–500）' } },
   // Fields: rank, title, description, url
-  { group: '🌐 Public', label: 'BBC · latest news',               site: 'bbc',           command: 'news',             args: { limit: '20' } },
+  { group: '🌐 Public', label: 'BBC · latest news', site: 'bbc', command: 'news',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
   // Fields: rank, title, date, section, url
-  { group: '🌐 Public', label: 'Reuters · search',                site: 'reuters',       command: 'search',           args: { query: 'technology', limit: '20' } },
-
-  // ── 国内 (Chinese, login required) ───────────────────────────────────────
-  // Fields: rank, title, author, play, danmaku
-  { group: '🇨🇳 国内',  label: 'Bilibili · 热门视频',             site: 'bilibili',      command: 'hot',              args: { limit: '20' } },
-  // Fields: rank, title, author, score, url
-  { group: '🇨🇳 国内',  label: 'Bilibili · 排行榜',               site: 'bilibili',      command: 'ranking',          args: { limit: '20' } },
-  // Fields: id, author, text, likes, url
-  { group: '🇨🇳 国内',  label: 'Bilibili · 关注动态',             site: 'bilibili',      command: 'dynamic',          args: { limit: '20' } },
-  // Fields: rank, title, author, plays, url
-  { group: '🇨🇳 国内',  label: 'Bilibili · 收藏夹',               site: 'bilibili',      command: 'favorite',         args: { limit: '20' } },
-  // Fields: rank, title, plays, likes, date, url
-  { group: '🇨🇳 国内',  label: 'Bilibili · 用户视频',             site: 'bilibili',      command: 'user-videos',      args: { uid: '', limit: '20' } },
-  // Fields: rank, title, heat, answers, url
-  { group: '🇨🇳 国内',  label: '知乎 · 热榜',                     site: 'zhihu',         command: 'hot',              args: { limit: '20' } },
-  // Fields: rank, author, votes, content
-  { group: '🇨🇳 国内',  label: '知乎 · 问题回答',                 site: 'zhihu',         command: 'question',         args: { id: '', limit: '10' } },
-  // Fields: rank, word(→title), hot_value, category, label, url
-  { group: '🇨🇳 国内',  label: '微博 · 热搜',                     site: 'weibo',         command: 'hot',              args: {} },
-  // Fields: rank, title, author, likes, url
-  { group: '🇨🇳 国内',  label: '小红书 · 搜索',                   site: 'xiaohongshu',   command: 'search',           args: { query: '', limit: '20' } },
-  // Fields: id, title, type, likes, url
-  { group: '🇨🇳 国内',  label: '小红书 · 用户笔记',               site: 'xiaohongshu',   command: 'user',             args: { id: '', limit: '20' } },
-  // Fields: rank, title, score, author, url
-  { group: '🇨🇳 国内',  label: 'V2EX · 热门话题',                 site: 'v2ex',          command: 'hot',              args: { limit: '20' } },
-  // Fields: rank, title, score, author, url
-  { group: '🇨🇳 国内',  label: 'V2EX · 最新话题',                 site: 'v2ex',          command: 'latest',           args: { limit: '20' } },
-  // Fields: rank, author, text(→content), likes, url
-  { group: '🇨🇳 国内',  label: '雪球 · 动态',                     site: 'xueqiu',        command: 'hot',              args: { limit: '20' } },
-  // Fields: rank, symbol, name(→title), price, changePercent, heat
-  { group: '🇨🇳 国内',  label: '雪球 · 热门股票',                 site: 'xueqiu',        command: 'hot-stock',        args: { limit: '20' } },
-  // Fields: name(→title), symbol, price, changePercent, marketCap
-  { group: '🇨🇳 国内',  label: '雪球 · 股票行情',                 site: 'xueqiu',        command: 'stock',            args: { symbol: '601318' } },
-  // Fields: rank, title, price, mall, comments, url
-  { group: '🇨🇳 国内',  label: '什么值得买 · 搜索',               site: 'smzdm',         command: 'search',           args: { keyword: '', limit: '20' } },
-  // Fields: name(→title), salary, company, area, experience, degree, skills, boss, url
-  { group: '🇨🇳 国内',  label: 'Boss直聘 · 职位搜索',             site: 'boss',          command: 'search',           args: { keyword: '', city: '101010100', limit: '20' } },
-  // Fields: rank, name(→title), type, score, price, url
-  { group: '🇨🇳 国内',  label: '携程 · 目的地搜索',               site: 'ctrip',         command: 'search',           args: { query: '', limit: '15' } },
-  // Fields: title, author, description(→content), subscribers, episodes, updated
-  { group: '🇨🇳 国内',  label: '小宇宙 · 播客信息',               site: 'xiaoyuzhou',    command: 'podcast',          args: { id: '' } },
-  // Fields: eid, title, duration, plays, date
-  { group: '🇨🇳 国内',  label: '小宇宙 · 单集列表',               site: 'xiaoyuzhou',    command: 'podcast-episodes', args: { id: '', limit: '15' } },
+  { group: '🌐 Public', label: 'Reuters · search', site: 'reuters', command: 'search',
+    args: { query: 'technology', limit: '20' },
+    argHints: { query: '搜索关键词（必填）', limit: '返回条数（默认 20）' } },
 
   // ── Global (login required) ───────────────────────────────────────────────
   // Fields: rank, topic(→title), tweets
-  { group: '🌍 Global', label: 'Twitter/X · trending',            site: 'twitter',       command: 'trending',         args: {} },
+  { group: '🌍 Global', label: 'Twitter/X · trending', site: 'twitter', command: 'trending',
+    args: {},
+    argHints: {} },
   // Fields: id, author, text(→content), likes, retweets, replies, views, created_at, url
-  { group: '🌍 Global', label: 'Twitter/X · timeline',            site: 'twitter',       command: 'timeline',         args: { limit: '20' } },
+  { group: '🌍 Global', label: 'Twitter/X · timeline', site: 'twitter', command: 'timeline',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
   // Fields: id, author, text(→content), likes, views, url
-  { group: '🌍 Global', label: 'Twitter/X · search',              site: 'twitter',       command: 'search',           args: { query: '', limit: '20' } },
+  { group: '🌍 Global', label: 'Twitter/X · search', site: 'twitter', command: 'search',
+    args: { query: '', limit: '20' },
+    argHints: { query: '搜索关键词，支持运算符（必填，如 "AI lang:en"）', limit: '返回条数（默认 20）' } },
   // Fields: title, subreddit, score, comments, url
-  { group: '🌍 Global', label: 'Twitter/X · bookmarks',           site: 'twitter',       command: 'bookmarks',        args: { limit: '20' } },
+  { group: '🌍 Global', label: 'Twitter/X · bookmarks', site: 'twitter', command: 'bookmarks',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
   // Fields: title, subreddit, author, upvotes, comments, url
-  { group: '🌍 Global', label: 'Reddit · frontpage',              site: 'reddit',        command: 'frontpage',        args: { limit: '20' } },
+  { group: '🌍 Global', label: 'Reddit · frontpage', site: 'reddit', command: 'frontpage',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
   // Fields: rank, title, subreddit, score, comments, url
-  { group: '🌍 Global', label: 'Reddit · hot',                    site: 'reddit',        command: 'hot',              args: { limit: '20' } },
+  { group: '🌍 Global', label: 'Reddit · hot', site: 'reddit', command: 'hot',
+    args: { limit: '20' },
+    argHints: { subreddit: '子版块名称（可选，留空则为全站热门，如 "programming"）', limit: '返回条数（默认 20）' } },
   // Fields: title, subreddit, score, comments, url
-  { group: '🌍 Global', label: 'Reddit · saved posts',            site: 'reddit',        command: 'saved',            args: { limit: '20' } },
+  { group: '🌍 Global', label: 'Reddit · saved posts', site: 'reddit', command: 'saved',
+    args: { limit: '20' },
+    argHints: { limit: '返回条数（默认 20）' } },
   // Fields: rank, title, channel(→author), views, duration, url
-  { group: '🌍 Global', label: 'YouTube · search',                site: 'youtube',       command: 'search',           args: { query: 'technology', limit: '10' } },
+  { group: '🌍 Global', label: 'YouTube · search', site: 'youtube', command: 'search',
+    args: { query: 'technology', limit: '10' },
+    argHints: { query: '搜索关键词（必填）', limit: '返回条数（最多 10）' } },
   // Fields: rank, title, company, location, listed(→published_at), salary, url
-  { group: '🌍 Global', label: 'LinkedIn · job search',           site: 'linkedin',      command: 'search',           args: { query: 'AI engineer', limit: '20' } },
+  { group: '🌍 Global', label: 'LinkedIn · job search', site: 'linkedin', command: 'search',
+    args: { query: 'AI engineer', limit: '20' },
+    argHints: { query: '职位名称或关键词（必填）', limit: '返回条数（默认 20）' } },
   // Fields: symbol, name(→title), price, change, changePercent, open, high, low, volume, marketCap
-  { group: '🌍 Global', label: 'Yahoo Finance · quote',           site: 'yahoo-finance', command: 'quote',            args: { symbol: 'AAPL' } },
+  { group: '🌍 Global', label: 'Yahoo Finance · quote', site: 'yahoo-finance', command: 'quote',
+    args: { symbol: 'AAPL' },
+    argHints: { symbol: '股票代码（如 AAPL、GOOGL、TSLA、SPY）' } },
   // Fields: symbol, name(→title), price, change, changePct, peRatio, eps, marketCap
-  { group: '🌍 Global', label: 'Barchart · stock quote',          site: 'barchart',      command: 'quote',            args: { symbol: 'AAPL' } },
+  { group: '🌍 Global', label: 'Barchart · stock quote', site: 'barchart', command: 'quote',
+    args: { symbol: 'AAPL' },
+    argHints: { symbol: '股票代码（如 AAPL、SPY、QQQ）' } },
 ]
 
 const PRESET_DEFAULT = OPENCLI_PRESETS[0]
+
+// ── Derived lookup structures ─────────────────────────────────────────────────
+
+const SITE_LABELS: Record<string, string> = {
+  xiaohongshu: '小红书', bilibili: 'Bilibili', zhihu: '知乎',
+  weibo: '微博', v2ex: 'V2EX', xueqiu: '雪球',
+  smzdm: '什么值得买', boss: 'Boss直聘', ctrip: '携程', xiaoyuzhou: '小宇宙',
+  hackernews: 'Hacker News', bbc: 'BBC', reuters: 'Reuters',
+  twitter: 'Twitter/X', reddit: 'Reddit', youtube: 'YouTube',
+  linkedin: 'LinkedIn', 'yahoo-finance': 'Yahoo Finance', barchart: 'Barchart',
+}
+
+// site → ordered list of presets
+const COMMANDS_BY_SITE: Record<string, Preset[]> = {}
+for (const p of OPENCLI_PRESETS) {
+  if (!COMMANDS_BY_SITE[p.site]) COMMANDS_BY_SITE[p.site] = []
+  COMMANDS_BY_SITE[p.site].push(p)
+}
+
+// Groups for the site <optgroup> — order matches preset group order
+const SITE_GROUPS = [
+  { label: '🇨🇳 国内', sites: ['xiaohongshu','bilibili','zhihu','weibo','v2ex','xueqiu','smzdm','boss','ctrip','xiaoyuzhou'] },
+  { label: '🌐 Public', sites: ['hackernews','bbc','reuters'] },
+  { label: '🌍 Global', sites: ['twitter','reddit','youtube','linkedin','yahoo-finance','barchart'] },
+]
+
+// Args list with per-key hint text shown as placeholder + description
+function ArgsKVList({
+  pairs,
+  onChange,
+  hints,
+}: {
+  pairs: KVPair[]
+  onChange: (pairs: KVPair[]) => void
+  hints?: Record<string, string>
+}) {
+  const update = (i: number, field: 'key' | 'value', v: string) =>
+    onChange(pairs.map((p, idx) => (idx === i ? { ...p, [field]: v } : p)))
+  const remove = (i: number) => onChange(pairs.filter((_, idx) => idx !== i))
+
+  return (
+    <div className="space-y-2">
+      {pairs.map((p, i) => {
+        const hintText = hints?.[p.key]
+        return (
+          <div key={i} className="space-y-0.5">
+            <div className="flex gap-2 items-center">
+              <input
+                className={`${input} flex-1 font-mono`}
+                value={p.key}
+                onChange={(e) => update(i, 'key', e.target.value)}
+                placeholder="flag"
+              />
+              <input
+                className={`${input} flex-1`}
+                value={p.value}
+                onChange={(e) => update(i, 'value', e.target.value)}
+                placeholder={hintText ?? 'value'}
+              />
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="p-1.5 text-red-400 hover:text-red-600 flex-shrink-0"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+            {hintText && (
+              <p className="text-xs text-gray-400 ml-1">{hintText}</p>
+            )}
+          </div>
+        )
+      })}
+      <button
+        type="button"
+        onClick={() => onChange([...pairs, { key: '', value: '' }])}
+        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 mt-1"
+      >
+        <Plus size={12} /> Add row
+      </button>
+    </div>
+  )
+}
 
 function OpenCLIConfig({
   config,
@@ -580,75 +733,88 @@ function OpenCLIConfig({
   const { t } = useTranslation()
   const [args, setArgs] = useState<KVPair[]>(objToKv(config.args as Record<string, unknown>))
 
-  const update = (patch: Partial<Record<string, unknown>>) => onChange({ ...config, ...patch })
+  const currentSite = (config.site as string) ?? ''
+  const currentCommand = (config.command as string) ?? ''
+  const siteCommands = COMMANDS_BY_SITE[currentSite] ?? []
+  const currentPreset = siteCommands.find((p) => p.command === currentCommand)
+
+  const applyPreset = (preset: Preset) => {
+    const newPairs = objToKv(preset.args)
+    setArgs(newPairs)
+    onChange({ site: preset.site, command: preset.command, args: preset.args, format: config.format ?? 'json' })
+  }
+
+  const onSiteChange = (site: string) => {
+    const cmds = COMMANDS_BY_SITE[site]
+    if (cmds?.length) {
+      applyPreset(cmds[0])
+    } else {
+      onChange({ ...config, site, command: '' })
+    }
+  }
+
+  const onCommandChange = (command: string) => {
+    const preset = siteCommands.find((p) => p.command === command)
+    if (preset) applyPreset(preset)
+  }
 
   const updateArgs = (pairs: KVPair[]) => {
     setArgs(pairs)
-    update({ args: kvToObj(pairs) })
+    onChange({ ...config, args: kvToObj(pairs) })
   }
 
-  const applyPreset = (label: string) => {
-    const preset = OPENCLI_PRESETS.find((p) => p.label === label)
-    if (!preset) return
-    const newPairs = objToKv(preset.args)
-    setArgs(newPairs)
-    onChange({ site: preset.site, command: preset.command, args: preset.args, format: 'json' })
+  // Strip site prefix from label for command option text
+  const commandOptionLabel = (p: Preset) => {
+    const parts = p.label.split(' · ')
+    return parts.length > 1 ? parts.slice(1).join(' · ') : p.command
   }
-
-  // Group presets for <optgroup>
-  const groups = [...new Set(OPENCLI_PRESETS.map((p) => p.group))]
-
-  const currentPreset = OPENCLI_PRESETS.find(
-    (p) => p.site === config.site && p.command === config.command,
-  )
 
   return (
     <div className="space-y-3">
-      {/* Preset picker */}
-      <Field label={t('channelConfig.quickPreset')} hint={t('channelConfig.quickPresetHint')}>
-        <select
-          className={input}
-          value={currentPreset?.label ?? ''}
-          onChange={(e) => applyPreset(e.target.value)}
-        >
-          <option value="">{t('channelConfig.customOption')}</option>
-          {groups.map((g) => (
-            <optgroup key={g} label={g}>
-              {OPENCLI_PRESETS.filter((p) => p.group === g).map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </Field>
-
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('channelConfig.site')}>
-          <TextInput
-            value={(config.site as string) ?? ''}
-            onChange={(v) => update({ site: v })}
-            placeholder="hackernews"
-            required
-          />
+          <select className={input} value={currentSite} onChange={(e) => onSiteChange(e.target.value)}>
+            <option value="">-- 选择平台 --</option>
+            {SITE_GROUPS.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.sites
+                  .filter((s) => COMMANDS_BY_SITE[s])
+                  .map((s) => (
+                    <option key={s} value={s}>{SITE_LABELS[s] ?? s}</option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
         </Field>
         <Field label={t('channelConfig.command')}>
-          <TextInput
-            value={(config.command as string) ?? ''}
-            onChange={(v) => update({ command: v })}
-            placeholder="top"
-            required
-          />
+          <select
+            className={input}
+            value={currentCommand}
+            onChange={(e) => onCommandChange(e.target.value)}
+            disabled={!currentSite || siteCommands.length === 0}
+          >
+            <option value="">-- 选择命令 --</option>
+            {siteCommands.map((p) => (
+              <option key={p.command} value={p.command}>{commandOptionLabel(p)}</option>
+            ))}
+          </select>
         </Field>
       </div>
-      <Field label={t('channelConfig.args')} hint={t('channelConfig.argsHint')}>
-        <KVList pairs={args} onChange={updateArgs} keyPlaceholder="flag" valuePlaceholder="value" />
-      </Field>
+
+      {args.length > 0 && (
+        <Field label={t('channelConfig.args')} hint={t('channelConfig.argsHint')}>
+          <ArgsKVList pairs={args} onChange={updateArgs} hints={currentPreset?.argHints} />
+        </Field>
+      )}
+
+      {args.length === 0 && currentCommand && (
+        <p className="text-xs text-gray-400 italic">{t('channelConfig.noArgs')}</p>
+      )}
+
       <Field label={t('channelConfig.outputFormat')}>
         <SelectInput
           value={(config.format as string) ?? 'json'}
-          onChange={(v) => update({ format: v })}
+          onChange={(v) => onChange({ ...config, format: v })}
           options={[
             { value: 'json',  label: 'JSON' },
             { value: 'table', label: 'Table' },

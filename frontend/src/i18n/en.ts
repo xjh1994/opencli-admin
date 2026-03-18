@@ -146,6 +146,7 @@ const en: Translations = {
     quickPreset: 'Quick Preset',
     quickPresetHint: 'You can still modify fields after selecting a preset',
     customOption: '— Custom —',
+    noArgs: 'This command takes no parameters',
     feedUrl: 'Feed URL *',
     maxEntries: 'Max entries',
     maxEntriesHint: 'Default: 50',
