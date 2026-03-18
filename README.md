@@ -29,7 +29,9 @@
 
 直接复用宿主机已有的 opencli 和 Chrome，适合本地开发。
 
-**前置要求**：Python 3.11+、Node.js 18+
+**前置要求**：Python 3.11+、Node.js 18+、[Playwright MCP Bridge](https://github.com/jackwener/opencli/blob/main/README.zh-CN.md#playwright-mcp-bridge-%E6%89%A9%E5%B1%95%E9%85%8D%E7%BD%AE)
+
+opencli 依赖 Playwright MCP Bridge 驱动浏览器，请按上方文档完成配置后再启动。
 
 ```bash
 # 1. 复制配置文件
