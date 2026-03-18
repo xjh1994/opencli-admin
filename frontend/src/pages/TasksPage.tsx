@@ -73,7 +73,10 @@ export default function TasksPage() {
               key: 'source',
               header: t('tasks.source'),
               render: (row) => (
-                <span className="font-mono text-xs">{row.source_id.slice(0, 12)}…</span>
+                <div>
+                  {row.source_name && <p className="text-sm font-medium">{row.source_name}</p>}
+                  <p className="font-mono text-xs text-gray-400">{row.source_id.slice(0, 8)}…</p>
+                </div>
               ),
             },
             {

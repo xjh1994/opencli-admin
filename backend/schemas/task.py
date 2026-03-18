@@ -14,6 +14,7 @@ class TaskTriggerRequest(BaseModel):
 class CollectionTaskRead(UTCModel):
     id: str
     source_id: str
+    source_name: Optional[str] = None
     trigger_type: str
     parameters: dict[str, Any]
     priority: int

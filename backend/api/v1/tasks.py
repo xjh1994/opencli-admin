@@ -3,7 +3,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from backend.database import get_db
+from backend.models.source import DataSource
 from backend.schemas.common import ApiResponse, PaginationMeta
 from backend.schemas.task import CollectionTaskRead, TaskRunRead, TaskTriggerRequest
 from backend.services import source_service, task_service
@@ -22,8 +25,16 @@ async def list_tasks(
     tasks, total = await task_service.list_tasks(
         db, source_id=source_id, status=status, page=page, limit=limit
     )
+    source_ids = list({t.source_id for t in tasks})
+    sources = (await db.execute(select(DataSource).where(DataSource.id.in_(source_ids)))).scalars().all()
+    name_map = {s.id: s.name for s in sources}
+    data = []
+    for t in tasks:
+        item = CollectionTaskRead.model_validate(t)
+        item.source_name = name_map.get(t.source_id)
+        data.append(item)
     return ApiResponse.ok(
-        data=[CollectionTaskRead.model_validate(t) for t in tasks],
+        data=data,
         meta=PaginationMeta(total=total, page=page, limit=limit, pages=max(1, -(-total // limit))),
     )
 

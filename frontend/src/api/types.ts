@@ -28,6 +28,7 @@ export interface DataSource {
 export interface CollectionTask {
   id: string
   source_id: string
+  source_name?: string
   trigger_type: string
   parameters: Record<string, unknown>
   priority: number
