@@ -95,6 +95,29 @@ opencli 渠道依赖浏览器登录态，首次使用需手动登录各平台账
 
 > **需要登录的平台**：小红书、Bilibili、知乎、微博、Twitter/X、LinkedIn、YouTube 等。Hacker News、BBC、Reuters、RSS 等公开内容无需登录。
 
+## 服务端口
+
+| 服务 | 默认端口 | 说明 |
+|------|----------|------|
+| 管理界面 | 8030 | React 前端 |
+| API | 8031 | FastAPI，含 `/docs` Swagger |
+| Chrome noVNC | 3010 | 浏览器操作界面（仅 Docker 模式） |
+| Chrome CDP | 9222 | Chrome DevTools Protocol（仅原生模式） |
+
+**修改端口**：在 `.env` 中设置以下变量，两种启动模式均生效：
+
+```bash
+API_PORT=8031
+FRONTEND_PORT=8030
+NOVNC_PORT=3010      # 仅 Docker 模式
+```
+
+原生模式也可通过命令行参数临时覆盖（优先级高于 `.env`）：
+
+```bash
+./start.sh --api-port 9000 --frontend-port 9001
+```
+
 ## 配置说明
 
 编辑 `.env` 文件：

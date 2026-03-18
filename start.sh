@@ -33,21 +33,21 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-# ── Options ───────────────────────────────────────────────────────────────────
+# ── Options (parsed early for --help; ports resolved after .env load) ─────────
 SKIP_CHROME=false
 SKIP_FRONTEND=false
-API_PORT=8000
-FRONTEND_PORT=5173
-CDP_PORT=9222
+_ARG_API_PORT=""
+_ARG_FRONTEND_PORT=""
+_ARG_CDP_PORT=""
 CHROME_PROFILE="${HOME}/.opencli-admin/chrome-profile"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-chrome)     SKIP_CHROME=true ;;
     --no-frontend)   SKIP_FRONTEND=true ;;
-    --api-port)      API_PORT="$2"; shift ;;
-    --frontend-port) FRONTEND_PORT="$2"; shift ;;
-    --cdp-port)      CDP_PORT="$2"; shift ;;
+    --api-port)      _ARG_API_PORT="$2"; shift ;;
+    --frontend-port) _ARG_FRONTEND_PORT="$2"; shift ;;
+    --cdp-port)      _ARG_CDP_PORT="$2"; shift ;;
     -h|--help)
       echo "Usage: $0 [--no-chrome] [--no-frontend] [--api-port N] [--frontend-port N] [--cdp-port N]"
       exit 0 ;;
@@ -62,15 +62,19 @@ echo "│      opencli-admin  (native)        │"
 echo "└─────────────────────────────────────┘"
 echo ""
 
-# ── Load .env (if present) ────────────────────────────────────────────────────
+# ── Load .env ─────────────────────────────────────────────────────────────────
 if [[ -f .env ]]; then
-  # Export vars from .env, skip comments and blanks
   set -a
   # shellcheck disable=SC1091
   source .env
   set +a
   ok ".env loaded"
 fi
+
+# Priority: CLI arg > .env > hardcoded default
+API_PORT="${_ARG_API_PORT:-${API_PORT:-8031}}"
+FRONTEND_PORT="${_ARG_FRONTEND_PORT:-${FRONTEND_PORT:-8030}}"
+CDP_PORT="${_ARG_CDP_PORT:-${CDP_PORT:-9222}}"
 
 # ── Check Python ──────────────────────────────────────────────────────────────
 PYTHON="${PYTHON:-python3}"

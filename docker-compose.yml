@@ -61,7 +61,7 @@ services:
       # opencli CDP: points to Chrome sidecar container
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
     ports:
-      - "8031:8000"
+      - "${API_PORT:-8031}:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -116,8 +116,8 @@ services:
       args:
         REGISTRY: ${DOCKER_REGISTRY:-}
     ports:
-      - "3010:6080"   # noVNC web UI — open http://localhost:3010 to operate Chrome
-      - "19222:19222" # CDP proxy (socat 0.0.0.0:19222 → 127.0.0.1:9222)
+      - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
+      - "19222:19222"               # CDP proxy (socat 0.0.0.0:19222 → 127.0.0.1:9222)
     volumes:
       - chrome_profile:/home/chrome/.config/chromium
     restart: unless-stopped
@@ -130,7 +130,7 @@ services:
       args:
         REGISTRY: ${DOCKER_REGISTRY:-}
     ports:
-      - "8030:80"
+      - "${FRONTEND_PORT:-8030}:80"
     depends_on:
       api:
         condition: service_healthy
@@ -146,7 +146,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "8030:5173"
+      - "${FRONTEND_PORT:-8030}:5173"
     environment:
       VITE_API_PROXY_TARGET: "http://api:8000"
     depends_on:
