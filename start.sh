@@ -131,30 +131,26 @@ if [[ "$SKIP_CHROME" == false ]]; then
   if CHROME_BIN="$(find_chrome)"; then
     mkdir -p "$CHROME_PROFILE"
     info "Starting Chrome (CDP :$CDP_PORT)  profile: $CHROME_PROFILE"
-    # Wrap in a restart loop — Chrome may exit on its own (e.g. after idle)
-    (
-      trap 'kill $(jobs -p) 2>/dev/null; exit' TERM INT
-      while true; do
-        "$CHROME_BIN" \
-          --remote-debugging-port="$CDP_PORT" \
-          --remote-debugging-address=127.0.0.1 \
-          --remote-allow-origins='*' \
-          --user-data-dir="$CHROME_PROFILE" \
-          --no-first-run \
-          --no-default-browser-check \
-          --window-size=1280,900 \
-          about:blank &>/dev/null
-        sleep 2
-      done
-    ) &
+    CHROME_LOG="/tmp/opencli-chrome.log"
+    # Remove stale profile locks left by previous crashes
+    find "$CHROME_PROFILE" -name 'SingletonLock' -o -name 'SingletonCookie' -o -name 'SingletonSocket' 2>/dev/null | xargs rm -f 2>/dev/null || true
+    nohup "$CHROME_BIN" \
+      --remote-debugging-port="$CDP_PORT" \
+      --remote-debugging-address=127.0.0.1 \
+      --remote-allow-origins='*' \
+      --user-data-dir="$CHROME_PROFILE" \
+      --no-first-run \
+      --no-default-browser-check \
+      --window-size=1280,900 \
+      about:blank >"$CHROME_LOG" 2>&1 &
     CHROME_PID=$!
     PIDS+=("$CHROME_PID")
     sleep 1
     if kill -0 "$CHROME_PID" 2>/dev/null; then
-      ok "Chrome started (pid $CHROME_PID)"
+      ok "Chrome started (pid $CHROME_PID)  log: $CHROME_LOG"
       export OPENCLI_CDP_ENDPOINT="http://127.0.0.1:$CDP_PORT"
     else
-      warn "Chrome failed to start — opencli channel may not work"
+      warn "Chrome failed to start — see $CHROME_LOG"
       CHROME_PID=""
     fi
   else
