@@ -152,9 +152,6 @@ fi
 # Export CDP endpoint for the backend (falls back to default if Chrome not started)
 export OPENCLI_CDP_ENDPOINT="${OPENCLI_CDP_ENDPOINT:-http://127.0.0.1:$CDP_PORT}"
 
-# DEBUG=true triggers init_db() on startup, which creates all tables automatically
-export DEBUG="${DEBUG:-true}"
-
 # ── Start backend API ─────────────────────────────────────────────────────────
 info "Starting backend API on http://localhost:$API_PORT ..."
 uvicorn backend.main:app \

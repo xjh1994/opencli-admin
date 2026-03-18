@@ -19,9 +19,8 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    if settings.debug:
-        await init_db()
+    # Startup — create tables if they don't exist (idempotent, safe to always run)
+    await init_db()
     if settings.task_executor == "local":
         from backend.scheduler import start_scheduler
         start_scheduler()
