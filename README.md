@@ -21,11 +21,11 @@
 
 ## 快速开始
 
-### 前置要求
+两种启动方式，按需选择：
 
-- Docker & Docker Compose
+### 方式一：Docker（推荐）
 
-### 启动
+**前置要求**：Docker & Docker Compose
 
 ```bash
 # 1. 复制配置文件
@@ -43,24 +43,60 @@ open http://localhost:8030
 open http://localhost:8031/docs
 ```
 
-### 登录采集账号（opencli 渠道必须）
+**登录采集账号**（opencli 渠道必须）
 
-opencli 渠道依赖浏览器登录态采集数据，首次使用需通过内置 Chrome 手动登录各平台账号：
+opencli 渠道依赖浏览器登录态，首次使用需通过内置 Chrome 手动登录各平台：
 
 ```bash
 # 打开浏览器远程操作界面（noVNC）
 open http://localhost:3010
 ```
 
-在 noVNC 界面中，打开对应平台网址并完成登录。登录状态会持久化保存在 Chrome 容器的 Profile 中，后续采集任务无需重复登录。
+在 noVNC 界面中打开对应平台网址并完成登录。登录态持久保存在 Chrome 容器 Profile 中，后续无需重复登录。
 
-> **需要登录的平台**：小红书、Bilibili、知乎、微博、Twitter/X、LinkedIn、YouTube 等需要账号的渠道。Hacker News、BBC、Reuters、RSS 等公开内容无需登录。
+> **需要登录**：小红书、Bilibili、知乎、微博、Twitter/X、LinkedIn、YouTube 等。Hacker News、BBC、Reuters、RSS 等公开内容无需登录。
 
-### 停止
+**停止**
 
 ```bash
 docker-compose down
 ```
+
+---
+
+### 方式二：原生 Shell（无需 Docker）
+
+直接复用宿主机已安装的 opencli 和 Chrome，适合本地开发或不想安装 Docker 的场景。
+
+**前置要求**：Python 3.11+、Node.js 18+
+
+```bash
+# 1. 复制配置文件
+cp .env.example .env
+
+# 2. 一键启动（自动创建 venv、安装依赖、运行迁移）
+./start.sh
+```
+
+启动后访问：
+- 管理界面：`http://localhost:5173`
+- API 文档：`http://localhost:8000/docs`
+
+**可选参数**
+
+```bash
+./start.sh --no-chrome      # 不启动 Chrome（RSS/API 渠道不需要）
+./start.sh --no-frontend    # 仅启动后端 API
+./start.sh --cdp-port 9223  # 自定义 Chrome CDP 端口
+```
+
+**登录采集账号**（opencli 渠道必须）
+
+脚本会在后台启动系统 Chrome 并挂载独立 Profile，直接在弹出的 Chrome 窗口中打开对应平台网址并登录即可。登录态持久保存在 `~/.opencli-admin/chrome-profile/`，重启后无需重复登录。
+
+如果系统未安装 Chrome，脚本会跳过并给出提示，RSS / API / Web 爬虫等渠道仍可正常使用。
+
+**停止**：按 `Ctrl+C`，脚本自动关闭所有服务。
 
 ## 配置说明
 
@@ -208,5 +244,6 @@ AI 增强（可选，Anthropic / OpenAI / Ollama）
 │       └── api/         # API 客户端
 ├── chrome/              # Chrome 容器（noVNC + CDP）
 ├── docker-compose.yml
+├── start.sh             # 原生 shell 启动脚本（无需 Docker）
 └── .env.example
 ```
