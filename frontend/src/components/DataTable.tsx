@@ -15,7 +15,7 @@ interface Props<T> {
 export default function DataTable<T>({ columns, data, keyFn, emptyMessage = 'No data' }: Props<T>) {
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
+      <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
             {columns.map((col) => (
@@ -46,7 +46,7 @@ export default function DataTable<T>({ columns, data, keyFn, emptyMessage = 'No 
                 className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
               >
                 {columns.map((col) => (
-                  <td key={col.key} className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                  <td key={col.key} className="px-4 py-3 text-gray-700 dark:text-gray-300 overflow-hidden">
                     {col.render(row)}
                   </td>
                 ))}

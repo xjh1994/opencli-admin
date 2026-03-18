@@ -238,6 +238,7 @@ export default function SourcesPage() {
             {
               key: 'name',
               header: t('common.name'),
+              width: '220px',
               render: (s) => (
                 <div>
                   <p className="font-medium">{s.name}</p>

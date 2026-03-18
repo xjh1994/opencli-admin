@@ -64,6 +64,7 @@ export default function TasksPage() {
             {
               key: 'source',
               header: t('tasks.source'),
+              width: '200px',
               render: (row) => (
                 <div>
                   {row.source_name && <p className="text-sm font-medium">{row.source_name}</p>}
