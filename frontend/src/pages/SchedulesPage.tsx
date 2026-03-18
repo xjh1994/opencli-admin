@@ -243,7 +243,11 @@ function AddScheduleModal({
             </label>
             <select className={inputCls} value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
               <option value="">— 选择数据源 —</option>
-              {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {sources.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}（{formatInTimeZone(new Date(s.created_at), 'Asia/Shanghai', 'MM-dd HH:mm')}）
+                </option>
+              ))}
             </select>
           </div>
 
