@@ -100,12 +100,6 @@ else
   warn "  Install: npm install -g @jackwener/opencli"
 fi
 
-# ── DB migrations ─────────────────────────────────────────────────────────────
-info "Running database migrations..."
-DATABASE_URL="${DATABASE_URL:-sqlite+aiosqlite:///./opencli_admin.db}" \
-  alembic upgrade head
-ok "Database up to date"
-
 # ── Find Chrome binary ────────────────────────────────────────────────────────
 find_chrome() {
   local candidates=(
@@ -157,6 +151,9 @@ fi
 
 # Export CDP endpoint for the backend (falls back to default if Chrome not started)
 export OPENCLI_CDP_ENDPOINT="${OPENCLI_CDP_ENDPOINT:-http://127.0.0.1:$CDP_PORT}"
+
+# DEBUG=true triggers init_db() on startup, which creates all tables automatically
+export DEBUG="${DEBUG:-true}"
 
 # ── Start backend API ─────────────────────────────────────────────────────────
 info "Starting backend API on http://localhost:$API_PORT ..."

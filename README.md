@@ -74,7 +74,7 @@ docker-compose down
 # 1. 复制配置文件
 cp .env.example .env
 
-# 2. 一键启动（自动创建 venv、安装依赖、运行迁移）
+# 2. 一键启动（自动创建 venv、安装依赖，首次启动自动建表）
 ./start.sh
 ```
 
