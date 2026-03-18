@@ -1,0 +1,1 @@
+"""Notifier plugin package."""

@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+*.db
+*.sqlite3
+frontend/
+tests/
+.git/
+.gitignore
+*.md

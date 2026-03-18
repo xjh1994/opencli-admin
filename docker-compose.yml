@@ -1,0 +1,132 @@
+# Shared backend config (DRY)
+x-backend-common: &backend-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    - db_data:/data
+  depends_on:
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-opencli_admin}
+      POSTGRES_USER: ${POSTGRES_USER:-opencli}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opencli_secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-opencli}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Backend API ───────────────────────────────────────────────────────────
+  api:
+    <<: *backend-common
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////data/opencli_admin.db}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      REDIS_URL: redis://redis:6379/0
+      RUN_MIGRATIONS: "true"
+      DEBUG: ${DEBUG:-false}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # opencli CDP: points to Chrome sidecar container
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+    ports:
+      - "8031:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Celery Worker ─────────────────────────────────────────────────────────
+  worker:
+    <<: *backend-common
+    command: celery -A backend.worker.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////data/opencli_admin.db}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      REDIS_URL: redis://redis:6379/0
+      RUN_MIGRATIONS: "false"
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ── Celery Beat (cron scheduler) ──────────────────────────────────────────
+  beat:
+    <<: *backend-common
+    command: celery -A backend.worker.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////data/opencli_admin.db}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      REDIS_URL: redis://redis:6379/0
+      RUN_MIGRATIONS: "false"
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ── Chrome sidecar (noVNC web UI + persistent profile for opencli) ────────
+  chrome:
+    build:
+      context: ./chrome
+      dockerfile: Dockerfile
+    ports:
+      - "3010:6080"   # noVNC web UI — open http://localhost:3010 to operate Chrome
+      - "19222:19222" # CDP proxy (socat 0.0.0.0:19222 → 127.0.0.1:9222)
+    volumes:
+      - chrome_profile:/home/chrome/.config/chromium
+    restart: unless-stopped
+
+  # ── Frontend (nginx + built React) ────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8030:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  postgres_data:
+  db_data:
+  chrome_profile:
