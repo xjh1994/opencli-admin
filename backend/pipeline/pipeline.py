@@ -34,6 +34,7 @@ async def run_pipeline(
     parameters: dict[str, Any] | None = None,
     enable_ai: bool = True,
     enable_notifications: bool = True,
+    agent_config: dict[str, Any] | None = None,
 ) -> PipelineResult:
     """Execute the full collection pipeline for a data source."""
     started = datetime.now(timezone.utc)
@@ -68,10 +69,12 @@ async def run_pipeline(
         )
 
     # Step 4: AI processing (optional)
+    # agent_config takes precedence over source.ai_config
+    effective_ai_config = agent_config or source.ai_config
     ai_count = 0
-    if enable_ai and source.ai_config and new_records:
+    if enable_ai and effective_ai_config and new_records:
         try:
-            await ai_processor.process_with_ai(new_records, source.ai_config)
+            await ai_processor.process_with_ai(new_records, effective_ai_config)
             ai_count = len(new_records)
         except Exception as exc:
             logger.warning("AI processing failed: %s", exc)

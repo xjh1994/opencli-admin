@@ -13,6 +13,7 @@ class CronScheduleCreate(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     is_one_time: bool = False
+    agent_id: Optional[str] = None
 
 
 class CronScheduleUpdate(BaseModel):
@@ -22,11 +23,13 @@ class CronScheduleUpdate(BaseModel):
     parameters: Optional[dict[str, Any]] = None
     enabled: Optional[bool] = None
     is_one_time: Optional[bool] = None
+    agent_id: Optional[str] = None
 
 
 class CronScheduleRead(UTCModel):
     id: str
     source_id: str
+    agent_id: Optional[str] = None
     name: str
     cron_expression: str
     timezone: str

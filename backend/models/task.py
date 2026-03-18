@@ -19,6 +19,9 @@ class CollectionTask(TimestampMixin):
     source_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False
     )
+    agent_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("ai_agents.id", ondelete="SET NULL"), nullable=True
+    )
     # manual | scheduled | webhook
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False, default="manual")
     parameters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

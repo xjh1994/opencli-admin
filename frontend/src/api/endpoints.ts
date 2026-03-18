@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type {
+  AIAgent,
   ApiResponse,
   CollectedRecord,
   CollectionTask,
@@ -45,11 +46,16 @@ export const listTasks = (params?: {
   limit?: number
 }) => apiClient.get<ApiResponse<CollectionTask[]>>('/tasks', { params }).then((r) => r.data)
 
-export const triggerTask = (source_id: string, parameters?: Record<string, unknown>) =>
+export const triggerTask = (
+  source_id: string,
+  parameters?: Record<string, unknown>,
+  agent_id?: string,
+) =>
   apiClient
     .post<ApiResponse<{ task_id: string; celery_task_id: string }>>('/tasks/trigger', {
       source_id,
       parameters: parameters ?? {},
+      ...(agent_id ? { agent_id } : {}),
     })
     .then((r) => r.data.data)
 
@@ -105,6 +111,19 @@ export const listNotificationLogs = (params?: { rule_id?: string }) =>
   apiClient
     .get<ApiResponse<NotificationLog[]>>('/notifications/logs', { params })
     .then((r) => r.data)
+
+// ── Agents ─────────────────────────────────────────────────────────────────────
+export const listAgents = (params?: { enabled?: boolean }) =>
+  apiClient.get<ApiResponse<AIAgent[]>>('/agents', { params }).then((r) => r.data)
+
+export const createAgent = (data: Partial<AIAgent>) =>
+  apiClient.post<ApiResponse<AIAgent>>('/agents', data).then((r) => r.data.data)
+
+export const updateAgent = (id: string, data: Partial<AIAgent>) =>
+  apiClient.patch<ApiResponse<AIAgent>>(`/agents/${id}`, data).then((r) => r.data.data)
+
+export const deleteAgent = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/agents/${id}`).then((r) => r.data)
 
 // ── System ─────────────────────────────────────────────────────────────────────
 export const getHealth = () =>

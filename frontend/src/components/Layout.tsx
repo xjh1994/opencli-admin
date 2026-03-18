@@ -9,6 +9,7 @@ import {
   Clock,
   Bell,
   Server,
+  Bot,
   ChevronLeft,
   ChevronRight,
   Moon,
@@ -28,6 +29,7 @@ export default function Layout() {
     { to: '/tasks',          label: t('nav.tasks'),         icon: ListChecks },
     { to: '/records',        label: t('nav.records'),       icon: FileText },
     { to: '/schedules',      label: t('nav.schedules'),     icon: Clock },
+    { to: '/agents',         label: t('nav.agents'),        icon: Bot },
     { to: '/notifications',  label: t('nav.notifications'), icon: Bell },
     { to: '/workers',        label: t('nav.workers'),       icon: Server },
   ]

@@ -54,7 +54,26 @@ async def run_collection_pipeline(
             return {"error": "Source not found"}
 
         merged_params = {**collection_task.parameters, **parameters}
-        pipeline_result = await run_pipeline(session, source, task_id, merged_params)
+
+        # Load agent config if task has an agent_id
+        agent_config = None
+        if collection_task.agent_id:
+            from backend.models.agent import AIAgent
+            agent_res = await session.execute(
+                select(AIAgent).where(AIAgent.id == collection_task.agent_id)
+            )
+            agent = agent_res.scalar_one_or_none()
+            if agent and agent.enabled:
+                agent_config = {
+                    "processor_type": agent.processor_type,
+                    "model": agent.model,
+                    "prompt_template": agent.prompt_template,
+                    **agent.processor_config,
+                }
+
+        pipeline_result = await run_pipeline(
+            session, source, task_id, merged_params, agent_config=agent_config
+        )
 
         run.finished_at = datetime.now(timezone.utc)
         run.duration_ms = pipeline_result.duration_ms
@@ -93,16 +112,19 @@ async def run_scheduled_pipeline(
     from backend.services import task_service
 
     async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(CronSchedule).where(CronSchedule.id == schedule_id)
+        )
+        schedule = result.scalar_one_or_none()
+        schedule_agent_id = schedule.agent_id if schedule else None
+
         task = await task_service.create_task(
             session,
             source_id=source_id,
             trigger_type="scheduled",
             parameters=parameters,
+            agent_id=schedule_agent_id,
         )
-        result = await session.execute(
-            select(CronSchedule).where(CronSchedule.id == schedule_id)
-        )
-        schedule = result.scalar_one_or_none()
         is_one_time = False
         if schedule:
             schedule.last_run_at = datetime.now(timezone.utc)
