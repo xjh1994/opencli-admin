@@ -7,8 +7,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-import os
-
 from backend.api.v1 import v1_router
 from backend.config import get_settings
 from backend.database import run_migrations
@@ -21,10 +19,7 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Docker: migrations already run by entrypoint.sh (RUN_MIGRATIONS=true).
-    # Native shell: run them here since there is no entrypoint wrapper.
-    if os.environ.get("RUN_MIGRATIONS") != "true":
-        await run_migrations()
+    await run_migrations()
     if settings.task_executor == "local":
         from backend.scheduler import start_scheduler
         start_scheduler()

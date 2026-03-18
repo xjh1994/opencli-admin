@@ -53,7 +53,6 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       REDIS_URL: redis://redis:6379/0
-      RUN_MIGRATIONS: "true"
       DEBUG: ${DEBUG:-false}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
