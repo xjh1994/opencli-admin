@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSchedules, createSchedule, updateSchedule, deleteSchedule } from '../api/endpoints'
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources } from '../api/endpoints'
 import type { CronSchedule } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -23,10 +23,16 @@ function AddScheduleModal({
     source_id: '',
     name: '',
     cron_expression: '0 * * * *',
-    timezone: 'UTC',
+    timezone: 'Asia/Shanghai',
   })
 
-  const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white'
+  const { data: sourcesData } = useQuery({
+    queryKey: ['sources', 'all'],
+    queryFn: () => listSources({ page: 1, limit: 100 }),
+  })
+  const sources = sourcesData?.data ?? []
+
+  const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
 
   return (
@@ -34,11 +40,25 @@ function AddScheduleModal({
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
         <h2 className="text-lg font-semibold mb-4 dark:text-white">{t('schedules.addScheduleTitle')}</h2>
         <div className="space-y-4">
+          <div>
+            <label className={labelCls}>
+              {t('schedules.sourceId')} <span className="text-red-500">*</span>
+            </label>
+            <select
+              className={inputCls}
+              value={form.source_id}
+              onChange={(e) => setForm((f) => ({ ...f, source_id: e.target.value }))}
+            >
+              <option value="">— 选择数据源 —</option>
+              {sources.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
           {[
-            { label: t('schedules.sourceId'), key: 'source_id', placeholder: 'UUID of the data source' },
-            { label: t('common.name'),         key: 'name',        placeholder: 'Daily at 9am' },
+            { label: t('common.name'), key: 'name', placeholder: '每小时' },
             { label: t('schedules.cronExpression'), key: 'cron_expression', placeholder: '0 9 * * *' },
-            { label: t('schedules.timezone'),  key: 'timezone',    placeholder: 'Asia/Shanghai' },
+            { label: t('schedules.timezone'), key: 'timezone', placeholder: 'Asia/Shanghai' },
           ].map(({ label, key, placeholder }) => (
             <div key={key}>
               <label className={labelCls}>{label}</label>
@@ -55,7 +75,11 @@ function AddScheduleModal({
           <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600">
             {t('common.cancel')}
           </button>
-          <button onClick={() => onSave(form)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+          <button
+            onClick={() => onSave(form)}
+            disabled={!form.source_id}
+            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          >
             {t('common.create')}
           </button>
         </div>
@@ -73,6 +97,12 @@ export default function SchedulesPage() {
     queryKey: ['schedules'],
     queryFn: () => listSchedules(),
   })
+
+  const { data: sourcesData } = useQuery({
+    queryKey: ['sources', 'all'],
+    queryFn: () => listSources({ page: 1, limit: 100 }),
+  })
+  const sourceNameMap = Object.fromEntries((sourcesData?.data ?? []).map((s) => [s.id, s.name]))
 
   const createMut = useMutation({
     mutationFn: createSchedule,
@@ -113,7 +143,18 @@ export default function SchedulesPage() {
           keyFn={(s) => s.id}
           emptyMessage={t('schedules.noSchedules')}
           columns={[
-            { key: 'name', header: t('common.name'), render: (s) => <span className="font-medium">{s.name}</span> },
+            { key: 'name', header: t('common.name'), width: '160px', render: (s) => <span className="font-medium">{s.name}</span> },
+            {
+              key: 'source',
+              header: t('tasks.source'),
+              width: '160px',
+              render: (s) => (
+                <div>
+                  {sourceNameMap[s.source_id] && <p className="text-sm font-medium">{sourceNameMap[s.source_id]}</p>}
+                  <p className="font-mono text-xs text-gray-400">{s.source_id.slice(0, 8)}…</p>
+                </div>
+              ),
+            },
             {
               key: 'cron',
               header: t('schedules.cronExpression'),
