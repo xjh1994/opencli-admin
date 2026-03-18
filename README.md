@@ -1,6 +1,6 @@
 # OpenCLI Admin
 
-多渠道数据采集管理平台。通过可视化界面统一管理数据源、定时计划、采集任务和通知规则，底层接入 [opencli](https://github.com/opencli/opencli) CLI 工具采集国内外主流平台内容。
+多渠道数据采集管理平台。通过可视化界面统一管理数据源、定时计划、采集任务和通知规则，底层接入 [opencli](https://github.com/jackwener/opencli) CLI 工具采集国内外主流平台内容。
 
 ## 功能概览
 
@@ -24,7 +24,7 @@
 ### 前置要求
 
 - Docker & Docker Compose
-- [opencli](https://github.com/opencli/opencli) 已安装在宿主机（用于 opencli 渠道）
+- [opencli](https://github.com/jackwener/opencli) 已安装在宿主机（用于 opencli 渠道）
 
 ### 启动
 
