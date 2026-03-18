@@ -381,7 +381,7 @@ function WebScraperConfig({
           placeholder=".athing"
         />
       </Field>
-      <Field label={t('channelConfig.fieldSelectors')} hint={t('channelConfig.fieldSelectorsHint')}>
+      <Field label={t('channelConfig.fieldSelectors')} hint={t('channelConfig.fieldSelectorsHint')} required>
         <KVList
           pairs={selectors}
           onChange={updateSelectors}
@@ -450,6 +450,7 @@ function CLIConfig({
       <Field
         label={t('channelConfig.arguments')}
         hint={t('channelConfig.argumentsHint')}
+        required
       >
         <TextInput
           value={cmdStr}
