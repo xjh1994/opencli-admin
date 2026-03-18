@@ -253,7 +253,7 @@ function AddScheduleModal({
 
           {/* Name */}
           <div>
-            <label className={labelCls}>{t('common.name')}</label>
+            <label className={labelCls}>{t('common.name')} <span className="text-red-500">*</span></label>
             <input
               className={inputCls}
               value={name}
@@ -287,7 +287,7 @@ function AddScheduleModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={!sourceId}
+            disabled={!sourceId || !name.trim()}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {t('common.create')}

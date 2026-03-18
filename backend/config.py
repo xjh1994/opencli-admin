@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite+aiosqlite:///./opencli_admin.db"
 
-    # Redis / Celery
+    # Task execution mode: "local" (in-process asyncio) or "celery" (distributed)
+    task_executor: Literal["local", "celery"] = "local"
+
+    # Redis / Celery — only required when task_executor="celery"
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"

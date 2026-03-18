@@ -8,14 +8,13 @@ x-backend-common: &backend-common
       required: false
   volumes:
     - db_data:/data
-  depends_on:
-    redis:
-      condition: service_healthy
+    - ./backend:/app/backend
   restart: unless-stopped
 
 services:
-  # ── Infrastructure ────────────────────────────────────────────────────────
+  # ── Infrastructure (only needed for TASK_EXECUTOR=celery) ─────────────────
   redis:
+    profiles: ["celery"]
     image: redis:7-alpine
     volumes:
       - redis_data:/data
@@ -68,8 +67,9 @@ services:
       retries: 5
       start_period: 20s
 
-  # ── Celery Worker ─────────────────────────────────────────────────────────
+  # ── Celery Worker (only needed for TASK_EXECUTOR=celery) ─────────────────
   worker:
+    profiles: ["celery"]
     <<: *backend-common
     command: celery -A backend.worker.celery_app worker --loglevel=info --concurrency=4
     environment:
@@ -83,11 +83,14 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
     depends_on:
+      redis:
+        condition: service_healthy
       api:
         condition: service_healthy
 
-  # ── Celery Beat (cron scheduler) ──────────────────────────────────────────
+  # ── Celery Beat (only needed for TASK_EXECUTOR=celery) ───────────────────
   beat:
+    profiles: ["celery"]
     <<: *backend-common
     command: celery -A backend.worker.celery_app beat --loglevel=info
     environment:
@@ -98,6 +101,8 @@ services:
       RUN_MIGRATIONS: "false"
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
     depends_on:
+      redis:
+        condition: service_healthy
       api:
         condition: service_healthy
 
@@ -113,13 +118,31 @@ services:
       - chrome_profile:/home/chrome/.config/chromium
     restart: unless-stopped
 
-  # ── Frontend (nginx + built React) ────────────────────────────────────────
+  # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "8030:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Frontend dev server (Vite HMR) — run with: docker-compose --profile dev up frontend-dev
+  frontend-dev:
+    profiles: ["dev"]
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci --legacy-peer-deps && npm run dev -- --host"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "8030:5173"
+    environment:
+      VITE_API_PROXY_TARGET: "http://api:8000"
     depends_on:
       api:
         condition: service_healthy

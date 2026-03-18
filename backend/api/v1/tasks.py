@@ -57,14 +57,10 @@ async def trigger_task(
         priority=body.priority,
     )
 
-    # Dispatch to Celery
-    from backend.worker.tasks import run_collection
-    celery_result = run_collection.apply_async(
-        kwargs={"task_id": task.id, "parameters": body.parameters},
-        priority=body.priority,
-    )
+    from backend.executor import get_executor
+    result = await get_executor().dispatch_collection(task.id, body.parameters)
 
-    return ApiResponse.ok({"task_id": task.id, "celery_task_id": celery_result.id})
+    return ApiResponse.ok(result)
 
 
 @router.get("/{task_id}", response_model=ApiResponse[CollectionTaskRead])

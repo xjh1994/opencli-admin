@@ -90,29 +90,45 @@ export default function DashboardPage() {
         <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="font-semibold text-gray-900 dark:text-white">{t('dashboard.recentRuns')}</h2>
         </div>
-        <div className="divide-y divide-gray-100 dark:divide-gray-700">
-          {data.recent_runs.length === 0 ? (
-            <p className="px-5 py-8 text-center text-gray-400 text-sm">{t('dashboard.noRuns')}</p>
-          ) : (
-            data.recent_runs.map((run) => (
-              <div key={run.id} className="px-5 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={run.status} />
-                  <span className="text-sm text-gray-600 dark:text-gray-300 font-mono">
-                    {run.task_id.slice(0, 8)}…
-                  </span>
-                </div>
-                <div className="flex items-center gap-6 text-sm text-gray-500">
-                  <span>{run.records_collected} {t('dashboard.records')}</span>
-                  {run.duration_ms && <span>{(run.duration_ms / 1000).toFixed(1)}s</span>}
-                  <span>
+        <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400" style={{ width: '90px' }}>{t('common.status')}</th>
+              <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400" style={{ width: '200px' }}>{t('sources.title')}</th>
+              <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400" style={{ width: '70px' }}>触发方式</th>
+              <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400" style={{ width: '70px' }}>{t('dashboard.records')}</th>
+              <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400" style={{ width: '60px' }}>耗时</th>
+              <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400" style={{ width: '130px' }}>{t('common.createdAt')}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+            {data.recent_runs.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-5 py-8 text-center text-gray-400">{t('dashboard.noRuns')}</td>
+              </tr>
+            ) : (
+              data.recent_runs.map((run) => (
+                <tr key={run.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                  <td className="px-5 py-3 overflow-hidden"><StatusBadge status={run.status} /></td>
+                  <td className="px-5 py-3 overflow-hidden">
+                    <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{run.source_name}</p>
+                    <p className="font-mono text-xs text-gray-400 truncate">{run.task_id.slice(0, 8)}…</p>
+                  </td>
+                  <td className="px-5 py-3 overflow-hidden">
+                    <span className="text-xs text-gray-500">{run.task_trigger_type}</span>
+                  </td>
+                  <td className="px-5 py-3 text-right text-gray-500 overflow-hidden">{run.records_collected}</td>
+                  <td className="px-5 py-3 text-right text-gray-500 overflow-hidden">
+                    {run.duration_ms ? `${(run.duration_ms / 1000).toFixed(1)}s` : '—'}
+                  </td>
+                  <td className="px-5 py-3 text-right text-gray-500 overflow-hidden">
                     {formatInTimeZone(new Date(run.created_at), 'Asia/Shanghai', 'MM-dd HH:mm:ss')}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </Card>
     </div>
   )

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listWorkers, getCeleryStats } from '../api/endpoints'
+import { listWorkers, getCeleryStats, getHealth } from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
@@ -8,23 +8,58 @@ import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import PageHeader from '../components/PageHeader'
 import { formatInTimeZone } from 'date-fns-tz'
+import { Server } from 'lucide-react'
 
 export default function WorkersPage() {
   const { t } = useTranslation()
+
+  const healthQ = useQuery({
+    queryKey: ['health'],
+    queryFn: getHealth,
+    staleTime: 60_000,
+  })
+
+  const isLocalMode = healthQ.data?.task_executor === 'local'
 
   const workersQ = useQuery({
     queryKey: ['workers'],
     queryFn: listWorkers,
     refetchInterval: 10_000,
+    enabled: !isLocalMode,
   })
 
   const statsQ = useQuery({
     queryKey: ['celery-stats'],
     queryFn: getCeleryStats,
     refetchInterval: 10_000,
+    enabled: !isLocalMode,
   })
 
   const workers = workersQ.data?.data ?? []
+
+  if (healthQ.isLoading) return <PageLoader />
+
+  if (isLocalMode) {
+    return (
+      <div>
+        <PageHeader title={t('workers.title')} description={t('workers.description')} />
+        <Card>
+          <div className="flex flex-col items-center py-10 text-center gap-4">
+            <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-full">
+              <Server size={32} className="text-gray-400" />
+            </div>
+            <div>
+              <p className="text-base font-medium text-gray-700 dark:text-gray-200">单机模式运行中</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-sm">
+                当前使用本地 asyncio 执行任务，不支持查看工作节点状态。
+                如需分布式部署，请将 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">TASK_EXECUTOR</code> 改为 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">celery</code> 并启动分布式任务服务。
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div>

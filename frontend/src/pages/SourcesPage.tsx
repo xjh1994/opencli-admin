@@ -206,7 +206,20 @@ export default function SourcesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sources'] }),
   })
 
-  const triggerMut = useMutation({ mutationFn: (id: string) => triggerTask(id) })
+  const [triggerStates, setTriggerStates] = useState<Record<string, 'loading' | 'ok' | 'err'>>({})
+
+  const triggerMut = useMutation({
+    mutationFn: (id: string) => triggerTask(id),
+    onMutate: (id) => setTriggerStates((s) => ({ ...s, [id]: 'loading' })),
+    onSuccess: (_data, id) => {
+      setTriggerStates((s) => ({ ...s, [id]: 'ok' }))
+      setTimeout(() => setTriggerStates((s) => { const n = { ...s }; delete n[id]; return n }), 2000)
+    },
+    onError: (_err, id) => {
+      setTriggerStates((s) => ({ ...s, [id]: 'err' }))
+      setTimeout(() => setTriggerStates((s) => { const n = { ...s }; delete n[id]; return n }), 3000)
+    },
+  })
 
   if (isLoading) return <PageLoader />
   if (error) return <ErrorAlert error={error as Error} onRetry={refetch} />
@@ -286,9 +299,17 @@ export default function SourcesPage() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => triggerMut.mutate(s.id)}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600"
+                    disabled={!!triggerStates[s.id]}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors disabled:cursor-default ${
+                      triggerStates[s.id] === 'ok'  ? 'text-green-600 bg-green-50 dark:bg-green-900/30' :
+                      triggerStates[s.id] === 'err' ? 'text-red-500 bg-red-50 dark:bg-red-900/30' :
+                      'hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600'
+                    }`}
                   >
-                    <Play size={12} /> 触发
+                    {triggerStates[s.id] === 'loading' ? <><span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" /> 触发中</> :
+                     triggerStates[s.id] === 'ok'      ? <>✓ 已触发</> :
+                     triggerStates[s.id] === 'err'     ? <>✗ 失败</> :
+                     <><Play size={12} /> 触发</>}
                   </button>
                   <button
                     onClick={() => toggleMut.mutate({ id: s.id, enabled: !s.enabled })}

@@ -106,6 +106,10 @@ export const listNotificationLogs = (params?: { rule_id?: string }) =>
     .get<ApiResponse<NotificationLog[]>>('/notifications/logs', { params })
     .then((r) => r.data)
 
+// ── System ─────────────────────────────────────────────────────────────────────
+export const getHealth = () =>
+  apiClient.get<{ status: string; version: string; task_executor: string }>('/health').then((r) => r.data)
+
 // ── Workers ────────────────────────────────────────────────────────────────────
 export const listWorkers = () =>
   apiClient.get<ApiResponse<WorkerNode[]>>('/workers').then((r) => r.data)

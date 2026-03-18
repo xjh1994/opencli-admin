@@ -122,6 +122,8 @@ export interface DashboardStats {
   recent_runs: Array<{
     id: string
     task_id: string
+    task_trigger_type: string
+    source_name: string
     status: string
     records_collected: number
     duration_ms?: number

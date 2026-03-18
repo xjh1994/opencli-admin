@@ -57,9 +57,7 @@ async def webhook_trigger(
         priority=5,
     )
 
-    from backend.worker.tasks import run_collection
-    celery_result = run_collection.apply_async(
-        kwargs={"task_id": task.id, "parameters": payload},
-    )
+    from backend.executor import get_executor
+    result = await get_executor().dispatch_collection(task.id, payload)
 
-    return ApiResponse.ok({"task_id": task.id, "celery_task_id": celery_result.id})
+    return ApiResponse.ok(result)

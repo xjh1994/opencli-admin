@@ -49,11 +49,15 @@ async def get_stats(db: AsyncSession = Depends(get_db)) -> ApiResponse:
         )
     ).scalar_one()
 
-    # Recent task runs (last 10)
+    # Recent task runs (last 10) with task + source info
     recent_runs_result = await db.execute(
-        select(TaskRun).order_by(TaskRun.created_at.desc()).limit(10)
+        select(TaskRun, CollectionTask, DataSource)
+        .join(CollectionTask, TaskRun.task_id == CollectionTask.id)
+        .join(DataSource, CollectionTask.source_id == DataSource.id)
+        .order_by(TaskRun.created_at.desc())
+        .limit(10)
     )
-    recent_runs = recent_runs_result.scalars().all()
+    recent_runs = recent_runs_result.all()
 
     return ApiResponse.ok(
         {
@@ -73,14 +77,16 @@ async def get_stats(db: AsyncSession = Depends(get_db)) -> ApiResponse:
             },
             "recent_runs": [
                 {
-                    "id": r.id,
-                    "task_id": r.task_id,
-                    "status": r.status,
-                    "records_collected": r.records_collected,
-                    "duration_ms": r.duration_ms,
-                    "created_at": r.created_at.isoformat(),
+                    "id": run.id,
+                    "task_id": run.task_id,
+                    "task_trigger_type": task.trigger_type,
+                    "source_name": source.name,
+                    "status": run.status,
+                    "records_collected": run.records_collected,
+                    "duration_ms": run.duration_ms,
+                    "created_at": run.created_at.isoformat(),
                 }
-                for r in recent_runs
+                for run, task, source in recent_runs
             ],
         }
     )

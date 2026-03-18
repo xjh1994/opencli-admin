@@ -503,8 +503,8 @@ const OPENCLI_PRESETS: Preset[] = [
   // ── 国内 (Chinese, login required) ───────────────────────────────────────
   // Fields: rank, title, author, likes, url
   { group: '🇨🇳 国内', label: '小红书 · 搜索', site: 'xiaohongshu', command: 'search',
-    args: { query: '', limit: '20' },
-    argHints: { query: '搜索关键词（必填）', limit: '返回条数（默认 20）' } },
+    args: { keyword: '', limit: '20' },
+    argHints: { keyword: '搜索关键词（必填）', limit: '返回条数（默认 20）' } },
   // Fields: id, title, type, likes, url
   { group: '🇨🇳 国内', label: '小红书 · 用户笔记', site: 'xiaohongshu', command: 'user',
     args: { id: '', limit: '20' },

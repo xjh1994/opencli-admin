@@ -22,9 +22,19 @@ async def lifespan(app: FastAPI):
     # Startup
     if settings.debug:
         await init_db()
-    logger.info("OpenCLI Admin started (env=%s)", settings.app_env)
+    if settings.task_executor == "local":
+        from backend.scheduler import start_scheduler
+        start_scheduler()
+    logger.info(
+        "OpenCLI Admin started (env=%s, executor=%s)",
+        settings.app_env,
+        settings.task_executor,
+    )
     yield
-    # Shutdown (no-op for now)
+    # Shutdown
+    if settings.task_executor == "local":
+        from backend.scheduler import stop_scheduler
+        stop_scheduler()
 
 
 def create_app() -> FastAPI:
@@ -61,7 +71,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict:
-        return {"status": "ok", "version": "0.1.0"}
+        return {"status": "ok", "version": "0.1.0", "task_executor": settings.task_executor}
 
     return app
 

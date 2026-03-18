@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from celery import Task
@@ -24,132 +23,20 @@ def _run_async(coro: Any) -> Any:
 @celery_app.task(bind=True, name="run_collection", max_retries=3, default_retry_delay=60)
 def run_collection(self: Task, task_id: str, parameters: dict | None = None) -> dict:
     """Execute the full collection pipeline for a task."""
-    return _run_async(_run_collection_async(self, task_id, parameters or {}))
-
-
-async def _run_collection_async(task: Task, task_id: str, parameters: dict) -> dict:
-    from datetime import datetime, timezone
-
-    from sqlalchemy import select
-
-    from backend.database import AsyncSessionLocal
-    from backend.models.task import CollectionTask, TaskRun
-    from backend.pipeline.pipeline import run_pipeline
-
-    async with AsyncSessionLocal() as session:
-        # Load task + source
-        result = await session.execute(
-            select(CollectionTask).where(CollectionTask.id == task_id)
-        )
-        collection_task = result.scalar_one_or_none()
-        if not collection_task:
-            return {"error": f"Task {task_id} not found"}
-
-        # Create a TaskRun record
-        run = TaskRun(
-            task_id=task_id,
-            status="running",
-            celery_task_id=task.request.id,
-            worker_id=task.request.hostname,
-            started_at=datetime.now(timezone.utc),
-        )
-        session.add(run)
-        await session.flush()
-
-        # Update task status
-        collection_task.status = "running"
-        await session.flush()
-
-        # Load source
-        from backend.models.source import DataSource
-        src_result = await session.execute(
-            select(DataSource).where(DataSource.id == collection_task.source_id)
-        )
-        source = src_result.scalar_one_or_none()
-        if not source:
-            run.status = "failed"
-            run.error_message = "Source not found"
-            collection_task.status = "failed"
-            collection_task.error_message = "Source not found"
-            await session.commit()
-            return {"error": "Source not found"}
-
-        merged_params = {**collection_task.parameters, **parameters}
-        pipeline_result = await run_pipeline(session, source, task_id, merged_params)
-
-        # Update run record
-        run.finished_at = datetime.now(timezone.utc)
-        run.duration_ms = pipeline_result.duration_ms
-        run.records_collected = pipeline_result.stored
-
-        if pipeline_result.success:
-            run.status = "completed"
-            collection_task.status = "completed"
-            collection_task.error_message = None
-        else:
-            run.status = "failed"
-            run.error_message = pipeline_result.error
-            collection_task.status = "failed"
-            collection_task.error_message = pipeline_result.error
-
-        await session.commit()
-
-        return {
-            "task_id": task_id,
-            "run_id": run.id,
-            "success": pipeline_result.success,
-            "collected": pipeline_result.collected,
-            "stored": pipeline_result.stored,
-            "skipped": pipeline_result.skipped,
-            "error": pipeline_result.error,
-        }
+    from backend.pipeline.runner import run_collection_pipeline
+    return _run_async(run_collection_pipeline(
+        task_id,
+        parameters or {},
+        celery_task_id=self.request.id,
+        worker_id=self.request.hostname,
+    ))
 
 
 @celery_app.task(name="run_scheduled_collection")
 def run_scheduled_collection(schedule_id: str, source_id: str, parameters: dict | None = None) -> dict:
     """Create a CollectionTask for a scheduled run, execute pipeline, auto-disable if one-time."""
-    return _run_async(_run_scheduled_async(schedule_id, source_id, parameters or {}))
-
-
-async def _run_scheduled_async(schedule_id: str, source_id: str, parameters: dict) -> dict:
-    from sqlalchemy import select
-
-    from backend.database import AsyncSessionLocal
-    from backend.models.schedule import CronSchedule
-    from backend.services import task_service
-
-    # Create a CollectionTask and record last_run_at
-    async with AsyncSessionLocal() as session:
-        task = await task_service.create_task(
-            session,
-            source_id=source_id,
-            trigger_type="scheduled",
-            parameters=parameters,
-        )
-        result = await session.execute(select(CronSchedule).where(CronSchedule.id == schedule_id))
-        schedule = result.scalar_one_or_none()
-        is_one_time = False
-        if schedule:
-            schedule.last_run_at = datetime.now(timezone.utc)
-            is_one_time = schedule.is_one_time
-        await session.commit()
-        task_id = task.id
-
-    # Run the pipeline via existing task (new event loop inside)
-    from celery.result import EagerResult
-    eager = run_collection.apply(kwargs={"task_id": task_id, "parameters": parameters})
-    outcome = eager.result if isinstance(eager, EagerResult) else {}
-
-    # Auto-disable one-time schedule after execution
-    if is_one_time:
-        async with AsyncSessionLocal() as session:
-            res = await session.execute(select(CronSchedule).where(CronSchedule.id == schedule_id))
-            sched = res.scalar_one_or_none()
-            if sched:
-                sched.enabled = False
-                await session.commit()
-
-    return outcome
+    from backend.pipeline.runner import run_scheduled_pipeline
+    return _run_async(run_scheduled_pipeline(schedule_id, source_id, parameters or {}))
 
 
 @celery_app.task(name="send_notification")
