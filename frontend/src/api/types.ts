@@ -74,6 +74,7 @@ export interface CronSchedule {
   timezone: string
   parameters: Record<string, unknown>
   enabled: boolean
+  is_one_time: boolean
   last_run_at?: string
   next_run_at?: string
   created_at: string

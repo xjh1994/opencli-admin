@@ -67,11 +67,12 @@ def build_beat_schedule() -> dict:
         try:
             schedule_key = f"schedule-{sched['schedule_id']}"
             beat_schedule[schedule_key] = {
-                "task": "run_collection",
+                "task": "run_scheduled_collection",
                 "schedule": parse_cron_expression(sched["cron_expression"]),
                 "args": [],
                 "kwargs": {
-                    "task_id": sched["source_id"],  # Will create a task at runtime
+                    "schedule_id": sched["schedule_id"],
+                    "source_id": sched["source_id"],
                     "parameters": sched["parameters"],
                 },
             }

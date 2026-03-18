@@ -12,6 +12,7 @@ class CronScheduleCreate(BaseModel):
     timezone: str = "UTC"
     parameters: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+    is_one_time: bool = False
 
 
 class CronScheduleUpdate(BaseModel):
@@ -20,6 +21,7 @@ class CronScheduleUpdate(BaseModel):
     timezone: Optional[str] = None
     parameters: Optional[dict[str, Any]] = None
     enabled: Optional[bool] = None
+    is_one_time: Optional[bool] = None
 
 
 class CronScheduleRead(UTCModel):
@@ -30,6 +32,7 @@ class CronScheduleRead(UTCModel):
     timezone: str
     parameters: dict[str, Any]
     enabled: bool
+    is_one_time: bool
     last_run_at: Optional[datetime]
     next_run_at: Optional[datetime]
     created_at: datetime

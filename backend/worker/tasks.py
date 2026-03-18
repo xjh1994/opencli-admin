@@ -105,6 +105,53 @@ async def _run_collection_async(task: Task, task_id: str, parameters: dict) -> d
         }
 
 
+@celery_app.task(name="run_scheduled_collection")
+def run_scheduled_collection(schedule_id: str, source_id: str, parameters: dict | None = None) -> dict:
+    """Create a CollectionTask for a scheduled run, execute pipeline, auto-disable if one-time."""
+    return _run_async(_run_scheduled_async(schedule_id, source_id, parameters or {}))
+
+
+async def _run_scheduled_async(schedule_id: str, source_id: str, parameters: dict) -> dict:
+    from sqlalchemy import select
+
+    from backend.database import AsyncSessionLocal
+    from backend.models.schedule import CronSchedule
+    from backend.services import task_service
+
+    # Create a CollectionTask and record last_run_at
+    async with AsyncSessionLocal() as session:
+        task = await task_service.create_task(
+            session,
+            source_id=source_id,
+            trigger_type="scheduled",
+            parameters=parameters,
+        )
+        result = await session.execute(select(CronSchedule).where(CronSchedule.id == schedule_id))
+        schedule = result.scalar_one_or_none()
+        is_one_time = False
+        if schedule:
+            schedule.last_run_at = datetime.now(timezone.utc)
+            is_one_time = schedule.is_one_time
+        await session.commit()
+        task_id = task.id
+
+    # Run the pipeline via existing task (new event loop inside)
+    from celery.result import EagerResult
+    eager = run_collection.apply(kwargs={"task_id": task_id, "parameters": parameters})
+    outcome = eager.result if isinstance(eager, EagerResult) else {}
+
+    # Auto-disable one-time schedule after execution
+    if is_one_time:
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(select(CronSchedule).where(CronSchedule.id == schedule_id))
+            sched = res.scalar_one_or_none()
+            if sched:
+                sched.enabled = False
+                await session.commit()
+
+    return outcome
+
+
 @celery_app.task(name="send_notification")
 def send_notification(rule_id: str, record_id: str) -> dict:
     """Send a single notification for a rule/record pair."""

@@ -23,6 +23,7 @@ class CronSchedule(TimestampMixin):
     timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="UTC")
     parameters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_one_time: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

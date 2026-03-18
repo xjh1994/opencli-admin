@@ -115,7 +115,7 @@ function CronBuilder({ fields, onChange }: { fields: CronFields; onChange: (f: C
               value={fields.datetime}
               onChange={(e) => set({ datetime: e.target.value })}
             />
-            <p className="text-xs text-amber-600 dark:text-amber-400">执行一次后建议手动禁用</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">执行完成后自动禁用</p>
           </div>
         )}
         {fields.freq === 'minutely' && (
@@ -223,6 +223,7 @@ function AddScheduleModal({
       name,
       cron_expression: buildCron(cronFields),
       timezone,
+      is_one_time: cronFields.freq === 'once',
     })
   }
 
