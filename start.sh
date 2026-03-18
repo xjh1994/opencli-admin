@@ -86,6 +86,7 @@ ok "Python $("$PYTHON" --version)"
 if [[ ! -d .venv ]]; then
   info "Creating Python virtual environment (.venv)..."
   "$PYTHON" -m venv .venv
+  .venv/bin/python -m ensurepip --upgrade 2>/dev/null || true
 fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
