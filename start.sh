@@ -93,7 +93,7 @@ ok "venv active"
 
 # ── Install Python deps ───────────────────────────────────────────────────────
 info "Checking backend dependencies..."
-pip install -q -e . 2>&1 | tail -1
+python -m pip install -q -e . 2>&1 | tail -1
 ok "Backend deps ready"
 
 # ── Check opencli ─────────────────────────────────────────────────────────────
