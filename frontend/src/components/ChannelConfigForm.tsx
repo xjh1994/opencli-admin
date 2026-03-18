@@ -493,32 +493,79 @@ type Preset = {
 }
 
 const OPENCLI_PRESETS: Preset[] = [
-  // Public – no browser login required
-  { group: '🌐 Public', label: 'Hacker News · top stories',   site: 'hackernews',   command: 'top',       args: { limit: '20' } },
-  { group: '🌐 Public', label: 'BBC · latest news',           site: 'bbc',          command: 'news',      args: { limit: '20' } },
-  { group: '🌐 Public', label: 'Reuters · search',            site: 'reuters',      command: 'search',    args: { query: 'technology', limit: '20' } },
-  { group: '🌐 Public', label: 'GitHub · search repos',       site: 'github',       command: 'search',    args: { query: 'trending', limit: '20' } },
-  // Chinese
-  { group: '🇨🇳 国内',  label: 'Bilibili · 热门视频',         site: 'bilibili',     command: 'hot',       args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: 'Bilibili · 动态',             site: 'bilibili',     command: 'dynamic',   args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: 'Bilibili · 排行榜',           site: 'bilibili',     command: 'ranking',   args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: '知乎 · 热榜',                 site: 'zhihu',        command: 'hot',       args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: '微博 · 热搜',                 site: 'weibo',        command: 'hot',       args: {} },
-  { group: '🇨🇳 国内',  label: '小红书 · 推荐流',             site: 'xiaohongshu',  command: 'feed',      args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: '小红书 · 搜索',               site: 'xiaohongshu',  command: 'search',    args: { query: '', limit: '20' } },
-  { group: '🇨🇳 国内',  label: 'V2EX · 热门',                 site: 'v2ex',         command: 'hot',       args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: 'V2EX · 最新',                 site: 'v2ex',         command: 'latest',    args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: '雪球 · 热股',                 site: 'xueqiu',       command: 'hot-stock', args: { limit: '20' } },
-  { group: '🇨🇳 国内',  label: '雪球 · 热帖',                 site: 'xueqiu',       command: 'hot',       args: { limit: '20' } },
-  // International
-  { group: '🌍 Global', label: 'Twitter/X · trending',        site: 'twitter',      command: 'trending',  args: { limit: '20' } },
-  { group: '🌍 Global', label: 'Twitter/X · timeline',        site: 'twitter',      command: 'timeline',  args: { limit: '20' } },
-  { group: '🌍 Global', label: 'Twitter/X · bookmarks',       site: 'twitter',      command: 'bookmarks', args: { limit: '20' } },
-  { group: '🌍 Global', label: 'Reddit · frontpage',          site: 'reddit',       command: 'frontpage', args: { limit: '20' } },
-  { group: '🌍 Global', label: 'Reddit · hot',                site: 'reddit',       command: 'hot',       args: { limit: '20' } },
-  { group: '🌍 Global', label: 'YouTube · search',            site: 'youtube',      command: 'search',    args: { query: 'technology', limit: '10' } },
-  { group: '🌍 Global', label: 'LinkedIn · search',           site: 'linkedin',     command: 'search',    args: { query: 'AI engineer', limit: '20' } },
-  { group: '🌍 Global', label: 'Yahoo Finance · quote',       site: 'yahoo-finance',command: 'quote',     args: { symbol: 'AAPL' } },
+  // ── Public (no login required) ────────────────────────────────────────────
+  // Fields: rank, title, score, author, comments, url
+  { group: '🌐 Public', label: 'Hacker News · top stories',       site: 'hackernews',    command: 'top',              args: { limit: '20' } },
+  // Fields: rank, title, description, url
+  { group: '🌐 Public', label: 'BBC · latest news',               site: 'bbc',           command: 'news',             args: { limit: '20' } },
+  // Fields: rank, title, date, section, url
+  { group: '🌐 Public', label: 'Reuters · search',                site: 'reuters',       command: 'search',           args: { query: 'technology', limit: '20' } },
+
+  // ── 国内 (Chinese, login required) ───────────────────────────────────────
+  // Fields: rank, title, author, play, danmaku
+  { group: '🇨🇳 国内',  label: 'Bilibili · 热门视频',             site: 'bilibili',      command: 'hot',              args: { limit: '20' } },
+  // Fields: rank, title, author, score, url
+  { group: '🇨🇳 国内',  label: 'Bilibili · 排行榜',               site: 'bilibili',      command: 'ranking',          args: { limit: '20' } },
+  // Fields: id, author, text, likes, url
+  { group: '🇨🇳 国内',  label: 'Bilibili · 关注动态',             site: 'bilibili',      command: 'dynamic',          args: { limit: '20' } },
+  // Fields: rank, title, author, plays, url
+  { group: '🇨🇳 国内',  label: 'Bilibili · 收藏夹',               site: 'bilibili',      command: 'favorite',         args: { limit: '20' } },
+  // Fields: rank, title, plays, likes, date, url
+  { group: '🇨🇳 国内',  label: 'Bilibili · 用户视频',             site: 'bilibili',      command: 'user-videos',      args: { uid: '', limit: '20' } },
+  // Fields: rank, title, heat, answers, url
+  { group: '🇨🇳 国内',  label: '知乎 · 热榜',                     site: 'zhihu',         command: 'hot',              args: { limit: '20' } },
+  // Fields: rank, author, votes, content
+  { group: '🇨🇳 国内',  label: '知乎 · 问题回答',                 site: 'zhihu',         command: 'question',         args: { id: '', limit: '10' } },
+  // Fields: rank, word(→title), hot_value, category, label, url
+  { group: '🇨🇳 国内',  label: '微博 · 热搜',                     site: 'weibo',         command: 'hot',              args: {} },
+  // Fields: rank, title, author, likes, url
+  { group: '🇨🇳 国内',  label: '小红书 · 搜索',                   site: 'xiaohongshu',   command: 'search',           args: { query: '', limit: '20' } },
+  // Fields: id, title, type, likes, url
+  { group: '🇨🇳 国内',  label: '小红书 · 用户笔记',               site: 'xiaohongshu',   command: 'user',             args: { id: '', limit: '20' } },
+  // Fields: rank, title, score, author, url
+  { group: '🇨🇳 国内',  label: 'V2EX · 热门话题',                 site: 'v2ex',          command: 'hot',              args: { limit: '20' } },
+  // Fields: rank, title, score, author, url
+  { group: '🇨🇳 国内',  label: 'V2EX · 最新话题',                 site: 'v2ex',          command: 'latest',           args: { limit: '20' } },
+  // Fields: rank, author, text(→content), likes, url
+  { group: '🇨🇳 国内',  label: '雪球 · 动态',                     site: 'xueqiu',        command: 'hot',              args: { limit: '20' } },
+  // Fields: rank, symbol, name(→title), price, changePercent, heat
+  { group: '🇨🇳 国内',  label: '雪球 · 热门股票',                 site: 'xueqiu',        command: 'hot-stock',        args: { limit: '20' } },
+  // Fields: name(→title), symbol, price, changePercent, marketCap
+  { group: '🇨🇳 国内',  label: '雪球 · 股票行情',                 site: 'xueqiu',        command: 'stock',            args: { symbol: '601318' } },
+  // Fields: rank, title, price, mall, comments, url
+  { group: '🇨🇳 国内',  label: '什么值得买 · 搜索',               site: 'smzdm',         command: 'search',           args: { keyword: '', limit: '20' } },
+  // Fields: name(→title), salary, company, area, experience, degree, skills, boss, url
+  { group: '🇨🇳 国内',  label: 'Boss直聘 · 职位搜索',             site: 'boss',          command: 'search',           args: { keyword: '', city: '101010100', limit: '20' } },
+  // Fields: rank, name(→title), type, score, price, url
+  { group: '🇨🇳 国内',  label: '携程 · 目的地搜索',               site: 'ctrip',         command: 'search',           args: { query: '', limit: '15' } },
+  // Fields: title, author, description(→content), subscribers, episodes, updated
+  { group: '🇨🇳 国内',  label: '小宇宙 · 播客信息',               site: 'xiaoyuzhou',    command: 'podcast',          args: { id: '' } },
+  // Fields: eid, title, duration, plays, date
+  { group: '🇨🇳 国内',  label: '小宇宙 · 单集列表',               site: 'xiaoyuzhou',    command: 'podcast-episodes', args: { id: '', limit: '15' } },
+
+  // ── Global (login required) ───────────────────────────────────────────────
+  // Fields: rank, topic(→title), tweets
+  { group: '🌍 Global', label: 'Twitter/X · trending',            site: 'twitter',       command: 'trending',         args: {} },
+  // Fields: id, author, text(→content), likes, retweets, replies, views, created_at, url
+  { group: '🌍 Global', label: 'Twitter/X · timeline',            site: 'twitter',       command: 'timeline',         args: { limit: '20' } },
+  // Fields: id, author, text(→content), likes, views, url
+  { group: '🌍 Global', label: 'Twitter/X · search',              site: 'twitter',       command: 'search',           args: { query: '', limit: '20' } },
+  // Fields: title, subreddit, score, comments, url
+  { group: '🌍 Global', label: 'Twitter/X · bookmarks',           site: 'twitter',       command: 'bookmarks',        args: { limit: '20' } },
+  // Fields: title, subreddit, author, upvotes, comments, url
+  { group: '🌍 Global', label: 'Reddit · frontpage',              site: 'reddit',        command: 'frontpage',        args: { limit: '20' } },
+  // Fields: rank, title, subreddit, score, comments, url
+  { group: '🌍 Global', label: 'Reddit · hot',                    site: 'reddit',        command: 'hot',              args: { limit: '20' } },
+  // Fields: title, subreddit, score, comments, url
+  { group: '🌍 Global', label: 'Reddit · saved posts',            site: 'reddit',        command: 'saved',            args: { limit: '20' } },
+  // Fields: rank, title, channel(→author), views, duration, url
+  { group: '🌍 Global', label: 'YouTube · search',                site: 'youtube',       command: 'search',           args: { query: 'technology', limit: '10' } },
+  // Fields: rank, title, company, location, listed(→published_at), salary, url
+  { group: '🌍 Global', label: 'LinkedIn · job search',           site: 'linkedin',      command: 'search',           args: { query: 'AI engineer', limit: '20' } },
+  // Fields: symbol, name(→title), price, change, changePercent, open, high, low, volume, marketCap
+  { group: '🌍 Global', label: 'Yahoo Finance · quote',           site: 'yahoo-finance', command: 'quote',            args: { symbol: 'AAPL' } },
+  // Fields: symbol, name(→title), price, change, changePct, peRatio, eps, marketCap
+  { group: '🌍 Global', label: 'Barchart · stock quote',          site: 'barchart',      command: 'quote',            args: { symbol: 'AAPL' } },
 ]
 
 const PRESET_DEFAULT = OPENCLI_PRESETS[0]

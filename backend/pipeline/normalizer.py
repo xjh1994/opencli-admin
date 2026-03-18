@@ -4,11 +4,48 @@ import hashlib
 import json
 from typing import Any
 
-_TITLE_KEYS = ("title", "name", "headline", "subject", "word", "keyword", "topic", "tag")
+# Field name aliases per semantic meaning, ordered by priority.
+# Covers all known opencli site output fields.
+_TITLE_KEYS = (
+    "title",     # most sites
+    "name",      # barchart, boss, ctrip, xueqiu hot-stock
+    "word",      # weibo hot
+    "topic",     # twitter trending
+    "headline",  # generic
+    "subject",   # generic email-style
+)
 _URL_KEYS = ("url", "link", "href", "permalink")
-_CONTENT_KEYS = ("content", "body", "text", "summary", "description")
-_AUTHOR_KEYS = ("author", "creator", "user", "by")
-_DATE_KEYS = ("published", "published_at", "date", "created_at", "timestamp")
+_CONTENT_KEYS = (
+    "content",      # bilibili subtitle, reddit read
+    "text",         # twitter timeline/search, xueqiu feed, bilibili dynamic
+    "body",         # generic
+    "summary",      # generic
+    "description",  # bbc, boss, barchart, xiaoyuzhou podcast
+)
+_AUTHOR_KEYS = (
+    "author",   # most sites
+    "channel",  # youtube
+    "creator",  # generic
+    "by",       # hackernews raw API (yaml maps to author, but keep as fallback)
+    "user",     # generic
+)
+_DATE_KEYS = (
+    "created_at",   # twitter, bilibili
+    "published_at", # generic
+    "published",    # generic RSS
+    "date",         # reuters
+    "time",         # v2ex notifications
+    "listed",       # linkedin
+    "updated",      # xiaoyuzhou podcast
+    "timestamp",    # generic
+)
+
+# All known standard field names (lowercase) — used to decide what goes into extra_*
+_STANDARD_KEYS_LOWER: frozenset[str] = frozenset(
+    k.lower()
+    for keys in (_TITLE_KEYS, _URL_KEYS, _CONTENT_KEYS, _AUTHOR_KEYS, _DATE_KEYS)
+    for k in keys
+)
 
 
 def _first(item: dict, keys: tuple[str, ...]) -> str:
@@ -30,10 +67,9 @@ def normalize_item(raw: dict[str, Any], source_id: str) -> tuple[dict[str, Any],
         "published_at": _first(raw, _DATE_KEYS),
         "source_id": source_id,
     }
-    # Carry over any extra fields not captured above
-    standard_keys = {*_TITLE_KEYS, *_URL_KEYS, *_CONTENT_KEYS, *_AUTHOR_KEYS, *_DATE_KEYS}
+    # Carry over any extra fields not captured above (case-insensitive exclusion)
     for k, v in raw.items():
-        if k not in standard_keys:
+        if k.lower() not in _STANDARD_KEYS_LOWER:
             normalized[f"extra_{k}"] = v
 
     # Build dedup hash from stable content; fall back to full raw_data
