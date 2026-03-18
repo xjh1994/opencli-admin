@@ -125,22 +125,28 @@ find_chrome() {
   return 1
 }
 
-# ── Start Chrome in CDP mode ──────────────────────────────────────────────────
+# ── Start Chrome in CDP mode (with auto-restart loop) ────────────────────────
 CHROME_PID=""
 if [[ "$SKIP_CHROME" == false ]]; then
   if CHROME_BIN="$(find_chrome)"; then
     mkdir -p "$CHROME_PROFILE"
     info "Starting Chrome (CDP :$CDP_PORT)  profile: $CHROME_PROFILE"
-    "$CHROME_BIN" \
-      --remote-debugging-port="$CDP_PORT" \
-      --remote-debugging-address=127.0.0.1 \
-      --remote-allow-origins='*' \
-      --user-data-dir="$CHROME_PROFILE" \
-      --no-first-run \
-      --no-default-browser-check \
-      --window-size=1280,900 \
-      about:blank \
-      &>/dev/null &
+    # Wrap in a restart loop — Chrome may exit on its own (e.g. after idle)
+    (
+      trap 'kill $(jobs -p) 2>/dev/null; exit' TERM INT
+      while true; do
+        "$CHROME_BIN" \
+          --remote-debugging-port="$CDP_PORT" \
+          --remote-debugging-address=127.0.0.1 \
+          --remote-allow-origins='*' \
+          --user-data-dir="$CHROME_PROFILE" \
+          --no-first-run \
+          --no-default-browser-check \
+          --window-size=1280,900 \
+          about:blank &>/dev/null
+        sleep 2
+      done
+    ) &
     CHROME_PID=$!
     PIDS+=("$CHROME_PID")
     sleep 1
