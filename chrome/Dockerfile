@@ -1,4 +1,5 @@
-FROM debian:bookworm-slim
+ARG REGISTRY=
+FROM ${REGISTRY}debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium x11vnc xvfb novnc websockify procps nginx \

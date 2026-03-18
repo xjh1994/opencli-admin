@@ -3,6 +3,8 @@ x-backend-common: &backend-common
   build:
     context: .
     dockerfile: Dockerfile
+    args:
+      REGISTRY: ${DOCKER_REGISTRY:-}
   env_file:
     - path: .env
       required: false
@@ -15,7 +17,7 @@ services:
   # ── Infrastructure (only needed for TASK_EXECUTOR=celery) ─────────────────
   redis:
     profiles: ["celery"]
-    image: redis:7-alpine
+    image: ${DOCKER_REGISTRY:-}redis:7-alpine
     volumes:
       - redis_data:/data
     healthcheck:
@@ -26,7 +28,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: ${DOCKER_REGISTRY:-}postgres:16-alpine
     profiles: ["postgres"]
     ports:
       - "5432:5432"
@@ -111,6 +113,8 @@ services:
     build:
       context: ./chrome
       dockerfile: Dockerfile
+      args:
+        REGISTRY: ${DOCKER_REGISTRY:-}
     ports:
       - "3010:6080"   # noVNC web UI — open http://localhost:3010 to operate Chrome
       - "19222:19222" # CDP proxy (socat 0.0.0.0:19222 → 127.0.0.1:9222)
@@ -123,6 +127,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        REGISTRY: ${DOCKER_REGISTRY:-}
     ports:
       - "8030:80"
     depends_on:
@@ -133,7 +139,7 @@ services:
   # ── Frontend dev server (Vite HMR) — run with: docker-compose --profile dev up frontend-dev
   frontend-dev:
     profiles: ["dev"]
-    image: node:22-alpine
+    image: ${DOCKER_REGISTRY:-}node:22-alpine
     working_dir: /app
     command: sh -c "npm ci --legacy-peer-deps && npm run dev -- --host"
     volumes:

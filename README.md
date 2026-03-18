@@ -61,6 +61,13 @@ SECRET_KEY=your-random-secret-key
 # 任务执行模式（见下方说明）
 TASK_EXECUTOR=local
 
+# Docker 镜像源（docker.io 访问受限时设置）
+# 华为云：swr.cn-north-4.myhuaweicloud.com/
+# 腾讯云：mirror.ccs.tencentyun.com/
+# 阿里云：<your-id>.mirror.aliyuncs.com/
+# DaoCloud：docker.m.daocloud.io/
+DOCKER_REGISTRY=
+
 # AI 增强（可选）
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...

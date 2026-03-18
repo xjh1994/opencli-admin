@@ -1,5 +1,6 @@
 # ── Stage 1: builder ──────────────────────────────────────────────────────────
-FROM python:3.13-slim AS builder
+ARG REGISTRY=
+FROM ${REGISTRY}python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -14,7 +15,8 @@ RUN pip install --upgrade pip && \
     pip install --prefix=/install .
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM python:3.13-slim AS runtime
+ARG REGISTRY=
+FROM ${REGISTRY}python:3.13-slim AS runtime
 
 WORKDIR /app
 
