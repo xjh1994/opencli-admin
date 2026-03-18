@@ -9,6 +9,7 @@ import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import PageHeader from '../components/PageHeader'
 import { formatInTimeZone } from 'date-fns-tz'
+import TruncatedText from '../components/TruncatedText'
 
 export default function TasksPage() {
   const { t } = useTranslation()
@@ -80,9 +81,11 @@ export default function TasksPage() {
                 <div className="space-y-1">
                   <StatusBadge status={row.status} />
                   {row.status === 'failed' && row.error_message && (
-                    <p className="text-xs text-red-500 break-all leading-relaxed">
-                      {row.error_message}
-                    </p>
+                    <TruncatedText
+                      text={row.error_message}
+                      lines={2}
+                      className="text-xs text-red-500 leading-relaxed"
+                    />
                   )}
                 </div>
               ),
