@@ -724,19 +724,29 @@ function ArgsKVList({
           </div>
         )
       })}
-      <select
-        className="text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:text-blue-700 mt-1 outline-none"
-        value=""
-        onChange={(e) => { if (e.target.value) addParam(e.target.value) }}
-      >
-        <option value="">＋ 添加参数</option>
-        {availableKeys.map((k) => (
-          <option key={k} value={k}>
-            {k}{hints?.[k] ? ` — ${hints[k]}` : ''}
-          </option>
-        ))}
-        <option value="__custom__">自定义参数...</option>
-      </select>
+      {availableKeys.length > 0 ? (
+        <select
+          className="text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:text-blue-700 mt-1 outline-none"
+          value=""
+          onChange={(e) => { if (e.target.value) addParam(e.target.value) }}
+        >
+          <option value="">＋ 添加参数</option>
+          {availableKeys.map((k) => (
+            <option key={k} value={k}>
+              {k}{hints?.[k] ? ` — ${hints[k]}` : ''}
+            </option>
+          ))}
+          <option value="__custom__">自定义参数...</option>
+        </select>
+      ) : (
+        <button
+          type="button"
+          onClick={() => addParam('__custom__')}
+          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 mt-1"
+        >
+          <Plus size={12} /> 添加参数
+        </button>
+      )}
     </div>
   )
 }
