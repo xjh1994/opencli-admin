@@ -665,7 +665,7 @@ const SITE_GROUPS = [
   { label: '🌍 Global', sites: ['twitter','reddit','youtube','linkedin','yahoo-finance','barchart'] },
 ]
 
-// Args list with per-key hint text shown as placeholder + description
+// Args list with per-key hint text and dropdown for adding known parameters
 function ArgsKVList({
   pairs,
   onChange,
@@ -679,6 +679,18 @@ function ArgsKVList({
     onChange(pairs.map((p, idx) => (idx === i ? { ...p, [field]: v } : p)))
   const remove = (i: number) => onChange(pairs.filter((_, idx) => idx !== i))
 
+  // Hint keys not yet added — shown as dropdown options
+  const usedKeys = new Set(pairs.map((p) => p.key))
+  const availableKeys = hints ? Object.keys(hints).filter((k) => !usedKeys.has(k)) : []
+
+  const addParam = (key: string) => {
+    if (key === '__custom__') {
+      onChange([...pairs, { key: '', value: '' }])
+    } else {
+      onChange([...pairs, { key, value: '' }])
+    }
+  }
+
   return (
     <div className="space-y-2">
       {pairs.map((p, i) => {
@@ -690,13 +702,13 @@ function ArgsKVList({
                 className={`${input} flex-1 font-mono`}
                 value={p.key}
                 onChange={(e) => update(i, 'key', e.target.value)}
-                placeholder="flag"
+                placeholder="参数名"
               />
               <input
                 className={`${input} flex-1`}
                 value={p.value}
                 onChange={(e) => update(i, 'value', e.target.value)}
-                placeholder={hintText ?? 'value'}
+                placeholder={hintText ?? '参数值'}
               />
               <button
                 type="button"
@@ -712,13 +724,19 @@ function ArgsKVList({
           </div>
         )
       })}
-      <button
-        type="button"
-        onClick={() => onChange([...pairs, { key: '', value: '' }])}
-        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 mt-1"
+      <select
+        className="text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:text-blue-700 mt-1 outline-none"
+        value=""
+        onChange={(e) => { if (e.target.value) addParam(e.target.value) }}
       >
-        <Plus size={12} /> Add row
-      </button>
+        <option value="">＋ 添加参数</option>
+        {availableKeys.map((k) => (
+          <option key={k} value={k}>
+            {k}{hints?.[k] ? ` — ${hints[k]}` : ''}
+          </option>
+        ))}
+        <option value="__custom__">自定义参数...</option>
+      </select>
     </div>
   )
 }
