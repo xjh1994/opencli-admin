@@ -112,7 +112,9 @@ function AddSourceModal({
                 onChange={(e) => handleTypeChange(e.target.value as ChannelType)}
               >
                 {CHANNEL_TYPES.map((type) => (
-                  <option key={type} value={type}>{type}</option>
+                  <option key={type} value={type}>
+                    {type}{type !== 'opencli' ? '（开发中）' : ''}
+                  </option>
                 ))}
               </select>
             </div>
