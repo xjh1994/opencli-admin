@@ -36,6 +36,17 @@ const inputCls =
   'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
 const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
 
+function genDefaultName(type: ChannelType, config: Record<string, unknown>): string {
+  const now = new Date()
+  const ts = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+  if (type === 'opencli') {
+    const site = (config.site as string) || ''
+    const cmd  = (config.command as string) || ''
+    return [site, cmd, ts].filter(Boolean).join('-')
+  }
+  return `${type}-${ts}`
+}
+
 function AddSourceModal({
   onClose,
   onSave,
@@ -44,15 +55,27 @@ function AddSourceModal({
   onSave: (data: Partial<DataSource>) => void
 }) {
   const { t } = useTranslation()
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [channelType, setChannelType] = useState<ChannelType>('opencli')
-  const [channelConfig, setChannelConfig] = useState<Record<string, unknown>>({
+  const initConfig: Record<string, unknown> = {
     site: PRESET_DEFAULT.site,
     command: PRESET_DEFAULT.command,
     args: PRESET_DEFAULT.args,
     format: 'json',
-  })
+  }
+  const [channelType, setChannelType] = useState<ChannelType>('opencli')
+  const [channelConfig, setChannelConfig] = useState<Record<string, unknown>>(initConfig)
+  const [name, setName] = useState(() => genDefaultName('opencli', initConfig))
+  const [nameEdited, setNameEdited] = useState(false)
+  const [description, setDescription] = useState('')
+
+  const handleConfigChange = (cfg: Record<string, unknown>) => {
+    setChannelConfig(cfg)
+    if (!nameEdited) setName(genDefaultName(channelType, cfg))
+  }
+
+  const handleTypeChange = (type: ChannelType) => {
+    setChannelType(type)
+    if (!nameEdited) setName(genDefaultName(type, {}))
+  }
 
   const handleSubmit = () => {
     onSave({ name, description, channel_type: channelType, channel_config: channelConfig, enabled: true, tags: [] })
@@ -68,12 +91,14 @@ function AddSourceModal({
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>{t('common.name')} *</label>
+              <label className={labelCls}>
+                {t('common.name')} <span className="text-red-500">*</span>
+              </label>
               <input
                 className={inputCls}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My Source"
+                onChange={(e) => { setName(e.target.value); setNameEdited(true) }}
+                placeholder="my-source"
               />
             </div>
             <div>
@@ -81,7 +106,7 @@ function AddSourceModal({
               <select
                 className={inputCls}
                 value={channelType}
-                onChange={(e) => setChannelType(e.target.value as ChannelType)}
+                onChange={(e) => handleTypeChange(e.target.value as ChannelType)}
               >
                 {CHANNEL_TYPES.map((type) => (
                   <option key={type} value={type}>{type}</option>
@@ -104,7 +129,7 @@ function AddSourceModal({
               <ChannelConfigForm
                 channelType={channelType}
                 config={channelConfig}
-                onChange={setChannelConfig}
+                onChange={handleConfigChange}
               />
             </div>
           </div>

@@ -12,15 +12,19 @@ const hint = 'mt-1 text-xs text-gray-400'
 function Field({
   label: l,
   hint: h,
+  required,
   children,
 }: {
   label: string
   hint?: string
+  required?: boolean
   children: React.ReactNode
 }) {
   return (
     <div>
-      <label className={label}>{l}</label>
+      <label className={label}>
+        {l}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
       {children}
       {h && <p className={hint}>{h}</p>}
     </div>
@@ -168,7 +172,7 @@ function RSSConfig({
   const { t } = useTranslation()
   return (
     <div className="space-y-3">
-      <Field label={t('channelConfig.feedUrl')}>
+      <Field label={t('channelConfig.feedUrl')} required>
         <TextInput
           value={(config.feed_url as string) ?? ''}
           onChange={(v) => onChange({ ...config, feed_url: v })}
@@ -228,7 +232,7 @@ function APIConfig({
 
   return (
     <div className="space-y-3">
-      <Field label={t('channelConfig.baseUrl')}>
+      <Field label={t('channelConfig.baseUrl')} required>
         <TextInput
           value={(config.base_url as string) ?? ''}
           onChange={(v) => update({ base_url: v })}
@@ -237,7 +241,7 @@ function APIConfig({
         />
       </Field>
       <div className="grid grid-cols-3 gap-3">
-        <Field label={t('channelConfig.endpoint')} hint={t('channelConfig.endpointHint')}>
+        <Field label={t('channelConfig.endpoint')} hint={t('channelConfig.endpointHint')} required>
           <TextInput
             value={(config.endpoint as string) ?? ''}
             onChange={(v) => update({ endpoint: v })}
@@ -359,7 +363,7 @@ function WebScraperConfig({
 
   return (
     <div className="space-y-3">
-      <Field label={t('channelConfig.url')}>
+      <Field label={t('channelConfig.url')} required>
         <TextInput
           value={(config.url as string) ?? ''}
           onChange={(v) => update({ url: v })}
@@ -435,7 +439,7 @@ function CLIConfig({
 
   return (
     <div className="space-y-3">
-      <Field label={t('channelConfig.binary')} hint={t('channelConfig.binaryHint')}>
+      <Field label={t('channelConfig.binary')} hint={t('channelConfig.binaryHint')} required>
         <TextInput
           value={(config.binary as string) ?? ''}
           onChange={(v) => update({ binary: v })}
@@ -800,7 +804,7 @@ function OpenCLIConfig({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
-        <Field label={t('channelConfig.site')}>
+        <Field label={t('channelConfig.site')} required>
           <select className={input} value={currentSite} onChange={(e) => onSiteChange(e.target.value)}>
             <option value="">-- 选择平台 --</option>
             {SITE_GROUPS.map((g) => (
@@ -814,7 +818,7 @@ function OpenCLIConfig({
             ))}
           </select>
         </Field>
-        <Field label={t('channelConfig.command')}>
+        <Field label={t('channelConfig.command')} required>
           <select
             className={input}
             value={currentCommand}
