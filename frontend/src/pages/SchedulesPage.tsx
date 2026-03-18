@@ -111,9 +111,10 @@ function CronBuilder({ fields, onChange }: { fields: CronFields; onChange: (f: C
           <div className="w-full space-y-1">
             <input
               type="datetime-local"
-              className={`${inputCls} w-full`}
+              className={`${inputCls} w-full cursor-pointer`}
               value={fields.datetime}
               onChange={(e) => set({ datetime: e.target.value })}
+              onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker?.()}
             />
             <p className="text-xs text-amber-600 dark:text-amber-400">执行完成后自动禁用</p>
           </div>
