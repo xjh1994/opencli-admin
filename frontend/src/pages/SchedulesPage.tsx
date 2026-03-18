@@ -13,11 +13,12 @@ import { formatInTimeZone } from 'date-fns-tz'
 
 // ── Cron builder ───────────────────────────────────────────────────────────────
 
-type FreqType = 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'
+type FreqType = 'once' | 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const FREQ_OPTIONS: { value: FreqType; label: string }[] = [
+  { value: 'once',     label: '指定时间' },
   { value: 'minutely', label: '每 N 分钟' },
   { value: 'hourly',   label: '每小时' },
   { value: 'daily',    label: '每天' },
@@ -49,6 +50,7 @@ const TIMEZONES = [
 
 interface CronFields {
   freq: FreqType
+  datetime: string   // once: ISO local datetime string
   interval: number   // minutely: every N minutes
   minute: number     // 0-59
   hour: number       // 0-23
@@ -59,6 +61,11 @@ interface CronFields {
 
 function buildCron(f: CronFields): string {
   switch (f.freq) {
+    case 'once': {
+      if (!f.datetime) return '0 0 1 1 *'
+      const d = new Date(f.datetime)
+      return `${d.getMinutes()} ${d.getHours()} ${d.getDate()} ${d.getMonth() + 1} *`
+    }
     case 'minutely': return `*/${f.interval} * * * *`
     case 'hourly':   return `${f.minute} * * * *`
     case 'daily':    return `${f.minute} ${f.hour} * * *`
@@ -69,7 +76,7 @@ function buildCron(f: CronFields): string {
 }
 
 const DEFAULT_FIELDS: CronFields = {
-  freq: 'hourly', interval: 30, minute: 0, hour: 9, weekday: 1, day: 1, custom: '0 9 * * *',
+  freq: 'hourly', datetime: '', interval: 30, minute: 0, hour: 9, weekday: 1, day: 1, custom: '0 9 * * *',
 }
 
 function CronBuilder({ fields, onChange }: { fields: CronFields; onChange: (f: CronFields) => void }) {
@@ -100,6 +107,17 @@ function CronBuilder({ fields, onChange }: { fields: CronFields; onChange: (f: C
 
       {/* Frequency-specific fields */}
       <div className="flex flex-wrap items-center gap-2 min-h-[36px]">
+        {fields.freq === 'once' && (
+          <div className="w-full space-y-1">
+            <input
+              type="datetime-local"
+              className={`${inputCls} w-full`}
+              value={fields.datetime}
+              onChange={(e) => set({ datetime: e.target.value })}
+            />
+            <p className="text-xs text-amber-600 dark:text-amber-400">执行一次后建议手动禁用</p>
+          </div>
+        )}
         {fields.freq === 'minutely' && (
           <>
             <span className={labelSm}>每</span>
