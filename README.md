@@ -80,6 +80,20 @@ docker-compose up -d
 | API 文档 | http://localhost:8031/docs |
 | Chrome noVNC | http://localhost:3010 |
 
+**容器内 Chrome ↔ opencli 通信**
+
+Docker 模式下，opencli 通过 CDP（Chrome DevTools Protocol）驱动浏览器完成登录态采集，链路如下：
+
+```
+api 容器
+  └─ opencli 调用 Playwright MCP Bridge
+       └─ CDP WebSocket → chrome:19222
+            └─ nginx 反向代理（Host 头重写）
+                 └─ Chrome 本体（127.0.0.1:9222）
+```
+
+nginx 代理的作用是将 CDP 响应中的 `localhost` 替换为 `chrome`，确保 api 容器能通过容器名寻址回连。该端点通过环境变量 `OPENCLI_CDP_ENDPOINT=http://chrome:19222` 注入到 api 和 worker 容器。
+
 **停止**
 
 ```bash
