@@ -66,6 +66,7 @@ const zh = {
     noSources: '暂无数据源，点击"添加数据源"开始',
     triggerNow: '立即触发',
     totalSources: '共 {{count}} 个数据源',
+    editSourceTitle: '编辑数据源',
     confirmDelete: '确认删除数据源 "{{name}}"？',
   },
   tasks: {

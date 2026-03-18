@@ -10,7 +10,7 @@ import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import PageHeader from '../components/PageHeader'
 import ChannelConfigForm, { type ChannelType, PRESET_DEFAULT, SITE_LABELS, COMMANDS_BY_SITE } from '../components/ChannelConfigForm'
-import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Tag } from 'lucide-react'
+import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Pencil } from 'lucide-react'
 import { formatInTimeZone } from 'date-fns-tz'
 
 const CHANNEL_COLORS: Record<string, string> = {
@@ -50,29 +50,32 @@ function genDefaultName(type: ChannelType, config: Record<string, unknown>): str
   return `${type}-${ts}`
 }
 
-function AddSourceModal({
+function SourceModal({
+  initial,
   onClose,
   onSave,
 }: {
+  initial?: DataSource
   onClose: () => void
   onSave: (data: Partial<DataSource>) => void
 }) {
   const { t } = useTranslation()
-  const initConfig: Record<string, unknown> = {
-    site: PRESET_DEFAULT.site,
-    command: PRESET_DEFAULT.command,
-    args: PRESET_DEFAULT.args,
-    format: 'json',
-  }
-  const [channelType, setChannelType] = useState<ChannelType>('opencli')
+  const isEdit = !!initial
+
+  const initConfig: Record<string, unknown> = isEdit
+    ? (initial.channel_config as Record<string, unknown>) ?? {}
+    : { site: PRESET_DEFAULT.site, command: PRESET_DEFAULT.command, args: PRESET_DEFAULT.args, format: 'json' }
+
+  const initType: ChannelType = isEdit ? (initial.channel_type as ChannelType) : 'opencli'
+
+  const [channelType, setChannelType] = useState<ChannelType>(initType)
   const [channelConfig, setChannelConfig] = useState<Record<string, unknown>>(initConfig)
-  // Cache config per channel type so switching back restores previous state
   const [configCache, setConfigCache] = useState<Partial<Record<ChannelType, Record<string, unknown>>>>({
-    opencli: initConfig,
+    [initType]: initConfig,
   })
-  const [name, setName] = useState(() => genDefaultName('opencli', initConfig))
-  const [nameEdited, setNameEdited] = useState(false)
-  const [description, setDescription] = useState('')
+  const [name, setName] = useState(isEdit ? initial.name : () => genDefaultName('opencli', initConfig))
+  const [nameEdited, setNameEdited] = useState(isEdit)
+  const [description, setDescription] = useState(isEdit ? (initial.description ?? '') : '')
 
   const handleConfigChange = (cfg: Record<string, unknown>) => {
     setChannelConfig(cfg)
@@ -96,7 +99,9 @@ function AddSourceModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="p-6 border-b border-gray-100 dark:border-gray-700">
-          <h2 className="text-lg font-semibold dark:text-white">{t('sources.addSourceTitle')}</h2>
+          <h2 className="text-lg font-semibold dark:text-white">
+            {isEdit ? t('sources.editSourceTitle') : t('sources.addSourceTitle')}
+          </h2>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
@@ -118,6 +123,7 @@ function AddSourceModal({
                 className={inputCls}
                 value={channelType}
                 onChange={(e) => handleTypeChange(e.target.value as ChannelType)}
+                disabled={isEdit}
               >
                 {CHANNEL_TYPES.map((type) => (
                   <option key={type} value={type}>
@@ -160,7 +166,7 @@ function AddSourceModal({
             disabled={!name.trim()}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {t('common.create')}
+            {isEdit ? t('common.save') : t('common.create')}
           </button>
         </div>
       </div>
@@ -171,6 +177,7 @@ function AddSourceModal({
 export default function SourcesPage() {
   const { t } = useTranslation()
   const [showAdd, setShowAdd] = useState(false)
+  const [editSource, setEditSource] = useState<DataSource | null>(null)
   const [page, setPage] = useState(1)
   const qc = useQueryClient()
 
@@ -182,6 +189,11 @@ export default function SourcesPage() {
   const createMut = useMutation({
     mutationFn: createSource,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sources'] }); setShowAdd(false) },
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<DataSource> }) => updateSource(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sources'] }); setEditSource(null) },
   })
 
   const toggleMut = useMutation({
@@ -237,83 +249,66 @@ export default function SourcesPage() {
               key: 'type',
               header: t('sources.channelType'),
               render: (s) => <ChannelBadge type={s.channel_type} />,
-              width: '130px',
-            },
-            {
-              key: 'tags',
-              header: 'Tags',
-              render: (s) => (
-                <div className="flex flex-wrap gap-1">
-                  {s.tags.map((tag) => (
-                    <span key={tag} className="flex items-center gap-0.5 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-                      <Tag size={10} /> {tag}
-                    </span>
-                  ))}
-                </div>
-              ),
+              width: '100px',
             },
             {
               key: 'status',
               header: t('common.status'),
               render: (s) => <StatusBadge status={s.enabled ? 'online' : 'offline'} />,
-              width: '90px',
-            },
-            {
-              key: 'id',
-              header: t('common.id'),
-              width: '100px',
-              render: (s) => (
-                <span className="font-mono text-xs text-gray-400">{s.id.slice(0, 8)}</span>
-              ),
+              width: '80px',
             },
             {
               key: 'created_at',
               header: t('common.createdAt'),
-              width: '130px',
+              width: '120px',
               render: (s) => (
                 <span className="text-xs text-gray-500">
-                  {formatInTimeZone(new Date(s.created_at), 'Asia/Shanghai', 'MM-dd HH:mm:ss')}
+                  {formatInTimeZone(new Date(s.created_at), 'Asia/Shanghai', 'MM-dd HH:mm')}
                 </span>
               ),
             },
             {
               key: 'updated_at',
               header: t('common.updatedAt'),
-              width: '130px',
+              width: '120px',
               render: (s) => (
                 <span className="text-xs text-gray-500">
-                  {formatInTimeZone(new Date(s.updated_at), 'Asia/Shanghai', 'MM-dd HH:mm:ss')}
+                  {formatInTimeZone(new Date(s.updated_at), 'Asia/Shanghai', 'MM-dd HH:mm')}
                 </span>
               ),
             },
             {
               key: 'actions',
               header: t('common.actions'),
-              width: '130px',
+              width: '210px',
               render: (s) => (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button
-                    title={t('sources.triggerNow')}
                     onClick={() => triggerMut.mutate(s.id)}
-                    className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600"
                   >
-                    <Play size={14} />
+                    <Play size={12} /> 触发
                   </button>
                   <button
-                    title={s.enabled ? t('common.disable') : t('common.enable')}
                     onClick={() => toggleMut.mutate({ id: s.id, enabled: !s.enabled })}
-                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
                   >
-                    {s.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                    {s.enabled ? <ToggleRight size={12} /> : <ToggleLeft size={12} />}
+                    {s.enabled ? t('common.disable') : t('common.enable')}
                   </button>
                   <button
-                    title={t('common.delete')}
+                    onClick={() => setEditSource(s)}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600"
+                  >
+                    <Pencil size={12} /> 编辑
+                  </button>
+                  <button
                     onClick={() => {
                       if (confirm(t('sources.confirmDelete', { name: s.name }))) deleteMut.mutate(s.id)
                     }}
-                    className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={12} /> 删除
                   </button>
                 </div>
               ),
@@ -336,9 +331,17 @@ export default function SourcesPage() {
       </Card>
 
       {showAdd && (
-        <AddSourceModal
+        <SourceModal
           onClose={() => setShowAdd(false)}
           onSave={(d) => createMut.mutate(d)}
+        />
+      )}
+
+      {editSource && (
+        <SourceModal
+          initial={editSource}
+          onClose={() => setEditSource(null)}
+          onSave={(d) => updateMut.mutate({ id: editSource.id, data: d })}
         />
       )}
     </div>

@@ -62,14 +62,6 @@ export default function TasksPage() {
           emptyMessage={t('tasks.noTasks')}
           columns={[
             {
-              key: 'id',
-              header: t('tasks.taskId'),
-              render: (row) => (
-                <span className="font-mono text-xs text-gray-500">{row.id.slice(0, 12)}…</span>
-              ),
-              width: '150px',
-            },
-            {
               key: 'source',
               header: t('tasks.source'),
               render: (row) => (
@@ -80,25 +72,9 @@ export default function TasksPage() {
               ),
             },
             {
-              key: 'trigger',
-              header: t('tasks.trigger'),
-              render: (row) => (
-                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-                  {row.trigger_type}
-                </span>
-              ),
-              width: '110px',
-            },
-            {
-              key: 'priority',
-              header: t('tasks.priority'),
-              render: (row) => <span className="text-xs">{row.priority}</span>,
-              width: '80px',
-            },
-            {
               key: 'status',
               header: t('common.status'),
-              width: '200px',
+              width: '140px',
               render: (row) => (
                 <div className="space-y-1">
                   <StatusBadge status={row.status} />
@@ -111,24 +87,42 @@ export default function TasksPage() {
               ),
             },
             {
+              key: 'trigger',
+              header: t('tasks.trigger'),
+              render: (row) => (
+                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
+                  {row.trigger_type}
+                </span>
+              ),
+              width: '80px',
+            },
+            {
               key: 'created',
               header: t('tasks.created'),
               render: (row) => (
                 <span className="text-xs text-gray-500">
-                  {formatInTimeZone(new Date(row.created_at), 'Asia/Shanghai', 'MM-dd HH:mm:ss')}
+                  {formatInTimeZone(new Date(row.created_at), 'Asia/Shanghai', 'MM-dd HH:mm')}
                 </span>
               ),
-              width: '140px',
+              width: '110px',
             },
             {
               key: 'updated_at',
               header: t('common.updatedAt'),
               render: (row) => (
                 <span className="text-xs text-gray-500">
-                  {formatInTimeZone(new Date(row.updated_at), 'Asia/Shanghai', 'MM-dd HH:mm:ss')}
+                  {formatInTimeZone(new Date(row.updated_at), 'Asia/Shanghai', 'MM-dd HH:mm')}
                 </span>
               ),
-              width: '130px',
+              width: '110px',
+            },
+            {
+              key: 'id',
+              header: t('tasks.taskId'),
+              render: (row) => (
+                <span className="font-mono text-xs text-gray-400">{row.id.slice(0, 8)}…</span>
+              ),
+              width: '100px',
             },
           ]}
         />

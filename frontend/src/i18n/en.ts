@@ -68,6 +68,7 @@ const en: Translations = {
     noSources: 'No sources yet. Add your first data source.',
     triggerNow: 'Trigger now',
     totalSources: '{{count}} sources',
+    editSourceTitle: 'Edit Data Source',
     confirmDelete: 'Delete source "{{name}}"?',
   },
   tasks: {
