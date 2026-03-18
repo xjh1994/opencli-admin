@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, Trash2 } from 'lucide-react'
 
@@ -874,13 +874,6 @@ interface Props {
 }
 
 export default function ChannelConfigForm({ channelType, config, onChange }: Props) {
-  const mounted = useRef(false)
-  // Reset config only when channel type changes after first render
-  useEffect(() => {
-    if (!mounted.current) { mounted.current = true; return }
-    onChange({})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelType])
 
   switch (channelType) {
     case 'rss':

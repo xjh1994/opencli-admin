@@ -66,18 +66,26 @@ function AddSourceModal({
   }
   const [channelType, setChannelType] = useState<ChannelType>('opencli')
   const [channelConfig, setChannelConfig] = useState<Record<string, unknown>>(initConfig)
+  // Cache config per channel type so switching back restores previous state
+  const [configCache, setConfigCache] = useState<Partial<Record<ChannelType, Record<string, unknown>>>>({
+    opencli: initConfig,
+  })
   const [name, setName] = useState(() => genDefaultName('opencli', initConfig))
   const [nameEdited, setNameEdited] = useState(false)
   const [description, setDescription] = useState('')
 
   const handleConfigChange = (cfg: Record<string, unknown>) => {
     setChannelConfig(cfg)
+    setConfigCache((prev) => ({ ...prev, [channelType]: cfg }))
     if (!nameEdited) setName(genDefaultName(channelType, cfg))
   }
 
   const handleTypeChange = (type: ChannelType) => {
+    setConfigCache((prev) => ({ ...prev, [channelType]: channelConfig }))
+    const restored = configCache[type] ?? (type === 'opencli' ? initConfig : {})
     setChannelType(type)
-    if (!nameEdited) setName(genDefaultName(type, {}))
+    setChannelConfig(restored)
+    if (!nameEdited) setName(genDefaultName(type, restored))
   }
 
   const handleSubmit = () => {
