@@ -97,22 +97,16 @@ opencli 渠道依赖浏览器登录态，首次使用需手动登录各平台账
 
 ## 服务端口
 
-| 服务 | 默认端口 | 说明 |
-|------|----------|------|
-| 管理界面 | 8030 | React 前端 |
-| API | 8031 | FastAPI，含 `/docs` Swagger |
-| Chrome noVNC | 3010 | 浏览器操作界面（仅 Docker 模式） |
-| Chrome CDP | 9222 | Chrome DevTools Protocol（仅原生模式） |
+两种模式共用同一套端口配置，在 `.env` 中修改即可：
 
-**修改端口**：在 `.env` 中设置以下变量，两种启动模式均生效：
+| 服务 | 默认端口 | `.env` 变量 |
+|------|----------|-------------|
+| 管理界面 | 8030 | `FRONTEND_PORT` |
+| API | 8031 | `API_PORT` |
+| Chrome noVNC | 3010 | `NOVNC_PORT`（仅 Docker） |
+| Chrome CDP | 9222 | `CDP_PORT`（仅原生） |
 
-```bash
-API_PORT=8031
-FRONTEND_PORT=8030
-NOVNC_PORT=3010      # 仅 Docker 模式
-```
-
-原生模式也可通过命令行参数临时覆盖（优先级高于 `.env`）：
+原生模式支持命令行参数临时覆盖（优先级高于 `.env`）：
 
 ```bash
 ./start.sh --api-port 9000 --frontend-port 9001
