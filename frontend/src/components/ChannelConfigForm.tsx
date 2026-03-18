@@ -849,7 +849,7 @@ function OpenCLIConfig({
           value={(config.format as string) ?? 'json'}
           onChange={(v) => onChange({ ...config, format: v })}
           options={[
-            { value: 'json',  label: 'JSON' },
+            { value: 'json',  label: 'JSON（推荐）' },
             { value: 'table', label: 'Table' },
             { value: 'yaml',  label: 'YAML' },
             { value: 'md',    label: 'Markdown' },
@@ -861,7 +861,7 @@ function OpenCLIConfig({
   )
 }
 
-export { OPENCLI_PRESETS, PRESET_DEFAULT }
+export { OPENCLI_PRESETS, PRESET_DEFAULT, SITE_LABELS, COMMANDS_BY_SITE }
 
 // ── Public component ──────────────────────────────────────────────────────────
 

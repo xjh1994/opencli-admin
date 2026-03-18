@@ -9,7 +9,7 @@ import Card from '../components/Card'
 import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import PageHeader from '../components/PageHeader'
-import ChannelConfigForm, { type ChannelType, PRESET_DEFAULT } from '../components/ChannelConfigForm'
+import ChannelConfigForm, { type ChannelType, PRESET_DEFAULT, SITE_LABELS, COMMANDS_BY_SITE } from '../components/ChannelConfigForm'
 import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Tag } from 'lucide-react'
 import { formatInTimeZone } from 'date-fns-tz'
 
@@ -42,7 +42,10 @@ function genDefaultName(type: ChannelType, config: Record<string, unknown>): str
   if (type === 'opencli') {
     const site = (config.site as string) || ''
     const cmd  = (config.command as string) || ''
-    return [site, cmd, ts].filter(Boolean).join('-')
+    const siteLabel = SITE_LABELS[site] || site
+    const preset = COMMANDS_BY_SITE[site]?.find((p) => p.command === cmd)
+    const cmdLabel = preset ? preset.label.split(' · ').slice(1).join(' · ') : cmd
+    return [siteLabel, cmdLabel, ts].filter(Boolean).join('-')
   }
   return `${type}-${ts}`
 }
