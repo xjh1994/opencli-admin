@@ -203,3 +203,7 @@ AI 增强（可选，Anthropic / OpenAI / Ollama）
 ├── start.sh             # 原生 shell 启动脚本
 └── .env.example
 ```
+
+## License
+
+[Apache License 2.0](LICENSE)
