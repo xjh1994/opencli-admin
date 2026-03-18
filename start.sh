@@ -86,10 +86,14 @@ ok "Python $("$PYTHON" --version)"
 if [[ ! -d .venv ]]; then
   info "Creating Python virtual environment (.venv)..."
   "$PYTHON" -m venv .venv
-  .venv/bin/python -m ensurepip --upgrade 2>/dev/null || true
 fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
+# Ensure pip is available (may be absent on some distros)
+if ! python -m pip --version &>/dev/null 2>&1; then
+  info "pip not found, installing via ensurepip..."
+  python -m ensurepip --upgrade
+fi
 ok "venv active"
 
 # ── Install Python deps ───────────────────────────────────────────────────────
