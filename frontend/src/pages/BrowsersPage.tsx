@@ -15,7 +15,7 @@ import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
 import PageHeader from '../components/PageHeader'
 import { SITE_LABELS } from '../components/ChannelConfigForm'
-import { Plus, X, ExternalLink, RefreshCw, Trash2 } from 'lucide-react'
+import { Plus, X, ExternalLink, RefreshCw, Trash2, Minus } from 'lucide-react'
 import type { BrowserBinding } from '../api/types'
 
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
@@ -38,10 +38,146 @@ function instanceIndex(cdpUrl: string): number | null {
     const hostname = new URL(cdpUrl).hostname
     const m = hostname.match(/^chrome(?:-(\d+))?$/)
     if (!m) return null
-    return m[1] ? parseInt(m[1], 10) : null  // null = instance 1 (compose-managed)
+    return m[1] ? parseInt(m[1], 10) : null
   } catch {
     return null
   }
+}
+
+// ── Container status badge ────────────────────────────────────────────────────
+
+interface StatusBadgeProps {
+  containerStatus?: string
+  available: boolean
+}
+
+function StatusBadge({ containerStatus, available }: StatusBadgeProps) {
+  const { t } = useTranslation()
+
+  if (containerStatus === 'running') {
+    if (available) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs">
+          <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+          <span className="text-green-600 dark:text-green-400">{t('browsers.statusIdle')}</span>
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-xs">
+        <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+        <span className="text-amber-600 dark:text-amber-400">{t('browsers.statusBusy')}</span>
+      </span>
+    )
+  }
+
+  if (containerStatus === 'created' || containerStatus === 'restarting') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs">
+        <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse shrink-0" />
+        <span className="text-orange-600 dark:text-orange-400">{t('browsers.statusStarting')}</span>
+      </span>
+    )
+  }
+
+  if (containerStatus === 'exited' || containerStatus === 'dead') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs">
+        <span className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
+        <span className="text-gray-500 dark:text-gray-400">{t('browsers.statusOffline')}</span>
+      </span>
+    )
+  }
+
+  // unknown / undefined — pending restart
+  return (
+    <span className="inline-flex items-center gap-1 text-xs">
+      <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
+      <span className="text-yellow-600 dark:text-yellow-400">{t('browsers.statusPending')}</span>
+    </span>
+  )
+}
+
+// ── Add Instances Modal ───────────────────────────────────────────────────────
+
+interface AddInstanceModalProps {
+  currentCount: number
+  onConfirm: (count: number) => void
+  onClose: () => void
+  isPending: boolean
+}
+
+function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddInstanceModalProps) {
+  const { t } = useTranslation()
+  const [count, setCount] = useState(1)
+
+  const preview = Array.from({ length: count }, (_, i) => {
+    const N = currentCount + 1 + i
+    return N === 1 ? 'chrome' : `chrome-${N}`
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-80 p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-sm font-semibold dark:text-white mb-4">{t('browsers.addInstanceTitle')}</h3>
+
+        {/* Count picker */}
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-xs text-gray-500 dark:text-gray-400 flex-1">{t('browsers.instanceCount')}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCount((c) => Math.max(1, c - 1))}
+              disabled={count <= 1}
+              className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:border-blue-400"
+            >
+              <Minus size={12} />
+            </button>
+            <span className="w-6 text-center text-sm font-medium dark:text-white">{count}</span>
+            <button
+              onClick={() => setCount((c) => Math.min(10, c + 1))}
+              disabled={count >= 10}
+              className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:border-blue-400"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 mb-5">
+          <p className="text-xs text-gray-400 mb-1.5">{t('browsers.instancePreview')}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {preview.map((name) => (
+              <span key={name} className="px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-mono">
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            onClick={() => onConfirm(count)}
+            disabled={isPending}
+            className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isPending ? t('browsers.adding') : t('common.create')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Site dropdown ─────────────────────────────────────────────────────────────
@@ -124,6 +260,7 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
 interface InstanceCardProps {
   url: string
   available: boolean
+  containerStatus?: string
   novncPort: number
   bindings: BrowserBinding[]
   boundSites: Set<string>
@@ -135,19 +272,19 @@ interface InstanceCardProps {
 }
 
 function InstanceCard({
-  url, available, novncPort, bindings, boundSites,
+  url, available, containerStatus, novncPort, bindings, boundSites,
   onBind, onUnbind, onRemove, isBindPending, isRemovePending,
 }: InstanceCardProps) {
   const { t } = useTranslation()
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
   const idx = instanceIndex(url)
-  const canRemove = idx !== null && onRemove  // instance 1 is compose-managed
+  const canRemove = idx !== null && idx > 1 && onRemove  // chrome-1 is compose-managed
 
   return (
     <Card>
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${available ? 'bg-green-500' : 'bg-red-400'}`} />
+        <StatusBadge containerStatus={containerStatus} available={available} />
         <span className="font-semibold text-sm dark:text-white">{label}</span>
         <a
           href={novncUrl}
@@ -194,6 +331,7 @@ export default function BrowsersPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [restartMsg, setRestartMsg] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   const invalidatePool = () => {
     queryClient.invalidateQueries({ queryKey: ['chrome-pool'] })
@@ -222,8 +360,12 @@ export default function BrowsersPage() {
   })
 
   const addInstanceMutation = useMutation({
-    mutationFn: addChromeInstance,
-    onSuccess: () => { invalidatePool(); setTimeout(() => invalidatePool(), 3000) },
+    mutationFn: (count: number) => addChromeInstance(count),
+    onSuccess: () => {
+      setShowAddModal(false)
+      invalidatePool()
+      setTimeout(() => invalidatePool(), 5000)
+    },
   })
 
   const removeInstanceMutation = useMutation({
@@ -235,7 +377,6 @@ export default function BrowsersPage() {
     mutationFn: restartApi,
     onSuccess: () => {
       setRestartMsg(t('browsers.restarting'))
-      // Poll until API is back
       const poll = setInterval(() => {
         fetch('/api/v1/health').then((r) => {
           if (r.ok) { clearInterval(poll); setRestartMsg(null); invalidatePool() }
@@ -268,12 +409,11 @@ export default function BrowsersPage() {
       {/* Toolbar */}
       <div className="flex items-center gap-3 mb-5">
         <button
-          onClick={() => addInstanceMutation.mutate()}
-          disabled={addInstanceMutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
         >
           <Plus size={15} />
-          {addInstanceMutation.isPending ? t('browsers.adding') : t('browsers.addInstance')}
+          {t('browsers.addInstance')}
         </button>
 
         <button
@@ -302,6 +442,7 @@ export default function BrowsersPage() {
               key={ep.url}
               url={ep.url}
               available={ep.available}
+              containerStatus={ep.container_status}
               novncPort={novncPort}
               bindings={bindingsByEndpoint[ep.url] ?? []}
               boundSites={boundSites}
@@ -339,6 +480,16 @@ export default function BrowsersPage() {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Add instance modal */}
+      {showAddModal && (
+        <AddInstanceModal
+          currentCount={endpoints.length}
+          onConfirm={(count) => addInstanceMutation.mutate(count)}
+          onClose={() => { if (!addInstanceMutation.isPending) setShowAddModal(false) }}
+          isPending={addInstanceMutation.isPending}
+        />
       )}
     </div>
   )

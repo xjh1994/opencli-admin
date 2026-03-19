@@ -80,56 +80,57 @@ def _update_env_file(key: str, value: str, path: str = "/app/.env") -> None:
 
 
 @router.post("/chrome-instances", response_model=ApiResponse[dict])
-async def add_chrome_instance() -> ApiResponse:
-    """Start a new Chrome instance (chrome-N) and hot-add it to the pool."""
+async def add_chrome_instance(count: int = 1) -> ApiResponse:
+    """Start one or more new Chrome instances (chrome-N) and hot-add them to the pool."""
     from backend.browser_pool import get_pool, LocalBrowserPool
 
-    pool = get_pool()
-    current = pool.endpoints  # e.g. ['http://chrome:19222', 'http://chrome-2:19222']
-    N = len(current) + 1
+    if count < 1 or count > 10:
+        raise HTTPException(status_code=400, detail="count must be between 1 and 10")
 
+    pool = get_pool()
     project = _project_name()
-    name = f"chrome-{N}"
     novnc_base = int(os.environ.get("NOVNC_BASE_PORT", 3010))
-    novnc_port = novnc_base + N - 1
-    volume = f"{project}_chrome_profile_{N}"
     network = f"{project}_default"
     image = f"{project}-chrome"
-    new_endpoint = f"http://{name}:19222"
-
     client = _docker_client()
 
-    try:
-        # Container already exists — just start it
-        existing = client.containers.get(name)
-        if existing.status != "running":
-            existing.start()
-            logger.info("chrome-pool: restarted existing container %s", name)
-        else:
-            logger.info("chrome-pool: %s already running", name)
-    except Exception:
-        # Container doesn't exist — create it
+    created: list[dict] = []
+    for _ in range(count):
+        current = pool.endpoints
+        N = len(current) + 1
+        name = f"chrome-{N}"
+        novnc_port = novnc_base + N - 1
+        volume = f"{project}_chrome_profile_{N}"
+        new_endpoint = f"http://{name}:19222"
+
         try:
-            client.containers.run(
-                image,
-                detach=True,
-                name=name,
-                network=network,
-                labels={"chrome.pool.extra": "true", "chrome.pool.index": str(N)},
-                ports={"6080/tcp": novnc_port},
-                volumes={volume: {"bind": "/home/chrome/.config/chromium", "mode": "rw"}},
-                restart_policy={"Name": "unless-stopped"},
-            )
-            logger.info("chrome-pool: started new container %s on noVNC :%d", name, novnc_port)
-        except Exception as exc:
-            logger.exception("chrome-pool: failed to start %s", name)
-            raise HTTPException(status_code=500, detail=str(exc))
+            existing = client.containers.get(name)
+            if existing.status != "running":
+                existing.start()
+                logger.info("chrome-pool: restarted existing container %s", name)
+            else:
+                logger.info("chrome-pool: %s already running", name)
+        except Exception:
+            try:
+                client.containers.run(
+                    image,
+                    detach=True,
+                    name=name,
+                    network=network,
+                    labels={"chrome.pool.extra": "true", "chrome.pool.index": str(N)},
+                    ports={"6080/tcp": novnc_port},
+                    volumes={volume: {"bind": "/home/chrome/.config/chromium", "mode": "rw"}},
+                    restart_policy={"Name": "unless-stopped"},
+                )
+                logger.info("chrome-pool: started new container %s on noVNC :%d", name, novnc_port)
+            except Exception as exc:
+                logger.exception("chrome-pool: failed to start %s", name)
+                raise HTTPException(status_code=500, detail=str(exc))
 
-    # Hot-add to in-memory pool
-    if isinstance(pool, LocalBrowserPool) and new_endpoint not in pool.endpoints:
-        pool.add_endpoint(new_endpoint)
+        if isinstance(pool, LocalBrowserPool) and new_endpoint not in pool.endpoints:
+            pool.add_endpoint(new_endpoint)
+        created.append({"endpoint": new_endpoint, "novnc_port": novnc_port})
 
-    # Persist to .env so the pool survives API restarts
     all_endpoints = ",".join(pool.endpoints)
     try:
         _update_env_file("CHROME_POOL_ENDPOINTS", all_endpoints)
@@ -137,8 +138,7 @@ async def add_chrome_instance() -> ApiResponse:
         logger.warning("chrome-pool: could not update .env: %s", exc)
 
     return ApiResponse.ok({
-        "endpoint": new_endpoint,
-        "novnc_port": novnc_port,
+        "created": created,
         "total": len(pool.endpoints),
     })
 

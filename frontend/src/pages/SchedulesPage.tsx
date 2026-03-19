@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool } from '../api/endpoints'
@@ -241,7 +241,14 @@ function AddScheduleModal({
   })
   const chromeEndpoints = chromePool?.endpoints ?? []
   const selectedSource = sources.find((s) => s.id === sourceId)
-  const showChromeSelector = selectedSource?.channel_type === 'opencli' && chromeEndpoints.length > 1
+  const showChromeSelector = selectedSource?.channel_type === 'opencli' && chromeEndpoints.length >= 1
+
+  // Auto-select when there's only one instance
+  useEffect(() => {
+    if (chromeEndpoints.length === 1 && !chromeEndpoint) {
+      setChromeEndpoint(chromeEndpoints[0].url)
+    }
+  }, [chromeEndpoints])
 
   const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'

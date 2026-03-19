@@ -123,6 +123,7 @@ export interface ChromeEndpoint {
   url: string
   available: boolean
   novnc_port: number
+  container_status?: string
 }
 
 export interface BrowserBinding {

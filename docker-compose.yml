@@ -61,7 +61,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # opencli CDP: single-instance fallback
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
       # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
       CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
       # Passed to the chrome pool manager so it can name containers/networks correctly
@@ -96,7 +96,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
       CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
     depends_on:
       redis:
@@ -124,7 +124,8 @@ services:
 
   # ── Chrome sidecar (noVNC web UI + persistent profile for opencli) ────────
   # Default single instance — always started.
-  chrome:
+  chrome-1:
+    container_name: chrome-1
     build:
       context: ./chrome
       dockerfile: Dockerfile
@@ -133,7 +134,7 @@ services:
     ports:
       - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
     volumes:
-      - chrome_profile:/home/chrome/.config/chromium
+      - chrome_profile_1:/home/chrome/.config/chromium
     restart: unless-stopped
 
   # Additional Chrome instances are managed dynamically via scripts/chrome-pool.sh
@@ -176,4 +177,4 @@ volumes:
   redis_data:
   postgres_data:
   db_data:
-  chrome_profile:
+  chrome_profile_1:

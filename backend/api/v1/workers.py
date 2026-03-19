@@ -53,6 +53,20 @@ def _novnc_port(cdp_url: str, base_port: int) -> int:
     return base_port + (n - 1)
 
 
+def _container_status(hostname: str) -> str:
+    """Return Docker container status string, or 'unknown' if unavailable.
+
+    Possible values from Docker API: 'running', 'created', 'restarting',
+    'paused', 'exited', 'dead'.  We also return 'unknown' on any error.
+    """
+    try:
+        import docker  # type: ignore[import]
+        client = docker.from_env()
+        return client.containers.get(hostname).status
+    except Exception:
+        return "unknown"
+
+
 @router.get("/chrome-pool", response_model=ApiResponse[dict])
 async def chrome_pool_status() -> ApiResponse:
     """Return Chrome browser pool status and available endpoints."""
@@ -63,6 +77,7 @@ async def chrome_pool_status() -> ApiResponse:
             "url": ep,
             "available": pool.available_for(ep),
             "novnc_port": _novnc_port(ep, base_port),
+            "container_status": _container_status(urlparse(ep).hostname or ""),
         }
         for ep in pool.endpoints
     ]

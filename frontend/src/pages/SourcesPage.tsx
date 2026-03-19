@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool } from '../api/endpoints'
@@ -211,7 +211,14 @@ function TriggerModal({
     enabled: source.channel_type === 'opencli',
   })
   const chromeEndpoints = chromePool?.endpoints ?? []
-  const showChromeSelector = source.channel_type === 'opencli' && chromeEndpoints.length > 1
+  const showChromeSelector = source.channel_type === 'opencli' && chromeEndpoints.length >= 1
+
+  // Auto-select when there's only one instance
+  useEffect(() => {
+    if (chromeEndpoints.length === 1 && !chromeEndpoint) {
+      setChromeEndpoint(chromeEndpoints[0].url)
+    }
+  }, [chromeEndpoints])
 
   const handleTrigger = () => {
     const params: Record<string, unknown> = {}
