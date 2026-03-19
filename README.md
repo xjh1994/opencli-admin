@@ -5,13 +5,13 @@
 > **支持 Docker 一键运行，对本地环境零侵入。** opencli、Chrome、所有运行时依赖均已打包在镜像内，宿主机只需安装 Docker；也可直接原生运行，复用本地已有环境。
 
 **多实例多账号同时采集**
-<img width="3410" height="1188" alt="image" src="https://github.com/user-attachments/assets/d456fd3d-1d2d-4846-b38a-1a86cbbf298a" />
+<img width="3410" height="1188" alt="566109092-d456fd3d-1d2d-4846-b38a-1a86cbbf298a" src="https://github.com/user-attachments/assets/205450a5-e0d8-495e-8d7b-0e05caa4af9a" />
 
 **支持 chrome 实例自动/手动路由**
-<img width="3360" height="1854" alt="image" src="https://github.com/user-attachments/assets/c147dfd9-24a8-47b2-bced-aafb7ae06b61" />
+<img width="3360" height="1854" alt="566335801-c147dfd9-24a8-47b2-bced-aafb7ae06b61" src="https://github.com/user-attachments/assets/1344c159-01dc-4582-b8f9-55212ba14439" />
 
 **支持自定义 agent 智能体对采集的数据打标签**
-<img width="3358" height="884" alt="image" src="https://github.com/user-attachments/assets/994046c5-88ae-436f-8108-3327108cb2cc" />
+<img width="3358" height="884" alt="566120897-994046c5-88ae-436f-8108-3327108cb2cc" src="https://github.com/user-attachments/assets/f0c59128-f74e-4cb7-84ee-87818743a4b6" />
 
 ## 功能概览
 
