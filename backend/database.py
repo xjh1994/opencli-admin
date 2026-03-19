@@ -4,26 +4,32 @@ from collections.abc import AsyncGenerator
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from backend.config import get_settings
 
 settings = get_settings()
 
-# SQLite needs check_same_thread=False; PostgreSQL ignores it
-connect_args = {"check_same_thread": False} if settings.is_sqlite else {}
+# SQLite: NullPool avoids multi-connection lock contention (each session gets its own
+# fresh connection, no pooling). PostgreSQL uses default QueuePool.
+_pool_kwargs = {"poolclass": NullPool} if settings.is_sqlite else {}
+# timeout=30: sqlite3 native busy-wait (seconds); check_same_thread=False: allow async
+connect_args = {"check_same_thread": False, "timeout": 30} if settings.is_sqlite else {}
 
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     connect_args=connect_args,
+    **_pool_kwargs,
 )
 
 if settings.is_sqlite:
     @event.listens_for(engine.sync_engine, "connect")
-    def _set_sqlite_pragma(conn, _):
-        # WAL mode: allows concurrent readers + one writer, avoids "database is locked"
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
+    def _set_sqlite_pragma(dbapi_conn, _):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

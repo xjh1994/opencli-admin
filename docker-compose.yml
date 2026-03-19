@@ -48,6 +48,9 @@ services:
   # ── Backend API ───────────────────────────────────────────────────────────
   api:
     <<: *backend-common
+    # Run as root so the API can manage Docker containers (chrome pool) via
+    # the mounted socket. Acceptable for a self-hosted admin panel.
+    user: root
     environment:
       DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////data/opencli_admin.db}
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -57,8 +60,19 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # opencli CDP: points to Chrome sidecar container
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+      # opencli CDP: single-instance fallback
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
+      # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
+      CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
+      # Passed to the chrome pool manager so it can name containers/networks correctly
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-opencli-admin}
+    volumes:
+      - db_data:/data
+      - ./backend:/app/backend
+      # Docker socket: lets the API start/stop Chrome pool containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # .env mount: lets the API persist CHROME_POOL_ENDPOINTS after pool changes
+      - ./.env:/app/.env:rw
     ports:
       - "${API_PORT:-8031}:8000"
     healthcheck:
@@ -82,7 +96,8 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
+      CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -108,7 +123,9 @@ services:
         condition: service_healthy
 
   # ── Chrome sidecar (noVNC web UI + persistent profile for opencli) ────────
-  chrome:
+  # Default single instance — always started.
+  chrome-1:
+    container_name: chrome-1
     build:
       context: ./chrome
       dockerfile: Dockerfile
@@ -116,10 +133,13 @@ services:
         REGISTRY: ${DOCKER_REGISTRY:-}
     ports:
       - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
-      - "19222:19222"               # CDP proxy (socat 0.0.0.0:19222 → 127.0.0.1:9222)
     volumes:
-      - chrome_profile:/home/chrome/.config/chromium
+      - chrome_profile_1:/home/chrome/.config/chromium
     restart: unless-stopped
+
+  # Additional Chrome instances are managed dynamically via scripts/chrome-pool.sh
+  # Run: ./scripts/chrome-pool.sh start [N]
+  # See: ./scripts/chrome-pool.sh status
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
@@ -157,4 +177,4 @@ volumes:
   redis_data:
   postgres_data:
   db_data:
-  chrome_profile:
+  chrome_profile_1:

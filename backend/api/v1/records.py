@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -9,6 +10,10 @@ from backend.schemas.record import CollectedRecordRead
 from backend.services import record_service
 
 router = APIRouter(prefix="/records", tags=["records"])
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[str]
 
 
 @router.get("", response_model=ApiResponse[list[CollectedRecordRead]])
@@ -42,3 +47,32 @@ async def get_record(
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     return ApiResponse.ok(CollectedRecordRead.model_validate(record))
+
+
+@router.delete("/{record_id}", response_model=ApiResponse[None])
+async def delete_record(
+    record_id: str, db: AsyncSession = Depends(get_db)
+) -> ApiResponse:
+    deleted = await record_service.delete_records(db, [record_id])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Record not found")
+    return ApiResponse.ok(None)
+
+
+@router.post("/batch-delete", response_model=ApiResponse[dict])
+async def batch_delete_records(
+    body: BatchDeleteRequest, db: AsyncSession = Depends(get_db)
+) -> ApiResponse:
+    if not body.ids:
+        return ApiResponse.ok({"deleted": 0})
+    deleted = await record_service.delete_records(db, body.ids)
+    return ApiResponse.ok({"deleted": deleted})
+
+
+@router.delete("", response_model=ApiResponse[dict])
+async def clear_all_records(
+    source_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    deleted = await record_service.delete_all_records(db, source_id=source_id)
+    return ApiResponse.ok({"deleted": deleted})

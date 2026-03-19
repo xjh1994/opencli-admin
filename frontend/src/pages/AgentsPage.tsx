@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listAgents, createAgent, updateAgent, deleteAgent } from '../api/endpoints'
-import type { AIAgent } from '../api/types'
+import { listAgents, createAgent, updateAgent, deleteAgent, listProviders } from '../api/endpoints'
+import type { AIAgent, ModelProvider } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
@@ -179,6 +179,12 @@ function AgentModal({
   const isEdit = !!initial
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  const { data: providersData } = useQuery({
+    queryKey: ['providers'],
+    queryFn: listProviders,
+  })
+  const savedProviders = (providersData?.data ?? []).filter((p) => p.enabled)
+
   // Derive initial provider key from existing agent data
   const deriveProviderKey = (): string => {
     if (!initial) return 'claude'
@@ -193,6 +199,9 @@ function AgentModal({
 
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
+  // useSavedProvider: true = pick from saved providers; false = configure inline
+  const [useSavedProvider, setUseSavedProvider] = useState(!!initial?.provider_id)
+  const [savedProviderId, setSavedProviderId] = useState(initial?.provider_id ?? '')
   const [providerKey, setProviderKey] = useState(deriveProviderKey)
   const [model, setModel] = useState(initial?.model ?? PROVIDER_MAP['claude'].default_model)
   const [apiKey, setApiKey] = useState((initial?.processor_config as Record<string, unknown>)?.api_key as string ?? '')
@@ -204,6 +213,7 @@ function AgentModal({
   const [selectedCommand, setSelectedCommand] = useState('')
 
   const provider = PROVIDER_MAP[providerKey] ?? PROVIDERS[0]
+  const selectedSavedProvider: ModelProvider | undefined = savedProviders.find((p) => p.id === savedProviderId)
 
   const handleProviderChange = (key: string) => {
     const p = PROVIDER_MAP[key]
@@ -211,6 +221,14 @@ function AgentModal({
     setProviderKey(key)
     setBaseUrl(p.base_url ?? '')
     if (!isEdit) setModel(p.default_model)
+  }
+
+  const handleSavedProviderChange = (id: string) => {
+    setSavedProviderId(id)
+    const p = savedProviders.find((sp) => sp.id === id)
+    if (p) {
+      if (p.default_model && !isEdit) setModel(p.default_model)
+    }
   }
 
   const insertPlaceholder = (ph: string) => {
@@ -243,16 +261,22 @@ function AgentModal({
 
   const handleSubmit = () => {
     const processorConfig: Record<string, unknown> = {}
-    if (apiKey) processorConfig.api_key = apiKey
-    if (baseUrl) processorConfig.base_url = baseUrl
+    if (!useSavedProvider) {
+      if (apiKey) processorConfig.api_key = apiKey
+      if (baseUrl) processorConfig.base_url = baseUrl
+    }
+    const processorType = useSavedProvider
+      ? (selectedSavedProvider?.provider_type ?? 'openai')
+      : provider.processor_type
     onSave({
       name,
       description: description || undefined,
-      processor_type: provider.processor_type,
+      processor_type: processorType,
       model: model || undefined,
       prompt_template: promptTemplate,
       processor_config: processorConfig,
       enabled: initial?.enabled ?? true,
+      provider_id: useSavedProvider && savedProviderId ? savedProviderId : undefined,
     })
   }
 
@@ -292,66 +316,141 @@ function AgentModal({
 
           {/* Provider + model + credentials */}
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">模型配置</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>{t('agents.provider')}</label>
-                <select
-                  className={inputCls}
-                  value={providerKey}
-                  onChange={(e) => handleProviderChange(e.target.value)}
-                >
-                  {PROVIDERS.map((p) => (
-                    <option key={p.key} value={p.key}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>{t('agents.model')}</label>
-                <input
-                  className={inputCls}
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder={provider.default_model}
-                />
-              </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">模型配置</p>
+              {savedProviders.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setUseSavedProvider(false)}
+                    className={`px-2 py-0.5 rounded-full transition-colors ${!useSavedProvider ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    手动配置
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseSavedProvider(true)}
+                    className={`px-2 py-0.5 rounded-full transition-colors ${useSavedProvider ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    已保存提供商
+                  </button>
+                </div>
+              )}
             </div>
 
-            {(provider.needs_api_key || provider.base_url_editable) && (
-              <div className="grid grid-cols-2 gap-3">
-                {provider.needs_api_key && (
-                  <div>
-                    <label className={labelCls}>
-                      API Key
-                      <span className="ml-1 text-gray-400 font-normal text-[11px]">（可选，留空读环境变量）</span>
-                    </label>
-                    <input
-                      className={inputCls}
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="sk-..."
-                    />
+            {useSavedProvider ? (
+              /* Saved provider mode */
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>{t('providers.selectProvider')}</label>
+                  <select
+                    className={inputCls}
+                    value={savedProviderId}
+                    onChange={(e) => handleSavedProviderChange(e.target.value)}
+                  >
+                    <option value="">— {t('providers.selectProvider')} —</option>
+                    {savedProviders.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.default_model ? ` · ${p.default_model}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedSavedProvider && (
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 text-xs space-y-1">
+                    <div className="flex gap-2">
+                      <span className="text-gray-400 w-16">类型</span>
+                      <span className="font-medium dark:text-white">{selectedSavedProvider.provider_type}</span>
+                    </div>
+                    {selectedSavedProvider.base_url && (
+                      <div className="flex gap-2">
+                        <span className="text-gray-400 w-16">Base URL</span>
+                        <span className="font-mono text-gray-600 dark:text-gray-300 truncate">{selectedSavedProvider.base_url}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <span className="text-gray-400 w-16">API Key</span>
+                      <span className="text-gray-600 dark:text-gray-300">{selectedSavedProvider.api_key ? '••••••••' : '未配置（读环境变量）'}</span>
+                    </div>
                   </div>
                 )}
-                {provider.base_url_editable && (
-                  <div>
-                    <label className={labelCls}>Base URL</label>
-                    <input
-                      className={inputCls}
-                      value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value)}
-                      placeholder={provider.base_url || 'https://api.example.com/v1'}
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className={labelCls}>
+                    {t('agents.model')}
+                    <span className="ml-1 text-gray-400 font-normal text-[11px]">（留空使用提供商默认）</span>
+                  </label>
+                  <input
+                    className={inputCls}
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    placeholder={selectedSavedProvider?.default_model ?? ''}
+                  />
+                </div>
               </div>
-            )}
+            ) : (
+              /* Inline config mode */
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>{t('agents.provider')}</label>
+                    <select
+                      className={inputCls}
+                      value={providerKey}
+                      onChange={(e) => handleProviderChange(e.target.value)}
+                    >
+                      {PROVIDERS.map((p) => (
+                        <option key={p.key} value={p.key}>{p.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>{t('agents.model')}</label>
+                    <input
+                      className={inputCls}
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      placeholder={provider.default_model}
+                    />
+                  </div>
+                </div>
 
-            {!provider.needs_api_key && !provider.base_url_editable && provider.base_url && (
-              <p className="text-xs text-gray-400">
-                接入点：<code className="font-mono">{provider.base_url}</code>
-              </p>
+                {(provider.needs_api_key || provider.base_url_editable) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {provider.needs_api_key && (
+                      <div>
+                        <label className={labelCls}>
+                          API Key
+                          <span className="ml-1 text-gray-400 font-normal text-[11px]">（可选，留空读环境变量）</span>
+                        </label>
+                        <input
+                          className={inputCls}
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder="sk-..."
+                        />
+                      </div>
+                    )}
+                    {provider.base_url_editable && (
+                      <div>
+                        <label className={labelCls}>Base URL</label>
+                        <input
+                          className={inputCls}
+                          value={baseUrl}
+                          onChange={(e) => setBaseUrl(e.target.value)}
+                          placeholder={provider.base_url || 'https://api.example.com/v1'}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!provider.needs_api_key && !provider.base_url_editable && provider.base_url && (
+                  <p className="text-xs text-gray-400">
+                    接入点：<code className="font-mono">{provider.base_url}</code>
+                  </p>
+                )}
+              </>
             )}
           </div>
 

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents } from '../api/endpoints'
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
 import type { CronSchedule } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -9,7 +9,20 @@ import Card from '../components/Card'
 import DataTable from '../components/DataTable'
 import PageHeader from '../components/PageHeader'
 import { Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
+import { SITE_LABELS } from '../components/ChannelConfigForm'
 import { formatInTimeZone } from 'date-fns-tz'
+
+/** Derive noVNC port from CDP URL using chrome-N hostname convention. */
+function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
+  try {
+    const hostname = new URL(cdpUrl).hostname
+    const m = hostname.match(/^chrome(?:-(\d+))?$/)
+    const n = m ? parseInt(m[1] ?? '1', 10) : 1
+    return basePort + (n - 1)
+  } catch {
+    return basePort
+  }
+}
 
 // ── Cron builder ───────────────────────────────────────────────────────────────
 
@@ -209,6 +222,7 @@ function AddScheduleModal({
   const [timezone, setTimezone] = useState('Asia/Shanghai')
   const [cronFields, setCronFields] = useState<CronFields>(DEFAULT_FIELDS)
   const [agentId, setAgentId] = useState('')
+  const [chromeEndpoint, setChromeEndpoint] = useState('')
 
   const { data: sourcesData } = useQuery({
     queryKey: ['sources', 'all'],
@@ -222,6 +236,45 @@ function AddScheduleModal({
   })
   const agents = agentsData?.data ?? []
 
+  const { data: chromePool } = useQuery({
+    queryKey: ['chrome-pool'],
+    queryFn: getChromePool,
+  })
+  const chromeEndpoints = chromePool?.endpoints ?? []
+  const selectedSource = sources.find((s) => s.id === sourceId)
+  const showChromeSelector = selectedSource?.channel_type === 'opencli' && chromeEndpoints.length >= 1
+
+  const { data: bindingsData } = useQuery({
+    queryKey: ['browser-bindings'],
+    queryFn: listBrowserBindings,
+  })
+  const bindings = bindingsData?.data ?? []
+
+  // endpoint → bound site names map (for display)
+  const endpointBoundSites: Record<string, string[]> = {}
+  for (const b of bindings) {
+    if (!endpointBoundSites[b.browser_endpoint]) endpointBoundSites[b.browser_endpoint] = []
+    endpointBoundSites[b.browser_endpoint].push(b.site)
+  }
+
+  // Auto-select: prefer endpoint bound to source's site, else single-endpoint fallback
+  // Re-runs when sourceId changes so selection resets for new source
+  useEffect(() => {
+    const site = selectedSource?.channel_config?.site as string | undefined
+    if (site) {
+      const binding = bindings.find((b) => b.site === site)
+      if (binding) {
+        setChromeEndpoint(binding.browser_endpoint)
+        return
+      }
+    }
+    if (chromeEndpoints.length === 1) {
+      setChromeEndpoint(chromeEndpoints[0].url)
+    } else {
+      setChromeEndpoint('')
+    }
+  }, [chromeEndpoints, bindingsData, sourceId])
+
   const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
 
@@ -233,6 +286,7 @@ function AddScheduleModal({
       timezone,
       is_one_time: cronFields.freq === 'once',
       agent_id: agentId || undefined,
+      parameters: chromeEndpoint ? { chrome_endpoint: chromeEndpoint } : {},
     })
   }
 
@@ -300,6 +354,64 @@ function AddScheduleModal({
               ))}
             </select>
           </div>
+
+          {showChromeSelector && (
+            <div>
+              <label className={labelCls}>{t('channelConfig.chromeEndpoint')}</label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="chrome-ep-sched"
+                    value=""
+                    checked={chromeEndpoint === ''}
+                    onChange={() => setChromeEndpoint('')}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-300">{t('channelConfig.chromeEndpointAny')}</span>
+                </label>
+                {chromeEndpoints.map((ep) => {
+                  const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
+                  const novncUrl = `http://${window.location.hostname}:${novncPort}`
+                  const label = ep.url.replace('http://', '').replace(':19222', '')
+                  const boundSites = endpointBoundSites[ep.url] ?? []
+                  return (
+                    <label key={ep.url} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="chrome-ep-sched"
+                        value={ep.url}
+                        checked={chromeEndpoint === ep.url}
+                        onChange={() => setChromeEndpoint(ep.url)}
+                        className="accent-blue-600"
+                      />
+                      <span className={`text-sm ${ep.available ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
+                        {label}
+                      </span>
+                      <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
+                        {ep.available ? '●' : '○'}
+                      </span>
+                      {boundSites.map((site) => (
+                        <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                          {SITE_LABELS[site] ?? site}
+                        </span>
+                      ))}
+                      <a
+                        href={novncUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="ml-auto text-xs text-blue-500 hover:underline font-mono"
+                      >
+                        {window.location.hostname}:{novncPort} ↗
+                      </a>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-xs text-gray-400">{t('channelConfig.chromeEndpointHint')}</p>
+            </div>
+          )}
         </div>
 
         <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">

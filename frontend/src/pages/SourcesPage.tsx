@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents } from '../api/endpoints'
+import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
 import type { DataSource } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -12,6 +12,18 @@ import PageHeader from '../components/PageHeader'
 import ChannelConfigForm, { type ChannelType, PRESET_DEFAULT, SITE_LABELS, COMMANDS_BY_SITE } from '../components/ChannelConfigForm'
 import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Pencil } from 'lucide-react'
 import { formatInTimeZone } from 'date-fns-tz'
+
+/** Derive noVNC port from CDP URL using chrome-N hostname convention. */
+function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
+  try {
+    const hostname = new URL(cdpUrl).hostname
+    const m = hostname.match(/^chrome(?:-(\d+))?$/)
+    const n = m ? parseInt(m[1] ?? '1', 10) : 1
+    return basePort + (n - 1)
+  } catch {
+    return basePort
+  }
+}
 
 const CHANNEL_COLORS: Record<string, string> = {
   opencli:     'bg-indigo-100 text-indigo-700',
@@ -175,22 +187,66 @@ function SourceModal({
 }
 
 function TriggerModal({
-  sourceId,
+  source,
   onClose,
   onTrigger,
 }: {
-  sourceId: string
+  source: DataSource
   onClose: () => void
-  onTrigger: (agentId?: string) => void
+  onTrigger: (agentId?: string, parameters?: Record<string, unknown>) => void
 }) {
   const { t } = useTranslation()
   const [agentId, setAgentId] = useState('')
+  const [chromeEndpoint, setChromeEndpoint] = useState('')
 
   const { data: agentsData } = useQuery({
     queryKey: ['agents', 'enabled'],
     queryFn: () => listAgents({ enabled: true }),
   })
   const agents = agentsData?.data ?? []
+
+  const { data: chromePool } = useQuery({
+    queryKey: ['chrome-pool'],
+    queryFn: getChromePool,
+    enabled: source.channel_type === 'opencli',
+  })
+  const chromeEndpoints = chromePool?.endpoints ?? []
+  const showChromeSelector = source.channel_type === 'opencli' && chromeEndpoints.length >= 1
+
+  const { data: bindingsData } = useQuery({
+    queryKey: ['browser-bindings'],
+    queryFn: listBrowserBindings,
+    enabled: source.channel_type === 'opencli',
+  })
+  const bindings = bindingsData?.data ?? []
+
+  // endpoint → bound site names map (for display)
+  const endpointBoundSites: Record<string, string[]> = {}
+  for (const b of bindings) {
+    if (!endpointBoundSites[b.browser_endpoint]) endpointBoundSites[b.browser_endpoint] = []
+    endpointBoundSites[b.browser_endpoint].push(b.site)
+  }
+
+  // Auto-select: prefer endpoint bound to source's site, else single-endpoint fallback
+  useEffect(() => {
+    const site = source.channel_config?.site as string | undefined
+    if (site) {
+      const binding = bindings.find((b) => b.site === site)
+      if (binding) {
+        setChromeEndpoint(binding.browser_endpoint)
+        return
+      }
+    }
+    if (chromeEndpoints.length === 1 && !chromeEndpoint) {
+      setChromeEndpoint(chromeEndpoints[0].url)
+    }
+  }, [chromeEndpoints, bindingsData])
+
+  const handleTrigger = () => {
+    const params: Record<string, unknown> = {}
+    if (chromeEndpoint) params.chrome_endpoint = chromeEndpoint
+    onTrigger(agentId || undefined, Object.keys(params).length ? params : undefined)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -214,6 +270,64 @@ function TriggerModal({
               ))}
             </select>
           </div>
+
+          {showChromeSelector && (
+            <div>
+              <label className={labelCls}>{t('channelConfig.chromeEndpoint')}</label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="chrome-ep"
+                    value=""
+                    checked={chromeEndpoint === ''}
+                    onChange={() => setChromeEndpoint('')}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-300">{t('channelConfig.chromeEndpointAny')}</span>
+                </label>
+                {chromeEndpoints.map((ep) => {
+                  const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
+                  const novncUrl = `http://${window.location.hostname}:${novncPort}`
+                  const label = ep.url.replace('http://', '').replace(':19222', '')
+                  const boundSites = endpointBoundSites[ep.url] ?? []
+                  return (
+                    <label key={ep.url} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="chrome-ep"
+                        value={ep.url}
+                        checked={chromeEndpoint === ep.url}
+                        onChange={() => setChromeEndpoint(ep.url)}
+                        className="accent-blue-600"
+                      />
+                      <span className={`text-sm ${ep.available ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
+                        {label}
+                      </span>
+                      <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
+                        {ep.available ? '●' : '○'}
+                      </span>
+                      {boundSites.map((site) => (
+                        <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                          {SITE_LABELS[site] ?? site}
+                        </span>
+                      ))}
+                      <a
+                        href={novncUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="ml-auto text-xs text-blue-500 hover:underline font-mono"
+                      >
+                        {window.location.hostname}:{novncPort} ↗
+                      </a>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-xs text-gray-400">{t('channelConfig.chromeEndpointHint')}</p>
+            </div>
+          )}
         </div>
         <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
           <button
@@ -223,7 +337,7 @@ function TriggerModal({
             {t('common.cancel')}
           </button>
           <button
-            onClick={() => onTrigger(agentId || undefined)}
+            onClick={handleTrigger}
             className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700"
           >
             {t('sources.triggerNow')}
@@ -270,8 +384,8 @@ export default function SourcesPage() {
   const [triggerStates, setTriggerStates] = useState<Record<string, 'loading' | 'ok' | 'err'>>({})
 
   const triggerMut = useMutation({
-    mutationFn: ({ id, agentId }: { id: string; agentId?: string }) =>
-      triggerTask(id, {}, agentId),
+    mutationFn: ({ id, agentId, parameters }: { id: string; agentId?: string; parameters?: Record<string, unknown> }) =>
+      triggerTask(id, parameters ?? {}, agentId),
     onMutate: ({ id }) => setTriggerStates((s) => ({ ...s, [id]: 'loading' })),
     onSuccess: (_data, { id }) => {
       setTriggerStates((s) => ({ ...s, [id]: 'ok' }))
@@ -433,9 +547,11 @@ export default function SourcesPage() {
 
       {triggerSource && (
         <TriggerModal
-          sourceId={triggerSource.id}
+          source={triggerSource}
           onClose={() => setTriggerSource(null)}
-          onTrigger={(agentId) => triggerMut.mutate({ id: triggerSource.id, agentId })}
+          onTrigger={(agentId, parameters) =>
+            triggerMut.mutate({ id: triggerSource.id, agentId, parameters })
+          }
         />
       )}
     </div>

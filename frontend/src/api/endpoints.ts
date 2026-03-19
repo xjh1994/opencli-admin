@@ -2,6 +2,9 @@ import { apiClient } from './client'
 import type {
   AIAgent,
   ApiResponse,
+  ModelProvider,
+  BrowserBinding,
+  ChromeEndpoint,
   CollectedRecord,
   CollectionTask,
   CronSchedule,
@@ -77,6 +80,15 @@ export const listRecords = (params?: {
 export const getRecord = (id: string) =>
   apiClient.get<ApiResponse<CollectedRecord>>(`/records/${id}`).then((r) => r.data.data)
 
+export const deleteRecord = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/records/${id}`).then((r) => r.data)
+
+export const batchDeleteRecords = (ids: string[]) =>
+  apiClient.post<ApiResponse<{ deleted: number }>>('/records/batch-delete', { ids }).then((r) => r.data)
+
+export const clearAllRecords = (source_id?: string) =>
+  apiClient.delete<ApiResponse<{ deleted: number }>>('/records', { params: source_id ? { source_id } : {} }).then((r) => r.data)
+
 // ── Schedules ──────────────────────────────────────────────────────────────────
 export const listSchedules = (params?: { source_id?: string; enabled?: boolean }) =>
   apiClient.get<ApiResponse<CronSchedule[]>>('/schedules', { params }).then((r) => r.data)
@@ -112,6 +124,19 @@ export const listNotificationLogs = (params?: { rule_id?: string }) =>
     .get<ApiResponse<NotificationLog[]>>('/notifications/logs', { params })
     .then((r) => r.data)
 
+// ── Model Providers ────────────────────────────────────────────────────────────
+export const listProviders = () =>
+  apiClient.get<ApiResponse<ModelProvider[]>>('/providers').then((r) => r.data)
+
+export const createProvider = (data: Partial<ModelProvider>) =>
+  apiClient.post<ApiResponse<ModelProvider>>('/providers', data).then((r) => r.data.data)
+
+export const updateProvider = (id: string, data: Partial<ModelProvider>) =>
+  apiClient.patch<ApiResponse<ModelProvider>>(`/providers/${id}`, data).then((r) => r.data.data)
+
+export const deleteProvider = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/providers/${id}`).then((r) => r.data)
+
 // ── Agents ─────────────────────────────────────────────────────────────────────
 export const listAgents = (params?: { enabled?: boolean }) =>
   apiClient.get<ApiResponse<AIAgent[]>>('/agents', { params }).then((r) => r.data)
@@ -125,6 +150,25 @@ export const updateAgent = (id: string, data: Partial<AIAgent>) =>
 export const deleteAgent = (id: string) =>
   apiClient.delete<ApiResponse<null>>(`/agents/${id}`).then((r) => r.data)
 
+// ── Browser bindings ───────────────────────────────────────────────────────────
+export const listBrowserBindings = () =>
+  apiClient.get<ApiResponse<BrowserBinding[]>>('/browsers/bindings').then((r) => r.data)
+
+export const createBrowserBinding = (data: { browser_endpoint: string; site: string; notes?: string }) =>
+  apiClient.post<ApiResponse<BrowserBinding>>('/browsers/bindings', data).then((r) => r.data.data)
+
+export const deleteBrowserBinding = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/browsers/bindings/${id}`).then((r) => r.data)
+
+export const addChromeInstance = (count = 1) =>
+  apiClient.post<ApiResponse<{ created: { endpoint: string; novnc_port: number }[]; total: number }>>(`/browsers/chrome-instances?count=${count}`).then((r) => r.data.data)
+
+export const removeChromeInstance = (n: number) =>
+  apiClient.delete<ApiResponse<{ removed: string; total: number }>>(`/browsers/chrome-instances/${n}`).then((r) => r.data)
+
+export const restartApi = () =>
+  apiClient.post<ApiResponse<{ restarting: boolean }>>('/browsers/restart-api').then((r) => r.data)
+
 // ── System ─────────────────────────────────────────────────────────────────────
 export const getHealth = () =>
   apiClient.get<{ status: string; version: string; task_executor: string }>('/health').then((r) => r.data)
@@ -135,3 +179,8 @@ export const listWorkers = () =>
 
 export const getCeleryStats = () =>
   apiClient.get<ApiResponse<Record<string, unknown>>>('/workers/celery-stats').then((r) => r.data.data)
+
+export const getChromePool = () =>
+  apiClient
+    .get<ApiResponse<{ endpoints: ChromeEndpoint[]; total: number; available: number }>>('/workers/chrome-pool')
+    .then((r) => r.data.data)

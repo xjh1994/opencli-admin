@@ -1,0 +1,24 @@
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 19222;
+
+    location / {
+        proxy_pass http://127.0.0.1:9222;
+        proxy_set_header Host localhost;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Rewrite WebSocket URLs so clients connect back through this proxy.
+        # CHROME_HOSTNAME is injected at container start via envsubst.
+        sub_filter_types application/json;
+        sub_filter_once off;
+        sub_filter 'ws://localhost/' 'ws://${CHROME_HOSTNAME}:19222/';
+        sub_filter 'ws://localhost:9222/' 'ws://${CHROME_HOSTNAME}:19222/';
+        sub_filter '"localhost"' '"${CHROME_HOSTNAME}"';
+    }
+}

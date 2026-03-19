@@ -47,6 +47,8 @@ dependencies = [
     "croniter>=3.0.0",
     "jinja2>=3.1.0",
     "pyyaml>=6.0.0",
+    # Docker SDK (for chrome pool management via API)
+    "docker>=7.0.0",
 ]
 
 [project.optional-dependencies]

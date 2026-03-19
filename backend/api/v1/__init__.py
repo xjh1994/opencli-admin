@@ -4,8 +4,10 @@ from fastapi import APIRouter
 
 from backend.api.v1 import (
     agents,
+    browsers,
     dashboard,
     notifications,
+    providers,
     records,
     schedules,
     sources,
@@ -17,6 +19,8 @@ from backend.api.v1 import (
 v1_router = APIRouter(prefix="/api/v1")
 
 v1_router.include_router(agents.router)
+v1_router.include_router(browsers.router)
+v1_router.include_router(providers.router)
 v1_router.include_router(sources.router)
 v1_router.include_router(tasks.router)
 v1_router.include_router(records.router)
