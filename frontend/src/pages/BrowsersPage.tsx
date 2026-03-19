@@ -197,6 +197,55 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
   )
 }
 
+// ── Remove Instance Modal ─────────────────────────────────────────────────────
+
+interface RemoveInstanceModalProps {
+  name: string
+  onConfirm: (withRestart: boolean) => void
+  onClose: () => void
+  isPending: boolean
+}
+
+function RemoveInstanceModal({ name, onConfirm, onClose, isPending }: RemoveInstanceModalProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-80 p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-sm font-semibold dark:text-white mb-2">{t('browsers.removeInstance')}</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+          {t('browsers.confirmRemove', { name })}
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => onConfirm(true)}
+            disabled={isPending}
+            className="w-full px-3 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 font-medium"
+          >
+            {isPending ? t('common.loading') : t('browsers.removeAndRestart')}
+          </button>
+          <button
+            onClick={() => onConfirm(false)}
+            disabled={isPending}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            {t('browsers.removeLaterRestart')}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="w-full px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Site dropdown ─────────────────────────────────────────────────────────────
 
 interface SiteDropdownProps {
@@ -351,6 +400,7 @@ export default function BrowsersPage() {
   const [restartMsg, setRestartMsg] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [startingEndpoints, setStartingEndpoints] = useState<Set<string>>(new Set())
+  const [removingIdx, setRemovingIdx] = useState<number | null>(null)
 
   const invalidatePool = () => {
     queryClient.invalidateQueries({ queryKey: ['chrome-pool'] })
@@ -402,8 +452,12 @@ export default function BrowsersPage() {
   })
 
   const removeInstanceMutation = useMutation({
-    mutationFn: removeChromeInstance,
-    onSuccess: invalidatePool,
+    mutationFn: ({ idx }: { idx: number; withRestart: boolean }) => removeChromeInstance(idx),
+    onSuccess: (_data, { withRestart }) => {
+      setRemovingIdx(null)
+      invalidatePool()
+      if (withRestart) restartMutation.mutate()
+    },
   })
 
   const restartMutation = useMutation({
@@ -482,7 +536,7 @@ export default function BrowsersPage() {
               boundSites={boundSites}
               onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
               onUnbind={(id) => deleteMutation.mutate(id)}
-              onRemove={idx !== null ? () => removeInstanceMutation.mutate(idx) : undefined}
+              onRemove={idx !== null ? () => setRemovingIdx(idx) : undefined}
               isBindPending={addMutation.isPending}
               isRemovePending={removeInstanceMutation.isPending}
             />
@@ -514,6 +568,16 @@ export default function BrowsersPage() {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Remove instance modal */}
+      {removingIdx !== null && (
+        <RemoveInstanceModal
+          name={`chrome-${removingIdx}`}
+          onConfirm={(withRestart) => removeInstanceMutation.mutate({ idx: removingIdx, withRestart })}
+          onClose={() => { if (!removeInstanceMutation.isPending) setRemovingIdx(null) }}
+          isPending={removeInstanceMutation.isPending}
+        />
       )}
 
       {/* Add instance modal */}
