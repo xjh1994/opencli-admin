@@ -22,6 +22,21 @@ RUN useradd -m -u 1000 chrome \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Build Browser Bridge extension (optional — only included if source was copied
+# by running ./scripts/build-extension.sh before docker compose build chrome-1).
+COPY extension-src/ /tmp/extension-src/
+RUN if [ -f /tmp/extension-src/package.json ]; then \
+      cd /tmp/extension-src && npm ci && npm run build \
+      && mkdir -p /home/chrome/extension/dist \
+      && cp manifest.json /home/chrome/extension/ \
+      && cp -r icons /home/chrome/extension/ \
+      && cp dist/background.js /home/chrome/extension/dist/ \
+      && echo "Browser Bridge extension built OK"; \
+    else \
+      echo "No extension source found — skipping extension build"; \
+    fi \
+    && rm -rf /tmp/extension-src
+
 EXPOSE 9222 6080
 
 USER chrome

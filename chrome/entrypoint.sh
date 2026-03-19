@@ -41,6 +41,12 @@ if [ "${BROWSER_BRIDGE_ENABLED:-false}" = "true" ]; then
 fi
 
 # Keep Chromium running; restart on crash
+CHROME_EXTRA_FLAGS=""
+if [ "${BROWSER_BRIDGE_ENABLED:-false}" = "true" ] && [ -f /home/chrome/extension/manifest.json ]; then
+  CHROME_EXTRA_FLAGS="--load-extension=/home/chrome/extension"
+  echo "[entrypoint] Browser Bridge extension will be loaded from /home/chrome/extension"
+fi
+
 start_chrome() {
   find /home/chrome/.config/chromium -name 'SingletonLock' -o -name 'SingletonCookie' -o -name 'SingletonSocket' 2>/dev/null | xargs rm -f 2>/dev/null || true
   chromium \
@@ -51,6 +57,7 @@ start_chrome() {
     --disable-dev-shm-usage \
     --user-data-dir=/home/chrome/.config/chromium \
     --window-size=1280,900 \
+    $CHROME_EXTRA_FLAGS \
     "$@"
 }
 

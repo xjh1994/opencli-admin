@@ -63,3 +63,7 @@ redis-data/
 # Celery
 celerybeat-schedule
 celerybeat.pid
+
+# Browser Bridge extension build artifacts (populated by scripts/build-extension.sh)
+chrome/extension-src/*
+!chrome/extension-src/.gitkeep
