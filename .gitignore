@@ -64,6 +64,7 @@ redis-data/
 celerybeat-schedule
 celerybeat.pid
 
-# Browser Bridge extension build artifacts (populated by scripts/build-extension.sh)
-chrome/extension-src/*
-!chrome/extension-src/.gitkeep
+# Ignore compiled extension artifacts; keep source
+chrome/extension-src/dist/
+chrome/extension-src/node_modules/
+chrome/extension-src/store-assets/
