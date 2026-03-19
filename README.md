@@ -10,8 +10,8 @@
 - **定时计划** — 结构化频率设置（每 N 分钟 / 每小时 / 每天 / 每周 / 每月 / 指定时间），支持时区和一次性执行
 - **采集任务** — 实时查看任务状态、执行历史、错误信息
 - **采集记录** — 归一化展示所有采集到的数据，支持状态筛选
-- **AI 增强** — 采集完成后自动调用 AI 对内容进行分析、摘要、打标等处理，结果附加到记录上；支持 Claude、OpenAI、Ollama（本地模型），通过 Prompt 模板灵活配置处理逻辑
-- **通知规则** — 按触发事件（新记录入库 / AI 处理完成 / 任务失败）向 Webhook、邮件、飞书、钉钉、企业微信推送通知，支持按数据源过滤
+- **AI 智能体** — 采集完成后自动调用 AI 对内容进行分析、摘要、打标等处理，结果附加到记录上；支持 Claude、OpenAI、DeepSeek、Kimi、GLM、MiniMax、Ollama 等模型提供商，内置预设 Prompt 模板，占位符自动匹配各站点实际字段
+- **通知推送** — 按触发事件（新记录入库 / AI 处理完成 / 任务失败）向 Webhook、邮件、飞书、钉钉、企业微信推送，各渠道结构化配置表单，支持签名验证
 - **工作节点** — 分布式模式下查看 Celery Worker 状态
 
 ### 支持平台（opencli 渠道）
@@ -142,9 +142,10 @@ SECRET_KEY=your-random-secret-key
 # 任务执行模式（见下方说明）
 TASK_EXECUTOR=local
 
-# AI 增强（可选）
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
+# AI 智能体所需密钥（按实际使用的提供商填写，也可在智能体配置页面单独填写）
+ANTHROPIC_API_KEY=sk-ant-...   # Claude
+OPENAI_API_KEY=sk-...          # OpenAI
+# DEEPSEEK_API_KEY / MOONSHOT_API_KEY 等在智能体配置中直接填写
 ```
 
 完整配置项参见 [.env.example](.env.example)。
@@ -188,13 +189,15 @@ docker-compose --profile celery up -d
     ↓
 渠道采集（opencli / RSS / API / Web Scraper / CLI）
     ↓
-数据归一化（title / url / content / author / published_at）
+数据归一化（title / url / content / author / published_at + extra_* 扩展字段）
     ↓
 去重存储（SHA-256 内容哈希）
     ↓
-AI 增强（可选，Anthropic / OpenAI / Ollama）
+AI 智能体处理（可选）
+  └─ 支持：Claude · OpenAI · DeepSeek · Kimi · GLM · MiniMax · Ollama · 自定义
     ↓
-通知推送（可选，按规则触发）
+通知推送（可选，按触发事件 + 数据源过滤）
+  └─ 渠道：Webhook · 飞书 · 钉钉 · 企业微信 · Email
 ```
 
 ## 项目结构
