@@ -99,7 +99,34 @@ api 容器
                  └─ Chrome 本体（127.0.0.1:9222）
 ```
 
-nginx 代理的作用是将 CDP 响应中的 `localhost` 替换为 `chrome`，确保 api 容器能通过容器名寻址回连。该端点通过环境变量 `OPENCLI_CDP_ENDPOINT=http://chrome:19222` 注入到 api 和 worker 容器。
+nginx 代理将 CDP 响应中的 `localhost` 替换为当前容器名，确保 api 容器能通过容器名寻址回连。
+
+**多实例 Chrome 并行采集**
+
+默认启动单个 Chrome 实例。如需并行执行多个采集任务，可通过脚本动态扩容：
+
+```bash
+# 启动 3 个 Chrome 实例
+./scripts/chrome-pool.sh start 3
+
+# 输出示例：
+#   ▶ Starting chrome-2  (noVNC → http://localhost:3011)
+#   ▶ Starting chrome-3  (noVNC → http://localhost:3012)
+#   CHROME_POOL_ENDPOINTS=http://chrome:19222,http://chrome-2:19222,http://chrome-3:19222
+
+# 将上面的 CHROME_POOL_ENDPOINTS 写入 .env，重启 API 即生效
+docker-compose restart api
+```
+
+其他命令：
+
+```bash
+./scripts/chrome-pool.sh status      # 查看所有实例状态
+./scripts/chrome-pool.sh start 1     # 缩减回单实例（多余的自动停止）
+./scripts/chrome-pool.sh stop        # 停止所有额外实例
+```
+
+每个实例拥有独立的浏览器 Profile 和 noVNC 端口（从 `NOVNC_PORT` 递增），首次启动后需分别通过 noVNC 登录各平台账号。
 
 **停止**
 
@@ -128,7 +155,8 @@ opencli 渠道依赖浏览器登录态，首次使用需手动登录各平台账
 |------|----------|-------------|
 | 管理界面 | 8030 | `FRONTEND_PORT` |
 | API | 8031 | `API_PORT` |
-| Chrome noVNC | 3010 | `NOVNC_PORT`（仅 Docker） |
+| Chrome noVNC（实例 1） | 3010 | `NOVNC_PORT`（仅 Docker） |
+| Chrome noVNC（实例 N） | 3010 + N−1 | 由 `chrome-pool.sh` 自动分配 |
 | Chrome CDP | 9222 | `CDP_PORT`（仅原生） |
 
 原生模式支持命令行参数临时覆盖（优先级高于 `.env`）：
@@ -223,6 +251,8 @@ AI 智能体处理（可选）
 │       ├── components/  # 公共组件
 │       └── api/         # API 客户端
 ├── chrome/              # Chrome 容器（noVNC + CDP，Docker 模式使用）
+├── scripts/
+│   └── chrome-pool.sh   # 动态管理 Chrome 实例数量（扩容 / 缩容 / 状态）
 ├── docker-compose.yml
 ├── start.sh             # 原生 shell 启动脚本
 └── .env.example
