@@ -35,6 +35,8 @@
 <img width="3360" height="1854" alt="image" src="https://github.com/user-attachments/assets/16158af4-7f2b-4c40-a0cb-fda6c87a9929" />
 <img width="3360" height="2128" alt="image" src="https://github.com/user-attachments/assets/c2860e1c-23f0-4ce5-94de-599f4b9de062" />
 <img width="3360" height="1856" alt="image" src="https://github.com/user-attachments/assets/1236b60d-b682-4327-bbfd-4e6da1f857cf" />
+<img width="634" height="768" alt="image" src="https://github.com/user-attachments/assets/df369395-3e29-438b-ab8a-223f10211687" />
+
 
 ### 支持平台（opencli 渠道）
 
