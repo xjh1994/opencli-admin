@@ -4,8 +4,8 @@ import asyncio
 import csv
 import io
 import json
+import logging
 import os
-import re
 import shutil
 from typing import Any
 
@@ -13,6 +13,8 @@ import yaml
 
 from backend.channels.base import AbstractChannel, ChannelResult
 from backend.channels.registry import register_channel
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_json(raw: str) -> list[dict]:
@@ -40,7 +42,6 @@ def _parse_csv(raw: str) -> list[dict]:
 def _parse_table(raw: str) -> list[dict]:
     """Parse cli-table3 Unicode box-drawing table into list of dicts."""
     lines = raw.splitlines()
-    # Keep only lines that start with │ (data/header rows)
     data_lines = [l for l in lines if l.strip().startswith("│")]
     if not data_lines:
         return [{"content": raw}]
@@ -68,7 +69,7 @@ def _parse_markdown(raw: str) -> list[dict]:
 
     headers = split_row(lines[0])
     rows = []
-    for line in lines[2:]:  # skip separator line (|---|---|)
+    for line in lines[2:]:
         cells = split_row(line)
         if len(cells) == len(headers):
             rows.append(dict(zip(headers, cells)))
@@ -97,8 +98,6 @@ class OpenCLIChannel(AbstractChannel):
         command = config.get("command", "")
         output_format = config.get("format", "json")
 
-        # chrome_endpoint is a routing hint, not a CLI argument — strip it before
-        # merging parameters into CLI args.
         chrome_endpoint: str | None = parameters.get("chrome_endpoint") or None
         cli_params = {k: v for k, v in parameters.items() if k != "chrome_endpoint"}
         args: dict = {**config.get("args", {}), **cli_params}
@@ -113,6 +112,7 @@ class OpenCLIChannel(AbstractChannel):
         from backend.browser_pool import get_pool
         async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:
             env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
+            logger.info("opencli exec | cmd=%s cdp=%s", " ".join(cmd), cdp_endpoint)
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -122,27 +122,39 @@ class OpenCLIChannel(AbstractChannel):
                 )
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
             except asyncio.TimeoutError:
+                logger.error("opencli timeout | cmd=%s", " ".join(cmd))
                 return ChannelResult.fail("opencli command timed out after 60s")
             except FileNotFoundError:
+                logger.error("opencli not found in PATH")
                 return ChannelResult.fail("opencli binary not found in PATH")
             except Exception as exc:
+                logger.exception("opencli subprocess error | %s", exc)
                 return ChannelResult.fail(f"Failed to run opencli: {exc}")
 
+            stderr_text = stderr.decode().strip()
+            if stderr_text:
+                logger.warning("opencli stderr | %s", stderr_text[:500])
+
             if proc.returncode != 0:
+                logger.error("opencli exit=%d | stderr=%s", proc.returncode, stderr_text[:500])
                 return ChannelResult.fail(
-                    f"opencli exited with code {proc.returncode}: {stderr.decode()}"
+                    f"opencli exited with code {proc.returncode}: {stderr_text}"
                 )
 
             raw = stdout.decode()
+            logger.debug("opencli stdout | %d chars | preview=%s", len(raw), raw[:200])
 
         parser = _PARSERS.get(output_format, _PARSERS["json"])
         try:
             items = parser(raw)
         except Exception as exc:
+            logger.error("opencli parse error | format=%s error=%s output_preview=%s",
+                         output_format, exc, raw[:300])
             return ChannelResult.fail(
                 f"Failed to parse opencli {output_format} output: {exc}"
             )
 
+        logger.info("opencli done | site=%s cmd=%s items=%d", site, command, len(items))
         return ChannelResult.ok(items, site=site, command=command)
 
     async def validate_config(self, config: dict[str, Any]) -> list[str]:

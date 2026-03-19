@@ -1,6 +1,7 @@
 """Claude (Anthropic) AI processor."""
 
 import json
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -9,6 +10,8 @@ from backend.processors.registry import register_processor
 
 if TYPE_CHECKING:
     from backend.models.record import CollectedRecord
+
+logger = logging.getLogger(__name__)
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
 
@@ -40,11 +43,16 @@ class ClaudeProcessor(AbstractProcessor):
         model = config.get("model", "claude-haiku-4-5-20251001")
         max_tokens = config.get("max_tokens", 1024)
 
+        logger.info("claude processor | model=%s max_tokens=%d records=%d",
+                    model, max_tokens, len(records))
+
         client = anthropic.AsyncAnthropic(api_key=api_key)
         enrichments: list[dict[str, Any]] = []
 
-        for record in records:
+        for i, record in enumerate(records):
             prompt = _render(prompt_template, record.normalized_data)
+            logger.debug("claude req [%d/%d] | prompt_preview=%s",
+                         i + 1, len(records), prompt[:200])
             try:
                 response = await client.messages.create(
                     model=model,
@@ -52,13 +60,21 @@ class ClaudeProcessor(AbstractProcessor):
                     messages=[{"role": "user", "content": prompt}],
                 )
                 text = response.content[0].text
-                # Try to parse JSON; fall back to raw text
+                usage = response.usage
+                logger.info("claude resp [%d/%d] | input_tokens=%d output_tokens=%d preview=%s",
+                            i + 1, len(records),
+                            usage.input_tokens, usage.output_tokens,
+                            text[:200])
                 try:
                     enrichment = json.loads(text)
                 except json.JSONDecodeError:
                     enrichment = {"analysis": text}
                 enrichments.append(enrichment)
             except Exception as exc:
+                logger.error("claude error [%d/%d] | %s", i + 1, len(records), exc)
                 enrichments.append({"error": str(exc)})
 
+        logger.info("claude processor done | success=%d errors=%d",
+                    sum(1 for e in enrichments if "error" not in e),
+                    sum(1 for e in enrichments if "error" in e))
         return ProcessingResult(success=True, enrichments=enrichments)

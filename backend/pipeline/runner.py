@@ -18,13 +18,22 @@ async def run_collection_pipeline(
     celery_task_id: str | None = None,
     worker_id: str | None = None,
 ) -> dict:
-    """Execute full collection pipeline for task_id. Returns result dict."""
+    """Execute full collection pipeline for task_id.
+
+    Uses separate short-lived sessions per write phase to avoid holding an open
+    write transaction during the long-running collection step (Chrome/CLI).
+    """
+    logger.info("[task:%s] pipeline start | params=%s", task_id, parameters)
+
+    # ── Phase 1: mark running, create TaskRun ────────────────────────────────
+    run_id: str | None = None
+    source_id: str | None = None
+    merged_params: dict = {}
+    agent_id: str | None = None
+
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(CollectionTask).where(CollectionTask.id == task_id)
-        )
-        collection_task = result.scalar_one_or_none()
-        if not collection_task:
+        task = await session.get(CollectionTask, task_id)
+        if not task:
             return {"error": f"Task {task_id} not found"}
 
         run = TaskRun(
@@ -35,34 +44,37 @@ async def run_collection_pipeline(
             started_at=datetime.now(timezone.utc),
         )
         session.add(run)
+        task.status = "running"
         await session.flush()
+        run_id = run.id
+        source_id = task.source_id
+        merged_params = {**task.parameters, **parameters}
+        agent_id = task.agent_id
+        await session.commit()
+    logger.info("[task:%s] phase1 done | run_id=%s source_id=%s merged_params=%s",
+                task_id, run_id, source_id, merged_params)
 
-        collection_task.status = "running"
-        await session.flush()
-
-        from backend.models.source import DataSource
-        src_result = await session.execute(
-            select(DataSource).where(DataSource.id == collection_task.source_id)
-        )
-        source = src_result.scalar_one_or_none()
+    # ── Phase 2: load source + agent config (read-only, no write lock) ───────
+    from backend.models.source import DataSource
+    async with AsyncSessionLocal() as session:
+        source = await session.get(DataSource, source_id)
         if not source:
-            run.status = "failed"
-            run.error_message = "Source not found"
-            collection_task.status = "failed"
-            collection_task.error_message = "Source not found"
-            await session.commit()
+            async with AsyncSessionLocal() as s2:
+                t = await s2.get(CollectionTask, task_id)
+                r = await s2.get(TaskRun, run_id)
+                if t:
+                    t.status = "failed"
+                    t.error_message = "Source not found"
+                if r:
+                    r.status = "failed"
+                    r.error_message = "Source not found"
+                await s2.commit()
             return {"error": "Source not found"}
 
-        merged_params = {**collection_task.parameters, **parameters}
-
-        # Load agent config if task has an agent_id
         agent_config = None
-        if collection_task.agent_id:
+        if agent_id:
             from backend.models.agent import AIAgent
-            agent_res = await session.execute(
-                select(AIAgent).where(AIAgent.id == collection_task.agent_id)
-            )
-            agent = agent_res.scalar_one_or_none()
+            agent = await session.get(AIAgent, agent_id)
             if agent and agent.enabled:
                 agent_config = {
                     "processor_type": agent.processor_type,
@@ -70,36 +82,63 @@ async def run_collection_pipeline(
                     "prompt_template": agent.prompt_template,
                     **agent.processor_config,
                 }
+        # Detach source from session so it can be used after session closes
+        session.expunge(source)
+    logger.info("[task:%s] phase2 done | source=%s channel=%s agent_config=%s",
+                task_id, source.name, source.channel_type,
+                {k: v for k, v in (agent_config or {}).items() if k != "prompt_template"})
 
-        pipeline_result = await run_pipeline(
-            session, source, task_id, merged_params, agent_config=agent_config
-        )
+    # ── Phase 3: run pipeline (no session held during collection) ─────────────
+    pipeline_result = await run_pipeline(
+        task_id=task_id,
+        source=source,
+        parameters=merged_params,
+        agent_config=agent_config,
+    )
 
-        run.finished_at = datetime.now(timezone.utc)
-        run.duration_ms = pipeline_result.duration_ms
-        run.records_collected = pipeline_result.stored
+    # ── Phase 4: persist final status ────────────────────────────────────────
+    async with AsyncSessionLocal() as session:
+        task = await session.get(CollectionTask, task_id)
+        run = await session.get(TaskRun, run_id)
+
+        if run:
+            run.finished_at = datetime.now(timezone.utc)
+            run.duration_ms = pipeline_result.duration_ms
+            run.records_collected = pipeline_result.stored
 
         if pipeline_result.success:
-            run.status = "completed"
-            collection_task.status = "completed"
-            collection_task.error_message = None
+            if task:
+                task.status = "completed"
+                task.error_message = None
+            if run:
+                run.status = "completed"
         else:
-            run.status = "failed"
-            run.error_message = pipeline_result.error
-            collection_task.status = "failed"
-            collection_task.error_message = pipeline_result.error
+            if task:
+                task.status = "failed"
+                task.error_message = pipeline_result.error
+            if run:
+                run.status = "failed"
+                run.error_message = pipeline_result.error
 
         await session.commit()
 
-        return {
-            "task_id": task_id,
-            "run_id": run.id,
-            "success": pipeline_result.success,
-            "collected": pipeline_result.collected,
-            "stored": pipeline_result.stored,
-            "skipped": pipeline_result.skipped,
-            "error": pipeline_result.error,
-        }
+    logger.info(
+        "[task:%s] pipeline done | success=%s collected=%d stored=%d skipped=%d "
+        "ai=%d duration_ms=%d error=%s",
+        task_id, pipeline_result.success, pipeline_result.collected,
+        pipeline_result.stored, pipeline_result.skipped,
+        pipeline_result.ai_processed, pipeline_result.duration_ms,
+        pipeline_result.error,
+    )
+    return {
+        "task_id": task_id,
+        "run_id": run_id,
+        "success": pipeline_result.success,
+        "collected": pipeline_result.collected,
+        "stored": pipeline_result.stored,
+        "skipped": pipeline_result.skipped,
+        "error": pipeline_result.error,
+    }
 
 
 async def run_scheduled_pipeline(
@@ -111,6 +150,7 @@ async def run_scheduled_pipeline(
     from backend.models.schedule import CronSchedule
     from backend.services import task_service
 
+    is_one_time = False
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(CronSchedule).where(CronSchedule.id == schedule_id)
@@ -125,7 +165,6 @@ async def run_scheduled_pipeline(
             parameters=parameters,
             agent_id=schedule_agent_id,
         )
-        is_one_time = False
         if schedule:
             schedule.last_run_at = datetime.now(timezone.utc)
             is_one_time = schedule.is_one_time

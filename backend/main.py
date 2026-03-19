@@ -11,7 +11,23 @@ from backend.api.v1 import v1_router
 from backend.config import get_settings
 from backend.database import run_migrations
 
-logging.basicConfig(level=logging.INFO)
+def _configure_logging() -> None:
+    """Restore backend.* logging after uvicorn's dictConfig disables pre-existing loggers.
+
+    uvicorn calls logging.config.dictConfig(LOGGING_CONFIG) with disable_existing_loggers=True,
+    which disables all loggers that were created before the config ran (i.e. all loggers
+    imported at module level). Also, alembic resets the root logger level to WARNING.
+    """
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    # Re-enable all backend.* loggers that uvicorn's dictConfig disabled
+    for name, lgr in logging.root.manager.loggerDict.items():
+        if name.startswith("backend") and isinstance(lgr, logging.Logger):
+            lgr.disabled = False
+            lgr.setLevel(logging.INFO)
+
+
+_configure_logging()
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
@@ -20,6 +36,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_migrations()
+    # Re-apply logging config: alembic resets root logger level to WARNING during migrations
+    # and uvicorn's dictConfig disables pre-existing loggers
+    _configure_logging()
 
     # Initialise Chrome browser pool
     from backend import browser_pool
@@ -29,6 +48,19 @@ async def lifespan(app: FastAPI):
         redis_url=settings.redis_url,
     )
     await browser_pool.ensure_ready()
+
+    # Mark stale pending/running tasks as failed (lost on previous restart)
+    from backend.database import AsyncSessionLocal
+    from backend.models.task import CollectionTask
+    from sqlalchemy import select, update
+    async with AsyncSessionLocal() as session:
+        await session.execute(
+            update(CollectionTask)
+            .where(CollectionTask.status.in_(["pending", "running", "ai_processing"]))
+            .values(status="failed", error_message="Task lost on server restart")
+        )
+        await session.commit()
+    logger.info("Recovered stale tasks on startup")
 
     if settings.task_executor == "local":
         from backend.scheduler import start_scheduler
