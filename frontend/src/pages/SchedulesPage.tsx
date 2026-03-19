@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool } from '../api/endpoints'
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
 import type { CronSchedule } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -9,6 +9,7 @@ import Card from '../components/Card'
 import DataTable from '../components/DataTable'
 import PageHeader from '../components/PageHeader'
 import { Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
+import { SITE_LABELS } from '../components/ChannelConfigForm'
 import { formatInTimeZone } from 'date-fns-tz'
 
 /** Derive noVNC port from CDP URL using chrome-N hostname convention. */
@@ -243,12 +244,36 @@ function AddScheduleModal({
   const selectedSource = sources.find((s) => s.id === sourceId)
   const showChromeSelector = selectedSource?.channel_type === 'opencli' && chromeEndpoints.length >= 1
 
-  // Auto-select when there's only one instance
+  const { data: bindingsData } = useQuery({
+    queryKey: ['browser-bindings'],
+    queryFn: listBrowserBindings,
+  })
+  const bindings = bindingsData?.data ?? []
+
+  // endpoint → bound site names map (for display)
+  const endpointBoundSites: Record<string, string[]> = {}
+  for (const b of bindings) {
+    if (!endpointBoundSites[b.browser_endpoint]) endpointBoundSites[b.browser_endpoint] = []
+    endpointBoundSites[b.browser_endpoint].push(b.site)
+  }
+
+  // Auto-select: prefer endpoint bound to source's site, else single-endpoint fallback
+  // Re-runs when sourceId changes so selection resets for new source
   useEffect(() => {
-    if (chromeEndpoints.length === 1 && !chromeEndpoint) {
-      setChromeEndpoint(chromeEndpoints[0].url)
+    const site = selectedSource?.channel_config?.site as string | undefined
+    if (site) {
+      const binding = bindings.find((b) => b.site === site)
+      if (binding) {
+        setChromeEndpoint(binding.browser_endpoint)
+        return
+      }
     }
-  }, [chromeEndpoints])
+    if (chromeEndpoints.length === 1) {
+      setChromeEndpoint(chromeEndpoints[0].url)
+    } else {
+      setChromeEndpoint('')
+    }
+  }, [chromeEndpoints, bindingsData, sourceId])
 
   const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
@@ -349,6 +374,7 @@ function AddScheduleModal({
                   const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
                   const novncUrl = `http://${window.location.hostname}:${novncPort}`
                   const label = ep.url.replace('http://', '').replace(':19222', '')
+                  const boundSites = endpointBoundSites[ep.url] ?? []
                   return (
                     <label key={ep.url} className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -365,6 +391,11 @@ function AddScheduleModal({
                       <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
                         {ep.available ? '●' : '○'}
                       </span>
+                      {boundSites.map((site) => (
+                        <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                          {SITE_LABELS[site] ?? site}
+                        </span>
+                      ))}
                       <a
                         href={novncUrl}
                         target="_blank"

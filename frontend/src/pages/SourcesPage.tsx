@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool } from '../api/endpoints'
+import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
 import type { DataSource } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -213,12 +213,34 @@ function TriggerModal({
   const chromeEndpoints = chromePool?.endpoints ?? []
   const showChromeSelector = source.channel_type === 'opencli' && chromeEndpoints.length >= 1
 
-  // Auto-select when there's only one instance
+  const { data: bindingsData } = useQuery({
+    queryKey: ['browser-bindings'],
+    queryFn: listBrowserBindings,
+    enabled: source.channel_type === 'opencli',
+  })
+  const bindings = bindingsData?.data ?? []
+
+  // endpoint → bound site names map (for display)
+  const endpointBoundSites: Record<string, string[]> = {}
+  for (const b of bindings) {
+    if (!endpointBoundSites[b.browser_endpoint]) endpointBoundSites[b.browser_endpoint] = []
+    endpointBoundSites[b.browser_endpoint].push(b.site)
+  }
+
+  // Auto-select: prefer endpoint bound to source's site, else single-endpoint fallback
   useEffect(() => {
+    const site = source.channel_config?.site as string | undefined
+    if (site) {
+      const binding = bindings.find((b) => b.site === site)
+      if (binding) {
+        setChromeEndpoint(binding.browser_endpoint)
+        return
+      }
+    }
     if (chromeEndpoints.length === 1 && !chromeEndpoint) {
       setChromeEndpoint(chromeEndpoints[0].url)
     }
-  }, [chromeEndpoints])
+  }, [chromeEndpoints, bindingsData])
 
   const handleTrigger = () => {
     const params: Record<string, unknown> = {}
@@ -268,6 +290,7 @@ function TriggerModal({
                   const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
                   const novncUrl = `http://${window.location.hostname}:${novncPort}`
                   const label = ep.url.replace('http://', '').replace(':19222', '')
+                  const boundSites = endpointBoundSites[ep.url] ?? []
                   return (
                     <label key={ep.url} className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -284,6 +307,11 @@ function TriggerModal({
                       <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
                         {ep.available ? '●' : '○'}
                       </span>
+                      {boundSites.map((site) => (
+                        <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                          {SITE_LABELS[site] ?? site}
+                        </span>
+                      ))}
                       <a
                         href={novncUrl}
                         target="_blank"
