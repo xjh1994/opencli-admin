@@ -18,7 +18,8 @@
 - **数据源管理** — 支持 opencli、RSS、API、Web 爬虫、CLI 五种渠道类型，可视化配置、一键触发
 - **定时计划** — 结构化频率设置（每 N 分钟 / 每小时 / 每天 / 每周 / 每月 / 指定时间），支持时区和一次性执行；可为每条计划指定专用 Chrome 实例
 - **采集任务** — 实时查看任务状态、执行历史、错误信息；手动触发时可临时指定 Chrome 实例
-- **采集记录** — 归一化展示所有采集到的数据，支持状态筛选
+- **采集记录** — 归一化展示所有采集到的数据，支持状态筛选、多选批量删除、一键清空
+- **浏览器管理** — 将站点与指定 Chrome 实例绑定，触发任务时自动路由到对应实例；卡片式交互，点选即绑，noVNC 链接一键直达
 - **AI 智能体** — 采集完成后自动调用 AI 对内容进行分析、摘要、打标等处理，结果附加到记录上；支持 Claude、OpenAI、DeepSeek、Kimi、GLM、MiniMax、Ollama 等模型提供商，内置预设 Prompt 模板，占位符自动匹配各站点实际字段
 - **通知推送** — 按触发事件（新记录入库 / AI 处理完成 / 任务失败）向 Webhook、邮件、飞书、钉钉、企业微信推送，各渠道结构化配置表单，支持签名验证
 - **工作节点** — 分布式模式下查看 Celery Worker 状态
@@ -141,14 +142,16 @@ docker-compose restart api
 
 多实例模式下，可以将不同数据源的采集任务路由到指定的 Chrome 实例，实现登录态隔离（例如：小红书账号只登录在 chrome-2，Twitter 账号只登录在 chrome-3）。
 
-路由配置有两个入口，均只在池中有多个实例时显示：
+路由优先级（高 → 低）：
 
-| 入口 | 作用 |
-|------|------|
-| 定时计划 → 新建计划 → Chrome 实例 | 该计划每次触发时固定使用指定实例 |
-| 数据源列表 → 触发 → Chrome 实例 | 仅本次手动触发使用，不影响计划配置 |
+| 优先级 | 入口 | 作用 |
+|--------|------|------|
+| 1（最高） | 数据源列表 → 触发 → Chrome 实例 | 仅本次手动触发使用，一次性覆盖 |
+| 2 | 定时计划 → 编辑计划 → Chrome 实例 | 该计划每次触发固定使用指定实例 |
+| 3 | **浏览器管理** → 站点绑定 | 按站点自动路由，无需每条计划单独配置 |
+| 4（兜底） | — | 自动分配当前空闲实例（负载均衡） |
 
-留空则自动分配当前空闲实例（负载均衡）。
+**推荐工作流**：在「浏览器管理」页将站点绑定到对应实例一次，之后所有涉及该站点的任务均自动路由，无需逐条配置计划。
 
 **停止**
 
@@ -276,9 +279,12 @@ docker-compose --profile celery up -d
 
 ```
 触发方式
-  ├─ 手动触发（可指定 Chrome 实例）
-  ├─ 定时计划（cron，可指定 Chrome 实例）
+  ├─ 手动触发（可临时指定 Chrome 实例）
+  ├─ 定时计划（cron，可绑定 Chrome 实例）
   └─ Webhook（HMAC 签名验证）
+    ↓
+Chrome 实例路由（opencli 渠道）
+  ├─ 手动指定 > 计划绑定 > 站点绑定（浏览器管理页）> 自动分配
     ↓
 渠道采集
   ├─ opencli  — Chrome 浏览器池（LocalPool / RedisPool）按路由分配实例
@@ -324,23 +330,24 @@ nginx CDP 代理（Host 重写 → localhost:9222）
 Chromium（带登录态 Profile）
 ```
 
-`chrome_endpoint` 通过任务 `parameters` 传递，在定时计划和手动触发时均可配置，不影响数据源本身的定义。
+`chrome_endpoint` 通过任务 `parameters` 传递，在定时计划和手动触发时均可配置，不影响数据源本身的定义。站点绑定（浏览器管理页）在 pipeline 预处理阶段自动注入，对上层完全透明。
 
 ## 项目结构
 
 ```
 ├── backend/
-│   ├── api/v1/          # FastAPI 路由
+│   ├── api/v1/          # FastAPI 路由（sources / tasks / records / schedules /
+│   │                    #   browsers / agents / notifications / workers / dashboard）
 │   ├── browser_pool.py  # Chrome 浏览器池（LocalBrowserPool / RedisBrowserPool）
 │   ├── channels/        # 渠道实现（opencli / rss / api / web_scraper / cli）
 │   ├── executor/        # 任务执行器（local / celery）
 │   ├── pipeline/        # 采集流水线（collect → normalize → store → ai → notify）
-│   ├── models/          # SQLAlchemy 模型
+│   ├── models/          # SQLAlchemy 模型（含 BrowserBinding 站点绑定）
 │   ├── scheduler.py     # 本地异步调度器
 │   └── worker/          # Celery 任务定义
 ├── frontend/
 │   └── src/
-│       ├── pages/       # 页面组件
+│       ├── pages/       # 页面组件（含 BrowsersPage 浏览器管理）
 │       ├── components/  # 公共组件
 │       └── api/         # API 客户端
 ├── chrome/              # Chrome 容器（noVNC + CDP，Docker 模式使用）
