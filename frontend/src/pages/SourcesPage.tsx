@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents } from '../api/endpoints'
+import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool } from '../api/endpoints'
 import type { DataSource } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -175,22 +175,37 @@ function SourceModal({
 }
 
 function TriggerModal({
-  sourceId,
+  source,
   onClose,
   onTrigger,
 }: {
-  sourceId: string
+  source: DataSource
   onClose: () => void
-  onTrigger: (agentId?: string) => void
+  onTrigger: (agentId?: string, parameters?: Record<string, unknown>) => void
 }) {
   const { t } = useTranslation()
   const [agentId, setAgentId] = useState('')
+  const [chromeEndpoint, setChromeEndpoint] = useState('')
 
   const { data: agentsData } = useQuery({
     queryKey: ['agents', 'enabled'],
     queryFn: () => listAgents({ enabled: true }),
   })
   const agents = agentsData?.data ?? []
+
+  const { data: chromePool } = useQuery({
+    queryKey: ['chrome-pool'],
+    queryFn: getChromePool,
+    enabled: source.channel_type === 'opencli',
+  })
+  const chromeEndpoints = chromePool?.endpoints ?? []
+  const showChromeSelector = source.channel_type === 'opencli' && chromeEndpoints.length > 1
+
+  const handleTrigger = () => {
+    const params: Record<string, unknown> = {}
+    if (chromeEndpoint) params.chrome_endpoint = chromeEndpoint
+    onTrigger(agentId || undefined, Object.keys(params).length ? params : undefined)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -214,6 +229,26 @@ function TriggerModal({
               ))}
             </select>
           </div>
+
+          {showChromeSelector && (
+            <div>
+              <label className={labelCls}>{t('channelConfig.chromeEndpoint')}</label>
+              <select
+                className={inputCls}
+                value={chromeEndpoint}
+                onChange={(e) => setChromeEndpoint(e.target.value)}
+              >
+                <option value="">{t('channelConfig.chromeEndpointAny')}</option>
+                {chromeEndpoints.map((ep) => (
+                  <option key={ep.url} value={ep.url}>
+                    {ep.url.replace('http://', '').replace(':19222', '')}
+                    {ep.available ? ' ✓' : ' (占用中)'}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-400">{t('channelConfig.chromeEndpointHint')}</p>
+            </div>
+          )}
         </div>
         <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
           <button
@@ -223,7 +258,7 @@ function TriggerModal({
             {t('common.cancel')}
           </button>
           <button
-            onClick={() => onTrigger(agentId || undefined)}
+            onClick={handleTrigger}
             className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700"
           >
             {t('sources.triggerNow')}
@@ -270,8 +305,8 @@ export default function SourcesPage() {
   const [triggerStates, setTriggerStates] = useState<Record<string, 'loading' | 'ok' | 'err'>>({})
 
   const triggerMut = useMutation({
-    mutationFn: ({ id, agentId }: { id: string; agentId?: string }) =>
-      triggerTask(id, {}, agentId),
+    mutationFn: ({ id, agentId, parameters }: { id: string; agentId?: string; parameters?: Record<string, unknown> }) =>
+      triggerTask(id, parameters ?? {}, agentId),
     onMutate: ({ id }) => setTriggerStates((s) => ({ ...s, [id]: 'loading' })),
     onSuccess: (_data, { id }) => {
       setTriggerStates((s) => ({ ...s, [id]: 'ok' }))
@@ -433,9 +468,11 @@ export default function SourcesPage() {
 
       {triggerSource && (
         <TriggerModal
-          sourceId={triggerSource.id}
+          source={triggerSource}
           onClose={() => setTriggerSource(null)}
-          onTrigger={(agentId) => triggerMut.mutate({ id: triggerSource.id, agentId })}
+          onTrigger={(agentId, parameters) =>
+            triggerMut.mutate({ id: triggerSource.id, agentId, parameters })
+          }
         />
       )}
     </div>

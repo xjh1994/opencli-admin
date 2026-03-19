@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents } from '../api/endpoints'
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool } from '../api/endpoints'
 import type { CronSchedule } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -209,6 +209,7 @@ function AddScheduleModal({
   const [timezone, setTimezone] = useState('Asia/Shanghai')
   const [cronFields, setCronFields] = useState<CronFields>(DEFAULT_FIELDS)
   const [agentId, setAgentId] = useState('')
+  const [chromeEndpoint, setChromeEndpoint] = useState('')
 
   const { data: sourcesData } = useQuery({
     queryKey: ['sources', 'all'],
@@ -222,6 +223,14 @@ function AddScheduleModal({
   })
   const agents = agentsData?.data ?? []
 
+  const { data: chromePool } = useQuery({
+    queryKey: ['chrome-pool'],
+    queryFn: getChromePool,
+  })
+  const chromeEndpoints = chromePool?.endpoints ?? []
+  const selectedSource = sources.find((s) => s.id === sourceId)
+  const showChromeSelector = selectedSource?.channel_type === 'opencli' && chromeEndpoints.length > 1
+
   const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
 
@@ -233,6 +242,7 @@ function AddScheduleModal({
       timezone,
       is_one_time: cronFields.freq === 'once',
       agent_id: agentId || undefined,
+      parameters: chromeEndpoint ? { chrome_endpoint: chromeEndpoint } : {},
     })
   }
 
@@ -300,6 +310,26 @@ function AddScheduleModal({
               ))}
             </select>
           </div>
+
+          {showChromeSelector && (
+            <div>
+              <label className={labelCls}>{t('channelConfig.chromeEndpoint')}</label>
+              <select
+                className={inputCls}
+                value={chromeEndpoint}
+                onChange={(e) => setChromeEndpoint(e.target.value)}
+              >
+                <option value="">{t('channelConfig.chromeEndpointAny')}</option>
+                {chromeEndpoints.map((ep) => (
+                  <option key={ep.url} value={ep.url}>
+                    {ep.url.replace('http://', '').replace(':19222', '')}
+                    {ep.available ? ' ✓' : ' (占用中)'}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-400">{t('channelConfig.chromeEndpointHint')}</p>
+            </div>
+          )}
         </div>
 
         <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">

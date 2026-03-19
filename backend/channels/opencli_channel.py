@@ -95,8 +95,13 @@ class OpenCLIChannel(AbstractChannel):
     ) -> ChannelResult:
         site = config.get("site", "")
         command = config.get("command", "")
-        args: dict = {**config.get("args", {}), **parameters}
         output_format = config.get("format", "json")
+
+        # chrome_endpoint is a routing hint, not a CLI argument — strip it before
+        # merging parameters into CLI args.
+        chrome_endpoint: str | None = parameters.get("chrome_endpoint") or None
+        cli_params = {k: v for k, v in parameters.items() if k != "chrome_endpoint"}
+        args: dict = {**config.get("args", {}), **cli_params}
 
         cmd = ["opencli", site, command]
         for key, value in args.items():
@@ -104,8 +109,6 @@ class OpenCLIChannel(AbstractChannel):
         cmd.extend(["-f", output_format])
 
         env = os.environ.copy()
-
-        chrome_endpoint: str | None = config.get("chrome_endpoint") or None
 
         from backend.browser_pool import get_pool
         async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:

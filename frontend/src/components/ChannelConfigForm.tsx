@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, Trash2 } from 'lucide-react'
-import { getChromePool } from '../api/endpoints'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -766,13 +765,6 @@ function OpenCLIConfig({
 }) {
   const { t } = useTranslation()
   const [args, setArgs] = useState<KVPair[]>(objToKv(config.args as Record<string, unknown>))
-  const [chromeEndpoints, setChromeEndpoints] = useState<{ url: string; available: boolean }[]>([])
-
-  useEffect(() => {
-    getChromePool()
-      .then((data) => data && setChromeEndpoints(data.endpoints))
-      .catch(() => {})
-  }, [])
 
   const currentSite = (config.site as string) ?? ''
   const currentCommand = (config.command as string) ?? ''
@@ -866,28 +858,6 @@ function OpenCLIConfig({
         />
       </Field>
 
-      {chromeEndpoints.length > 1 && (
-        <Field
-          label={t('channelConfig.chromeEndpoint')}
-          hint={t('channelConfig.chromeEndpointHint')}
-        >
-          <select
-            className={input}
-            value={(config.chrome_endpoint as string) ?? ''}
-            onChange={(e) =>
-              onChange({ ...config, chrome_endpoint: e.target.value || undefined })
-            }
-          >
-            <option value="">{t('channelConfig.chromeEndpointAny')}</option>
-            {chromeEndpoints.map((ep) => (
-              <option key={ep.url} value={ep.url}>
-                {ep.url.replace('http://', '').replace(':19222', '')}
-                {ep.available ? ' ✓' : ' (占用中)'}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )}
     </div>
   )
 }
