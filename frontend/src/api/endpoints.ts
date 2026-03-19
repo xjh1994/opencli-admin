@@ -2,6 +2,7 @@ import { apiClient } from './client'
 import type {
   AIAgent,
   ApiResponse,
+  ChromeEndpoint,
   CollectedRecord,
   CollectionTask,
   CronSchedule,
@@ -147,5 +148,5 @@ export const getCeleryStats = () =>
 
 export const getChromePool = () =>
   apiClient
-    .get<ApiResponse<{ endpoints: { url: string; available: boolean }[]; total: number; available: number }>>('/workers/chrome-pool')
+    .get<ApiResponse<{ endpoints: ChromeEndpoint[]; total: number; available: number }>>('/workers/chrome-pool')
     .then((r) => r.data.data)

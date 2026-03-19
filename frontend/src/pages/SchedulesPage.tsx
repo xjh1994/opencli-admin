@@ -314,19 +314,51 @@ function AddScheduleModal({
           {showChromeSelector && (
             <div>
               <label className={labelCls}>{t('channelConfig.chromeEndpoint')}</label>
-              <select
-                className={inputCls}
-                value={chromeEndpoint}
-                onChange={(e) => setChromeEndpoint(e.target.value)}
-              >
-                <option value="">{t('channelConfig.chromeEndpointAny')}</option>
-                {chromeEndpoints.map((ep) => (
-                  <option key={ep.url} value={ep.url}>
-                    {ep.url.replace('http://', '').replace(':19222', '')}
-                    {ep.available ? ' 🟢' : ' 🔴'}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="chrome-ep-sched"
+                    value=""
+                    checked={chromeEndpoint === ''}
+                    onChange={() => setChromeEndpoint('')}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-300">{t('channelConfig.chromeEndpointAny')}</span>
+                </label>
+                {chromeEndpoints.map((ep) => {
+                  const novncUrl = `http://${window.location.hostname}:${ep.novnc_port}`
+                  const label = ep.url.replace('http://', '').replace(':19222', '')
+                  return (
+                    <label key={ep.url} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="chrome-ep-sched"
+                        value={ep.url}
+                        checked={chromeEndpoint === ep.url}
+                        onChange={() => setChromeEndpoint(ep.url)}
+                        className="accent-blue-600"
+                      />
+                      <span className={`text-sm ${ep.available ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
+                        {label}
+                      </span>
+                      <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
+                        {ep.available ? '●' : '○'}
+                      </span>
+                      <a
+                        href={novncUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="ml-auto text-xs text-blue-500 hover:underline font-mono"
+                        title={novncUrl}
+                      >
+                        :{ep.novnc_port} ↗
+                      </a>
+                    </label>
+                  )
+                })}
+              </div>
               <p className="mt-1 text-xs text-gray-400">{t('channelConfig.chromeEndpointHint')}</p>
             </div>
           )}

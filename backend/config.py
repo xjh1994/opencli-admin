@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     #   http://chrome-1:19222,http://chrome-2:19222,http://chrome-3:19222
     # When set, overrides opencli_cdp_endpoint.
     chrome_pool_endpoints: str = ""
+    # noVNC base port for the first Chrome instance (chrome-1). Additional
+    # instances use base+1, base+2, …  Matches docker-compose NOVNC_PORT.
+    novnc_base_port: int = 3010
 
     @property
     def cdp_endpoints(self) -> list[str]:

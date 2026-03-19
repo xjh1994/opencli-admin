@@ -119,6 +119,12 @@ export interface NotificationLog {
   created_at: string
 }
 
+export interface ChromeEndpoint {
+  url: string
+  available: boolean
+  novnc_port: number
+}
+
 export interface WorkerNode {
   id: string
   worker_id: string

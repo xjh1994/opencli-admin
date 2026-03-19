@@ -1,6 +1,10 @@
+import re
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import get_settings
 from backend.database import get_db
 from backend.schemas.common import ApiResponse
 from backend.browser_pool import get_pool
@@ -37,14 +41,28 @@ async def list_workers(db: AsyncSession = Depends(get_db)) -> ApiResponse:
         return ApiResponse.ok([])
 
 
+def _novnc_port(cdp_url: str, base_port: int) -> int:
+    """Derive the noVNC web-UI port from a CDP endpoint URL.
+
+    Naming convention: chrome → 1, chrome-2 → 2, chrome-N → N.
+    noVNC port = base_port + (N - 1).
+    """
+    hostname = urlparse(cdp_url).hostname or ""
+    m = re.match(r"^chrome(?:-(\d+))?$", hostname)
+    n = int(m.group(1)) if (m and m.group(1)) else 1
+    return base_port + (n - 1)
+
+
 @router.get("/chrome-pool", response_model=ApiResponse[dict])
 async def chrome_pool_status() -> ApiResponse:
     """Return Chrome browser pool status and available endpoints."""
     pool = get_pool()
+    base_port = get_settings().novnc_base_port
     endpoints = [
         {
             "url": ep,
             "available": pool.available_for(ep),
+            "novnc_port": _novnc_port(ep, base_port),
         }
         for ep in pool.endpoints
     ]
