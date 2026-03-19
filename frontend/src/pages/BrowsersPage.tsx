@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { getChromePool, listBrowserBindings, createBrowserBinding, deleteBrowserBinding } from '../api/endpoints'
@@ -7,12 +7,9 @@ import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
 import PageHeader from '../components/PageHeader'
 import { SITE_LABELS } from '../components/ChannelConfigForm'
-import { Plus, Trash2, ExternalLink } from 'lucide-react'
+import { Plus, X, ExternalLink } from 'lucide-react'
+import type { BrowserBinding } from '../api/types'
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
-const labelCls = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
-
-/** Derive noVNC port from CDP URL hostname convention. */
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
   try {
     const hostname = new URL(cdpUrl).hostname
@@ -28,83 +25,156 @@ function instanceLabel(cdpUrl: string): string {
   return cdpUrl.replace('http://', '').replace(':19222', '')
 }
 
-interface AddBindingFormProps {
-  endpoints: string[]
+// ── Site dropdown ─────────────────────────────────────────────────────────────
+
+interface SiteDropdownProps {
   boundSites: Set<string>
-  onAdd: (browser_endpoint: string, site: string, notes?: string) => void
+  onSelect: (site: string) => void
   isPending: boolean
 }
 
-function AddBindingForm({ endpoints, boundSites, onAdd, isPending }: AddBindingFormProps) {
+function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
   const { t } = useTranslation()
-  const [endpoint, setEndpoint] = useState(endpoints[0] ?? '')
-  const [site, setSite] = useState('')
-  const [notes, setNotes] = useState('')
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
 
-  const handleSubmit = () => {
-    if (!endpoint || !site.trim()) return
-    onAdd(endpoint, site.trim(), notes.trim() || undefined)
-    setSite('')
-    setNotes('')
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const available = Object.entries(SITE_LABELS)
+    .filter(([key]) => !boundSites.has(key))
+    .filter(([key, label]) =>
+      !query || key.includes(query.toLowerCase()) || label.includes(query)
+    )
+
+  const handleSelect = (site: string) => {
+    onSelect(site)
+    setOpen(false)
+    setQuery('')
   }
 
-  const allSites = Object.keys(SITE_LABELS)
-
   return (
-    <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 space-y-3">
-      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('browsers.addBinding')}</p>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={labelCls}>{t('browsers.browser')}</label>
-          <select className={inputCls} value={endpoint} onChange={(e) => setEndpoint(e.target.value)}>
-            {endpoints.map((ep) => (
-              <option key={ep} value={ep}>{instanceLabel(ep)}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className={labelCls}>{t('browsers.site')}</label>
-          <input
-            className={inputCls}
-            list="site-options"
-            value={site}
-            onChange={(e) => setSite(e.target.value)}
-            placeholder={t('browsers.sitePlaceholder')}
-          />
-          <datalist id="site-options">
-            {allSites.filter((s) => !boundSites.has(s)).map((s) => (
-              <option key={s} value={s}>{SITE_LABELS[s]}</option>
-            ))}
-          </datalist>
-        </div>
-      </div>
-      <div>
-        <label className={labelCls}>{t('browsers.notes')} ({t('common.optional')})</label>
-        <input
-          className={inputCls}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder={t('browsers.notesPlaceholder')}
-        />
-      </div>
+    <div ref={ref} className="relative inline-block">
       <button
-        onClick={handleSubmit}
-        disabled={isPending || !endpoint || !site.trim()}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        onClick={() => setOpen((o) => !o)}
+        disabled={isPending}
+        className="flex items-center gap-1 px-2 py-1 rounded-full text-xs border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors disabled:opacity-50"
       >
-        <Plus size={14} />
-        {isPending ? t('common.loading') : t('browsers.bind')}
+        <Plus size={11} />
+        {t('browsers.addSite')}
       </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg w-48 overflow-hidden">
+          <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+            <input
+              autoFocus
+              className="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-600 bg-transparent dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder={t('browsers.searchSite')}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <ul className="max-h-52 overflow-y-auto py-1">
+            {available.length === 0 ? (
+              <li className="px-3 py-2 text-xs text-gray-400">{t('browsers.noAvailable')}</li>
+            ) : available.map(([key, label]) => (
+              <li key={key}>
+                <button
+                  onClick={() => handleSelect(key)}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between"
+                >
+                  <span className="font-medium dark:text-white">{label}</span>
+                  <span className="text-gray-400 font-mono">{key}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
 
+// ── Instance card ─────────────────────────────────────────────────────────────
+
+interface InstanceCardProps {
+  url: string
+  available: boolean
+  novncPort: number
+  bindings: BrowserBinding[]
+  boundSites: Set<string>
+  onBind: (site: string) => void
+  onUnbind: (id: string) => void
+  isPending: boolean
+}
+
+function InstanceCard({ url, available, novncPort, bindings, boundSites, onBind, onUnbind, isPending }: InstanceCardProps) {
+  const novncUrl = `http://${window.location.hostname}:${novncPort}`
+  const label = instanceLabel(url)
+
+  return (
+    <Card>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${available ? 'bg-green-500' : 'bg-red-400'}`} />
+        <span className="font-semibold text-sm dark:text-white">{label}</span>
+        <a
+          href={novncUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono shrink-0"
+        >
+          {window.location.hostname}:{novncPort}
+          <ExternalLink size={11} />
+        </a>
+      </div>
+
+      {/* Bound sites as tags */}
+      <div className="flex flex-wrap gap-2 min-h-[2rem]">
+        {bindings.map((b) => (
+          <span
+            key={b.id}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700"
+          >
+            {SITE_LABELS[b.site] ?? b.site}
+            <button
+              onClick={() => onUnbind(b.id)}
+              className="hover:text-red-500 transition-colors ml-0.5"
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+
+        <SiteDropdown
+          boundSites={boundSites}
+          onSelect={onBind}
+          isPending={isPending}
+        />
+      </div>
+    </Card>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function BrowsersPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [error422, setError422] = useState<string | null>(null)
 
-  const { data: poolData, isLoading: poolLoading, error: poolError, refetch: refetchPool } = useQuery({
+  const { data: poolData, isLoading: poolLoading, error: poolError, refetch } = useQuery({
     queryKey: ['chrome-pool'],
     queryFn: getChromePool,
     refetchInterval: 10_000,
@@ -115,200 +185,68 @@ export default function BrowsersPage() {
     queryFn: listBrowserBindings,
   })
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['browser-bindings'] })
-    setError422(null)
-  }
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] })
 
-  const addMutation = useMutation({
-    mutationFn: createBrowserBinding,
-    onSuccess: invalidate,
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError422(msg ?? t('common.error'))
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteBrowserBinding,
-    onSuccess: invalidate,
-  })
+  const addMutation = useMutation({ mutationFn: createBrowserBinding, onSuccess: invalidate })
+  const deleteMutation = useMutation({ mutationFn: deleteBrowserBinding, onSuccess: invalidate })
 
   if (poolLoading || bindingsLoading) return <PageLoader />
-  if (poolError) return <ErrorAlert error={poolError as Error} onRetry={refetchPool} />
+  if (poolError) return <ErrorAlert error={poolError as Error} onRetry={refetch} />
 
   const endpoints = poolData?.endpoints ?? []
   const bindings = bindingsData?.data ?? []
 
-  // Group bindings by browser_endpoint
-  const bindingsByEndpoint: Record<string, typeof bindings> = {}
-  for (const ep of endpoints) {
-    bindingsByEndpoint[ep.url] = []
-  }
+  const bindingsByEndpoint: Record<string, BrowserBinding[]> = {}
+  for (const ep of endpoints) bindingsByEndpoint[ep.url] = []
   for (const b of bindings) {
-    if (!bindingsByEndpoint[b.browser_endpoint]) {
-      bindingsByEndpoint[b.browser_endpoint] = []
-    }
+    if (!bindingsByEndpoint[b.browser_endpoint]) bindingsByEndpoint[b.browser_endpoint] = []
     bindingsByEndpoint[b.browser_endpoint].push(b)
   }
 
-  // Unbound bindings (endpoint no longer in pool)
-  const orphaned = bindings.filter((b) => !endpoints.find((e) => e.url === b.browser_endpoint))
-
   const boundSites = new Set(bindings.map((b) => b.site))
-  const allEndpointUrls = endpoints.map((e) => e.url)
+  const orphaned = bindings.filter((b) => !endpoints.find((e) => e.url === b.browser_endpoint))
 
   return (
     <div>
       <PageHeader title={t('browsers.title')} description={t('browsers.description')} />
 
-      {error422 && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
-          {error422}
-        </div>
-      )}
-
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {endpoints.map((ep) => {
           const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
-          const novncUrl = `http://${window.location.hostname}:${novncPort}`
-          const label = instanceLabel(ep.url)
-          const epBindings = bindingsByEndpoint[ep.url] ?? []
-
           return (
-            <Card key={ep.url}>
-              {/* Instance header */}
-              <div className="flex items-center gap-2 mb-3">
-                <span className={`w-2 h-2 rounded-full ${ep.available ? 'bg-green-500' : 'bg-red-400'}`} />
-                <span className="font-semibold text-sm">{label}</span>
-                <a
-                  href={novncUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono"
-                >
-                  {window.location.hostname}:{novncPort}
-                  <ExternalLink size={11} />
-                </a>
-              </div>
-
-              {/* Bound sites */}
-              <div className="space-y-1.5 mb-3 min-h-[2rem]">
-                {epBindings.length === 0 ? (
-                  <p className="text-xs text-gray-400">{t('browsers.noBindings')}</p>
-                ) : epBindings.map((b) => (
-                  <div key={b.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded px-2 py-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium">{SITE_LABELS[b.site] ?? b.site}</span>
-                      <span className="text-xs text-gray-400 font-mono">({b.site})</span>
-                    </div>
-                    <button
-                      onClick={() => deleteMutation.mutate(b.id)}
-                      disabled={deleteMutation.isPending}
-                      className="text-gray-400 hover:text-red-500 transition-colors p-0.5 rounded"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Quick add for this instance */}
-              <QuickAddSite
-                browserEndpoint={ep.url}
-                allEndpoints={allEndpointUrls}
-                boundSites={boundSites}
-                onAdd={(site, notes) => addMutation.mutate({ browser_endpoint: ep.url, site, notes })}
-                isPending={addMutation.isPending}
-              />
-            </Card>
+            <InstanceCard
+              key={ep.url}
+              url={ep.url}
+              available={ep.available}
+              novncPort={novncPort}
+              bindings={bindingsByEndpoint[ep.url] ?? []}
+              boundSites={boundSites}
+              onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
+              onUnbind={(id) => deleteMutation.mutate(id)}
+              isPending={addMutation.isPending}
+            />
           )
         })}
       </div>
 
-      {/* Orphaned bindings */}
       {orphaned.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">{t('browsers.orphaned')}</h3>
+          <p className="text-xs font-medium text-gray-400 mb-2">{t('browsers.orphaned')}</p>
           <Card>
-            <div className="space-y-1.5">
+            <div className="flex flex-wrap gap-2">
               {orphaned.map((b) => (
-                <div key={b.id} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">
-                    {SITE_LABELS[b.site] ?? b.site} → <span className="font-mono text-xs">{b.browser_endpoint}</span>
-                  </span>
-                  <button
-                    onClick={() => deleteMutation.mutate(b.id)}
-                    className="text-gray-400 hover:text-red-500 p-1"
-                  >
-                    <Trash2 size={14} />
+                <span key={b.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 border border-gray-200 dark:border-gray-600">
+                  {SITE_LABELS[b.site] ?? b.site}
+                  <span className="font-mono text-gray-400">→ {instanceLabel(b.browser_endpoint)}</span>
+                  <button onClick={() => deleteMutation.mutate(b.id)} className="hover:text-red-500 ml-0.5">
+                    <X size={10} />
                   </button>
-                </div>
+                </span>
               ))}
             </div>
           </Card>
         </div>
       )}
-
-      {/* Global add binding form */}
-      <div className="mt-6">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('browsers.addBinding')}</h3>
-        <Card>
-          <AddBindingForm
-            endpoints={allEndpointUrls}
-            boundSites={boundSites}
-            onAdd={(browser_endpoint, site, notes) => addMutation.mutate({ browser_endpoint, site, notes })}
-            isPending={addMutation.isPending}
-          />
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-interface QuickAddSiteProps {
-  browserEndpoint: string
-  allEndpoints: string[]
-  boundSites: Set<string>
-  onAdd: (site: string, notes?: string) => void
-  isPending: boolean
-}
-
-function QuickAddSite({ boundSites, onAdd, isPending }: QuickAddSiteProps) {
-  const { t } = useTranslation()
-  const [site, setSite] = useState('')
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && site.trim()) {
-      onAdd(site.trim())
-      setSite('')
-    }
-  }
-
-  const allSites = Object.keys(SITE_LABELS)
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-        list="quick-site-options"
-        value={site}
-        onChange={(e) => setSite(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={t('browsers.sitePlaceholder')}
-      />
-      <datalist id="quick-site-options">
-        {allSites.filter((s) => !boundSites.has(s)).map((s) => (
-          <option key={s} value={s}>{SITE_LABELS[s]}</option>
-        ))}
-      </datalist>
-      <button
-        onClick={() => { if (site.trim()) { onAdd(site.trim()); setSite('') } }}
-        disabled={isPending || !site.trim()}
-        className="p-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-      >
-        <Plus size={13} />
-      </button>
     </div>
   )
 }
