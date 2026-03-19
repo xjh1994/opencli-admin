@@ -127,8 +127,8 @@ services:
   chrome-1:
     container_name: chrome-1
     build:
-      context: ./chrome
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: chrome/Dockerfile
       args:
         REGISTRY: ${DOCKER_REGISTRY:-}
     ports:
