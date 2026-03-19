@@ -26,7 +26,7 @@ RUN chmod +x /entrypoint.sh
 # by running ./scripts/build-extension.sh before docker compose build chrome-1).
 COPY extension-src/ /tmp/extension-src/
 RUN if [ -f /tmp/extension-src/package.json ]; then \
-      cd /tmp/extension-src && npm ci && npm run build \
+      cd /tmp/extension-src && npm install && npm run build \
       && mkdir -p /home/chrome/extension/dist \
       && cp manifest.json /home/chrome/extension/ \
       && cp -r icons /home/chrome/extension/ \
