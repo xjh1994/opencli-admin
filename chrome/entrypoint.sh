@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Clean up stale display lock (left by container restart)
+rm -f /tmp/.X99-lock
+
 # Start virtual display
 Xvfb :99 -screen 0 1280x900x24 -nolisten tcp &
 export DISPLAY=:99
