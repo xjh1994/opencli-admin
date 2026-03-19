@@ -861,6 +861,84 @@ function OpenCLIConfig({
   )
 }
 
+// Standard fields actually populated for each site:command
+// (title/url/content/author/published_at — source_id is always injected by pipeline)
+export const SITE_STANDARD_FIELDS: Record<string, string[]> = {
+  'xiaohongshu:search':          ['title', 'author', 'url'],
+  'xiaohongshu:user':            ['title', 'url'],
+  'bilibili:hot':                ['title', 'author'],
+  'bilibili:ranking':            ['title', 'author', 'url'],
+  'bilibili:dynamic':            ['content', 'author', 'url'],
+  'bilibili:favorite':           ['title', 'author', 'url'],
+  'bilibili:user-videos':        ['title', 'url', 'published_at'],
+  'zhihu:hot':                   ['title', 'url'],
+  'zhihu:question':              ['content', 'author'],
+  'weibo:hot':                   ['title', 'url'],
+  'v2ex:hot':                    ['title', 'author', 'url'],
+  'v2ex:latest':                 ['title', 'author', 'url'],
+  'xueqiu:hot':                  ['content', 'author', 'url'],
+  'xueqiu:hot-stock':            ['title'],
+  'xueqiu:stock':                ['title'],
+  'smzdm:search':                ['title', 'url'],
+  'boss:search':                 ['title', 'url'],
+  'ctrip:search':                ['title', 'url'],
+  'xiaoyuzhou:podcast':          ['title', 'author', 'content', 'published_at'],
+  'xiaoyuzhou:podcast-episodes': ['title', 'published_at'],
+  'hackernews:top':              ['title', 'author', 'url'],
+  'bbc:news':                    ['title', 'content', 'url'],
+  'reuters:search':              ['title', 'url', 'published_at'],
+  'twitter:trending':            ['title'],
+  'twitter:timeline':            ['content', 'author', 'url', 'published_at'],
+  'twitter:search':              ['content', 'author', 'url'],
+  'twitter:bookmarks':           ['title', 'url'],
+  'reddit:frontpage':            ['title', 'author', 'url'],
+  'reddit:hot':                  ['title', 'url'],
+  'reddit:saved':                ['title', 'url'],
+  'youtube:search':              ['title', 'author', 'url'],
+  'linkedin:search':             ['title', 'url', 'published_at'],
+  'yahoo-finance:quote':         ['title'],
+  'barchart:quote':              ['title'],
+}
+
+// Extra fields per site:command that fall through to normalized_data as extra_*
+// (fields mapped to standard title/url/content/author/published_at are excluded)
+export const SITE_EXTRA_FIELDS: Record<string, string[]> = {
+  'xiaohongshu:search':        ['rank', 'likes'],
+  'xiaohongshu:user':          ['id', 'type', 'likes'],
+  'bilibili:hot':              ['rank', 'play', 'danmaku'],
+  'bilibili:ranking':          ['rank', 'score'],
+  'bilibili:dynamic':          ['id', 'likes'],
+  'bilibili:favorite':         ['rank', 'plays'],
+  'bilibili:user-videos':      ['rank', 'plays', 'likes'],
+  'zhihu:hot':                 ['rank', 'heat', 'answers'],
+  'zhihu:question':            ['rank', 'votes'],
+  'weibo:hot':                 ['rank', 'hot_value', 'category', 'label'],
+  'v2ex:hot':                  ['rank', 'score'],
+  'v2ex:latest':               ['rank', 'score'],
+  'xueqiu:hot':                ['rank', 'likes'],
+  'xueqiu:hot-stock':          ['rank', 'symbol', 'price', 'changePercent', 'heat'],
+  'xueqiu:stock':              ['symbol', 'price', 'change', 'changePercent', 'open', 'high', 'low', 'volume', 'marketCap'],
+  'smzdm:search':              ['rank', 'price', 'mall', 'comments'],
+  'boss:search':               ['salary', 'company', 'area', 'experience', 'degree', 'skills', 'boss'],
+  'ctrip:search':              ['rank', 'type', 'score', 'price'],
+  'xiaoyuzhou:podcast':        ['subscribers', 'episodes'],
+  'xiaoyuzhou:podcast-episodes': ['eid', 'duration', 'plays'],
+  'hackernews:top':            ['rank', 'score', 'comments'],
+  'bbc:news':                  ['rank'],
+  'reuters:search':            ['rank', 'section'],
+  'twitter:trending':          ['rank', 'tweets'],
+  'twitter:timeline':          ['id', 'likes', 'retweets', 'replies', 'views'],
+  'twitter:search':            ['id', 'likes', 'views'],
+  'twitter:bookmarks':         ['score', 'comments'],
+  'reddit:frontpage':          ['subreddit', 'upvotes', 'comments'],
+  'reddit:hot':                ['rank', 'subreddit', 'score', 'comments'],
+  'reddit:saved':              ['subreddit', 'score', 'comments'],
+  'youtube:search':            ['rank', 'views', 'duration'],
+  'linkedin:search':           ['rank', 'company', 'location', 'salary'],
+  'yahoo-finance:quote':       ['symbol', 'price', 'change', 'changePercent', 'open', 'high', 'low', 'volume', 'marketCap'],
+  'barchart:quote':            ['symbol', 'price', 'change', 'changePct', 'peRatio', 'eps', 'marketCap'],
+}
+
 export { OPENCLI_PRESETS, PRESET_DEFAULT, SITE_LABELS, COMMANDS_BY_SITE }
 
 // ── Public component ──────────────────────────────────────────────────────────

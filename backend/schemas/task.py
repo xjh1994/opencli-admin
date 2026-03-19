@@ -9,12 +9,14 @@ class TaskTriggerRequest(BaseModel):
     source_id: str
     parameters: dict[str, Any] = Field(default_factory=dict)
     priority: int = Field(default=5, ge=1, le=10)
+    agent_id: Optional[str] = None
 
 
 class CollectionTaskRead(UTCModel):
     id: str
     source_id: str
     source_name: Optional[str] = None
+    agent_id: Optional[str] = None
     trigger_type: str
     parameters: dict[str, Any]
     priority: int

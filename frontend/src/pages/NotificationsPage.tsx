@@ -14,67 +14,80 @@ import Card from '../components/Card'
 import DataTable from '../components/DataTable'
 import PageHeader from '../components/PageHeader'
 import StatusBadge from '../components/StatusBadge'
+import NotifierConfigForm, { type NotifierType } from '../components/NotifierConfigForm'
 import { Plus, Trash2 } from 'lucide-react'
 import { formatInTimeZone } from 'date-fns-tz'
 
-const NOTIFIER_TYPES = ['webhook', 'email', 'feishu', 'dingtalk', 'wecom']
-const TRIGGER_EVENTS = ['on_new_record', 'on_ai_processed', 'on_task_failed']
+const NOTIFIER_TYPES: NotifierType[] = ['webhook', 'dingtalk', 'feishu', 'wecom', 'email']
+const TRIGGER_EVENTS = ['on_new_record', 'on_ai_processed', 'on_task_failed'] as const
+type TriggerEvent = typeof TRIGGER_EVENTS[number]
+
+const DEFAULT_CONFIGS: Record<NotifierType, Record<string, unknown>> = {
+  webhook: { url: '' },
+  dingtalk: { webhook_url: '' },
+  feishu: { webhook_url: '' },
+  wecom: { webhook_url: '' },
+  email: { smtp_host: '', smtp_port: 587, to: [] },
+}
 
 function AddRuleModal({ onClose, onSave }: { onClose: () => void; onSave: (d: Partial<NotificationRule>) => void }) {
   const { t } = useTranslation()
-  const [form, setForm] = useState({ name: '', trigger_event: 'on_new_record', notifier_type: 'webhook', enabled: true })
-  const [configJson, setConfigJson] = useState('{"url": "https://hooks.example.com/notify"}')
-  const [jsonError, setJsonError] = useState('')
+  const [name, setName] = useState('')
+  const [triggerEvent, setTriggerEvent] = useState('on_new_record')
+  const [notifierType, setNotifierType] = useState<NotifierType>('webhook')
+  const [notifierConfig, setNotifierConfig] = useState<Record<string, unknown>>(DEFAULT_CONFIGS.webhook)
 
-  const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white'
+  const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
 
+  const handleTypeChange = (type: NotifierType) => {
+    setNotifierType(type)
+    setNotifierConfig(DEFAULT_CONFIGS[type])
+  }
+
   const handleSubmit = () => {
-    try {
-      const config = JSON.parse(configJson)
-      setJsonError('')
-      onSave({ ...form, notifier_config: config })
-    } catch {
-      setJsonError('Invalid JSON')
-    }
+    if (!name.trim()) return
+    onSave({ name: name.trim(), trigger_event: triggerEvent, notifier_type: notifierType, notifier_config: notifierConfig, enabled: true })
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold mb-4 dark:text-white">{t('notifications.addRuleTitle')}</h2>
         <div className="space-y-4">
           <div>
-            <label className={labelCls}>{t('common.name')}</label>
-            <input className={inputCls} value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            <label className={labelCls}>{t('common.name')}<span className="text-red-500 ml-0.5">*</span></label>
+            <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div>
             <label className={labelCls}>{t('notifications.triggerEvent')}</label>
-            <select className={inputCls} value={form.trigger_event}
-              onChange={(e) => setForm((f) => ({ ...f, trigger_event: e.target.value }))}>
-              {TRIGGER_EVENTS.map((e) => <option key={e} value={e}>{e}</option>)}
+            <select className={inputCls} value={triggerEvent} onChange={(e) => setTriggerEvent(e.target.value)}>
+              {TRIGGER_EVENTS.map((e) => <option key={e} value={e}>{t(`notifications.events.${e}`)}</option>)}
             </select>
           </div>
           <div>
             <label className={labelCls}>{t('notifications.notifierType')}</label>
-            <select className={inputCls} value={form.notifier_type}
-              onChange={(e) => setForm((f) => ({ ...f, notifier_type: e.target.value }))}>
+            <select className={inputCls} value={notifierType} onChange={(e) => handleTypeChange(e.target.value as NotifierType)}>
               {NOTIFIER_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
             </select>
           </div>
-          <div>
-            <label className={labelCls}>{t('notifications.notifierConfig')}</label>
-            <textarea className={`${inputCls} font-mono`} rows={4}
-              value={configJson} onChange={(e) => setConfigJson(e.target.value)} />
-            {jsonError && <p className="mt-1 text-xs text-red-500">{jsonError}</p>}
+
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wide font-medium">
+              {t('notifications.notifierConfig')}
+            </p>
+            <NotifierConfigForm
+              notifierType={notifierType}
+              config={notifierConfig}
+              onChange={setNotifierConfig}
+            />
           </div>
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600">
             {t('common.cancel')}
           </button>
-          <button onClick={handleSubmit} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+          <button onClick={handleSubmit} disabled={!name.trim()} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
             {t('common.create')}
           </button>
         </div>
@@ -141,7 +154,7 @@ export default function NotificationsPage() {
             emptyMessage={t('notifications.noRules')}
             columns={[
               { key: 'name', header: t('common.name'), render: (r) => <span className="font-medium">{r.name}</span> },
-              { key: 'event', header: t('notifications.triggerEvent'), render: (r) => <code className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">{r.trigger_event}</code> },
+              { key: 'event', header: t('notifications.triggerEvent'), render: (r) => <span className="text-xs">{t(`notifications.events.${r.trigger_event as TriggerEvent}`, { defaultValue: r.trigger_event })}</span> },
               { key: 'type', header: t('notifications.notifierType'), render: (r) => <span className="text-xs">{r.notifier_type}</span> },
               { key: 'enabled', header: t('common.status'), render: (r) => <StatusBadge status={r.enabled ? 'online' : 'offline'} /> },
               {

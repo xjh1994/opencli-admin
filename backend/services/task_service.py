@@ -13,9 +13,11 @@ async def create_task(
     trigger_type: str,
     parameters: dict,
     priority: int = 5,
+    agent_id: Optional[str] = None,
 ) -> CollectionTask:
     task = CollectionTask(
         source_id=source_id,
+        agent_id=agent_id,
         trigger_type=trigger_type,
         parameters=parameters,
         priority=priority,

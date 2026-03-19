@@ -55,6 +55,7 @@ async def trigger_task(
         trigger_type="manual",
         parameters=body.parameters,
         priority=body.priority,
+        agent_id=body.agent_id,
     )
     # Commit before dispatching so the background runner's new session can find the task
     await db.commit()

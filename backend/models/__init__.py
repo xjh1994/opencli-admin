@@ -1,3 +1,4 @@
+from backend.models.agent import AIAgent
 from backend.models.base import TimestampMixin
 from backend.models.notification import NotificationLog, NotificationRule
 from backend.models.record import CollectedRecord
@@ -8,6 +9,7 @@ from backend.models.worker import WorkerNode
 
 __all__ = [
     "TimestampMixin",
+    "AIAgent",
     "DataSource",
     "CollectionTask",
     "TaskRun",

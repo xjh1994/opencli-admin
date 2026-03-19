@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSources, createSource, updateSource, deleteSource, triggerTask } from '../api/endpoints'
+import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents } from '../api/endpoints'
 import type { DataSource } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -174,10 +174,71 @@ function SourceModal({
   )
 }
 
+function TriggerModal({
+  sourceId,
+  onClose,
+  onTrigger,
+}: {
+  sourceId: string
+  onClose: () => void
+  onTrigger: (agentId?: string) => void
+}) {
+  const { t } = useTranslation()
+  const [agentId, setAgentId] = useState('')
+
+  const { data: agentsData } = useQuery({
+    queryKey: ['agents', 'enabled'],
+    queryFn: () => listAgents({ enabled: true }),
+  })
+  const agents = agentsData?.data ?? []
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm">
+        <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="text-lg font-semibold dark:text-white">{t('agents.triggerTitle')}</h2>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className={labelCls}>{t('agents.selectAgent')}</label>
+            <select
+              className={inputCls}
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+            >
+              <option value="">{t('agents.noAgent')}</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  [{a.processor_type}] {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            onClick={() => onTrigger(agentId || undefined)}
+            className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700"
+          >
+            {t('sources.triggerNow')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SourcesPage() {
   const { t } = useTranslation()
   const [showAdd, setShowAdd] = useState(false)
   const [editSource, setEditSource] = useState<DataSource | null>(null)
+  const [triggerSource, setTriggerSource] = useState<DataSource | null>(null)
   const [page, setPage] = useState(1)
   const qc = useQueryClient()
 
@@ -209,15 +270,18 @@ export default function SourcesPage() {
   const [triggerStates, setTriggerStates] = useState<Record<string, 'loading' | 'ok' | 'err'>>({})
 
   const triggerMut = useMutation({
-    mutationFn: (id: string) => triggerTask(id),
-    onMutate: (id) => setTriggerStates((s) => ({ ...s, [id]: 'loading' })),
-    onSuccess: (_data, id) => {
+    mutationFn: ({ id, agentId }: { id: string; agentId?: string }) =>
+      triggerTask(id, {}, agentId),
+    onMutate: ({ id }) => setTriggerStates((s) => ({ ...s, [id]: 'loading' })),
+    onSuccess: (_data, { id }) => {
       setTriggerStates((s) => ({ ...s, [id]: 'ok' }))
       setTimeout(() => setTriggerStates((s) => { const n = { ...s }; delete n[id]; return n }), 2000)
+      setTriggerSource(null)
     },
-    onError: (_err, id) => {
+    onError: (_err, { id }) => {
       setTriggerStates((s) => ({ ...s, [id]: 'err' }))
       setTimeout(() => setTriggerStates((s) => { const n = { ...s }; delete n[id]; return n }), 3000)
+      setTriggerSource(null)
     },
   })
 
@@ -298,7 +362,7 @@ export default function SourcesPage() {
               render: (s) => (
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => triggerMut.mutate(s.id)}
+                    onClick={() => setTriggerSource(s)}
                     disabled={!!triggerStates[s.id]}
                     className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors disabled:cursor-default ${
                       triggerStates[s.id] === 'ok'  ? 'text-green-600 bg-green-50 dark:bg-green-900/30' :
@@ -364,6 +428,14 @@ export default function SourcesPage() {
           initial={editSource}
           onClose={() => setEditSource(null)}
           onSave={(d) => updateMut.mutate({ id: editSource.id, data: d })}
+        />
+      )}
+
+      {triggerSource && (
+        <TriggerModal
+          sourceId={triggerSource.id}
+          onClose={() => setTriggerSource(null)}
+          onTrigger={(agentId) => triggerMut.mutate({ id: triggerSource.id, agentId })}
         />
       )}
     </div>

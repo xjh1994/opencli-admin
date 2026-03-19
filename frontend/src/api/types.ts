@@ -1,3 +1,16 @@
+export interface AIAgent {
+  id: string
+  name: string
+  description?: string
+  processor_type: 'claude' | 'openai' | 'local'
+  model?: string
+  prompt_template: string
+  processor_config: Record<string, unknown>
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface PaginationMeta {
   total: number
   page: number
@@ -29,6 +42,7 @@ export interface CollectionTask {
   id: string
   source_id: string
   source_name?: string
+  agent_id?: string
   trigger_type: string
   parameters: Record<string, unknown>
   priority: number
@@ -69,6 +83,7 @@ export interface CollectedRecord {
 export interface CronSchedule {
   id: string
   source_id: string
+  agent_id?: string
   name: string
   cron_expression: string
   timezone: string

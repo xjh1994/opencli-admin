@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import event
@@ -49,7 +50,42 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def init_db() -> None:
-    """Create all tables (development use; production uses Alembic)."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def run_migrations() -> None:
+    """Run Alembic migrations to head.
+
+    If the database has no alembic_version table yet (i.e., it was created by
+    the old create_all path), stamp it at the initial revision before upgrading
+    so Alembic doesn't try to recreate existing tables.
+    """
+    import logging
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect, text
+
+    logger = logging.getLogger(__name__)
+
+    alembic_cfg = Config("alembic.ini")
+
+    # Check if existing DB was created without Alembic (no alembic_version table)
+    async with engine.connect() as conn:
+        def _needs_stamp(sync_conn) -> bool:
+            insp = inspect(sync_conn)
+            tables = insp.get_table_names()
+            return "data_sources" in tables and "alembic_version" not in tables
+
+        needs_stamp = await conn.run_sync(_needs_stamp)
+
+    if needs_stamp:
+        logger.info(
+            "Existing database detected without alembic_version; "
+            "stamping at initial revision before upgrading"
+        )
+        def _stamp():
+            command.stamp(alembic_cfg, "5a9a94795d00")
+        await asyncio.to_thread(_stamp)
+
+    def _upgrade():
+        command.upgrade(alembic_cfg, "head")
+
+    await asyncio.to_thread(_upgrade)
+    logger.info("Database migrations applied")

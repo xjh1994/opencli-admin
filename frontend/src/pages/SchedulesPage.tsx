@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources } from '../api/endpoints'
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents } from '../api/endpoints'
 import type { CronSchedule } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -208,12 +208,19 @@ function AddScheduleModal({
   const [name, setName] = useState('')
   const [timezone, setTimezone] = useState('Asia/Shanghai')
   const [cronFields, setCronFields] = useState<CronFields>(DEFAULT_FIELDS)
+  const [agentId, setAgentId] = useState('')
 
   const { data: sourcesData } = useQuery({
     queryKey: ['sources', 'all'],
     queryFn: () => listSources({ page: 1, limit: 100 }),
   })
   const sources = sourcesData?.data ?? []
+
+  const { data: agentsData } = useQuery({
+    queryKey: ['agents', 'enabled'],
+    queryFn: () => listAgents({ enabled: true }),
+  })
+  const agents = agentsData?.data ?? []
 
   const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
@@ -225,6 +232,7 @@ function AddScheduleModal({
       cron_expression: buildCron(cronFields),
       timezone,
       is_one_time: cronFields.freq === 'once',
+      agent_id: agentId || undefined,
     })
   }
 
@@ -276,6 +284,19 @@ function AddScheduleModal({
             <select className={inputCls} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Agent */}
+          <div>
+            <label className={labelCls}>{t('agents.selectAgent')}</label>
+            <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+              <option value="">{t('agents.noAgent')}</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  [{a.processor_type}] {a.name}
+                </option>
               ))}
             </select>
           </div>
