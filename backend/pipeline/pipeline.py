@@ -40,6 +40,18 @@ async def run_pipeline(
     started = datetime.now(timezone.utc)
     params = parameters or {}
 
+    # Pre-step: auto-resolve chrome endpoint from browser binding (opencli only)
+    if source.channel_type == "opencli" and not params.get("chrome_endpoint"):
+        site = source.channel_config.get("site", "")
+        if site:
+            from backend.services import browser_service
+            async with AsyncSessionLocal() as session:
+                binding = await browser_service.get_binding_by_site(session, site)
+                if binding:
+                    params = {**params, "chrome_endpoint": binding.browser_endpoint}
+                    logger.info("[task:%s] auto-binding | site=%s → %s",
+                                task_id, site, binding.browser_endpoint)
+
     # Step 1: Collect
     logger.info("[task:%s] step1/collect start | source=%s channel=%s params=%s",
                 task_id, source.name, source.channel_type, params)

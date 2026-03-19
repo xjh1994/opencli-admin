@@ -2,6 +2,7 @@ import { apiClient } from './client'
 import type {
   AIAgent,
   ApiResponse,
+  BrowserBinding,
   ChromeEndpoint,
   CollectedRecord,
   CollectionTask,
@@ -134,6 +135,16 @@ export const updateAgent = (id: string, data: Partial<AIAgent>) =>
 
 export const deleteAgent = (id: string) =>
   apiClient.delete<ApiResponse<null>>(`/agents/${id}`).then((r) => r.data)
+
+// ── Browser bindings ───────────────────────────────────────────────────────────
+export const listBrowserBindings = () =>
+  apiClient.get<ApiResponse<BrowserBinding[]>>('/browsers/bindings').then((r) => r.data)
+
+export const createBrowserBinding = (data: { browser_endpoint: string; site: string; notes?: string }) =>
+  apiClient.post<ApiResponse<BrowserBinding>>('/browsers/bindings', data).then((r) => r.data.data)
+
+export const deleteBrowserBinding = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/browsers/bindings/${id}`).then((r) => r.data)
 
 // ── System ─────────────────────────────────────────────────────────────────────
 export const getHealth = () =>

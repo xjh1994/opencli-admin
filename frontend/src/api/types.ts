@@ -125,6 +125,15 @@ export interface ChromeEndpoint {
   novnc_port: number
 }
 
+export interface BrowserBinding {
+  id: string
+  browser_endpoint: string
+  site: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
 export interface WorkerNode {
   id: string
   worker_id: string
