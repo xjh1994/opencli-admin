@@ -143,9 +143,43 @@ opencli 渠道依赖浏览器登录态，首次使用需手动登录各平台账
 | 启动方式 | 操作 |
 |----------|------|
 | 原生 Shell | 脚本启动后 Chrome 窗口自动打开，在其中访问平台网址登录即可。登录态保存在 `~/.opencli-admin/chrome-profile/` |
-| Docker | 打开 http://localhost:3010（noVNC），在浏览器界面中访问平台网址登录 |
+| Docker 单实例 | 打开 http://localhost:3010（noVNC），在浏览器界面中访问平台网址登录 |
+| Docker 多实例 | 每个实例独立 Profile，需分别登录。chrome-2 → :3011，chrome-3 → :3012，以此类推 |
 
 > **需要登录的平台**：小红书、Bilibili、知乎、微博、Twitter/X、LinkedIn、YouTube 等。Hacker News、BBC、Reuters、RSS 等公开内容无需登录。
+
+### 浏览器状态管理
+
+**Profile 持久化**
+
+每个 Chrome 实例的 Profile（Cookies、LocalStorage、扩展数据等）保存在独立的 Docker named volume 中：
+
+| 实例 | Volume 名称 |
+|------|------------|
+| chrome（实例 1） | `{project}_chrome_profile` |
+| chrome-2 | `{project}_chrome_profile_2` |
+| chrome-N | `{project}_chrome_profile_N` |
+
+容器重启、镜像升级均不会丢失登录状态。
+
+**重置登录状态**
+
+如需清除某个实例的所有登录信息（如账号切换、Cookie 失效）：
+
+```bash
+# 停止并删除实例及其 volume（以 chrome-2 为例）
+docker rm -f chrome-2
+docker volume rm opencli-admin_chrome_profile_2
+
+# 重新启动，按提示重新登录
+./scripts/chrome-pool.sh start 3
+```
+
+**多实例登录注意事项**
+
+- 各实例 Profile 完全隔离，在一个实例中登录不影响其他实例
+- 同一平台需在每个实例中分别登录，否则该实例执行对应采集任务时会因无登录态而失败
+- 建议：扩容后先通过 noVNC 逐一确认各实例登录状态，再将 `CHROME_POOL_ENDPOINTS` 写入 `.env`
 
 ## 服务端口
 
