@@ -293,9 +293,8 @@ const zh = {
     daemonPort: 'Daemon 端口',
     daemonPortHint: 'Browser Bridge 守护进程监听端口（默认 19825，需与容器设置一致）',
     bridgeSetupTitle: '启用 Browser Bridge 扩展',
-    bridgeSetupStep1: '运行 ./scripts/build-extension.sh 构建扩展',
-    bridgeSetupStep2: '在 .env 中设置 BROWSER_BRIDGE_ENABLED=true',
-    bridgeSetupStep3: '重建并重启 chrome 镜像：docker compose build chrome-1 && docker compose up -d chrome-1',
+    bridgeSetupStep1: '在 .env 中设置 BROWSER_BRIDGE_ENABLED=true',
+    bridgeSetupStep2: '重启 chrome 容器：docker compose up -d chrome-1',
     bridgeDockerNote: '触发或定时任务时需选择开启了 Bridge 的 Chrome 实例',
   },
 }

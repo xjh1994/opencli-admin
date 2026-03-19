@@ -295,9 +295,8 @@ const en: Translations = {
     daemonPort: 'Daemon Port',
     daemonPortHint: 'Browser Bridge daemon listen port (default 19825, must match container setting)',
     bridgeSetupTitle: 'Enable Browser Bridge Extension',
-    bridgeSetupStep1: 'Run ./scripts/build-extension.sh to build the extension',
-    bridgeSetupStep2: 'Set BROWSER_BRIDGE_ENABLED=true in .env',
-    bridgeSetupStep3: 'Rebuild and restart: docker compose build chrome-1 && docker compose up -d chrome-1',
+    bridgeSetupStep1: 'Set BROWSER_BRIDGE_ENABLED=true in .env',
+    bridgeSetupStep2: 'Restart the chrome container: docker compose up -d chrome-1',
     bridgeDockerNote: 'When triggering tasks, select the Chrome instance with Bridge enabled',
   },
 }

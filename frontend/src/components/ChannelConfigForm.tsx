@@ -903,7 +903,6 @@ function OpenCLIConfig({
               <ol className="text-xs text-blue-600 dark:text-blue-400 list-decimal list-inside space-y-0.5">
                 <li>{t('channelConfig.bridgeSetupStep1')}</li>
                 <li>{t('channelConfig.bridgeSetupStep2')}</li>
-                <li>{t('channelConfig.bridgeSetupStep3')}</li>
               </ol>
               <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">
                 ⚠ {t('channelConfig.bridgeDockerNote')}
