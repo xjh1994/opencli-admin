@@ -7,8 +7,8 @@
 ## 功能概览
 
 - **数据源管理** — 支持 opencli、RSS、API、Web 爬虫、CLI 五种渠道类型，可视化配置、一键触发
-- **定时计划** — 结构化频率设置（每 N 分钟 / 每小时 / 每天 / 每周 / 每月 / 指定时间），支持时区和一次性执行
-- **采集任务** — 实时查看任务状态、执行历史、错误信息
+- **定时计划** — 结构化频率设置（每 N 分钟 / 每小时 / 每天 / 每周 / 每月 / 指定时间），支持时区和一次性执行；可为每条计划指定专用 Chrome 实例
+- **采集任务** — 实时查看任务状态、执行历史、错误信息；手动触发时可临时指定 Chrome 实例
 - **采集记录** — 归一化展示所有采集到的数据，支持状态筛选
 - **AI 智能体** — 采集完成后自动调用 AI 对内容进行分析、摘要、打标等处理，结果附加到记录上；支持 Claude、OpenAI、DeepSeek、Kimi、GLM、MiniMax、Ollama 等模型提供商，内置预设 Prompt 模板，占位符自动匹配各站点实际字段
 - **通知推送** — 按触发事件（新记录入库 / AI 处理完成 / 任务失败）向 Webhook、邮件、飞书、钉钉、企业微信推送，各渠道结构化配置表单，支持签名验证
@@ -127,6 +127,19 @@ docker-compose restart api
 ```
 
 每个实例拥有独立的浏览器 Profile 和 noVNC 端口（从 `NOVNC_PORT` 递增），首次启动后需分别通过 noVNC 登录各平台账号。
+
+**Chrome 实例路由**
+
+多实例模式下，可以将不同数据源的采集任务路由到指定的 Chrome 实例，实现登录态隔离（例如：小红书账号只登录在 chrome-2，Twitter 账号只登录在 chrome-3）。
+
+路由配置有两个入口，均只在池中有多个实例时显示：
+
+| 入口 | 作用 |
+|------|------|
+| 定时计划 → 新建计划 → Chrome 实例 | 该计划每次触发时固定使用指定实例 |
+| 数据源列表 → 触发 → Chrome 实例 | 仅本次手动触发使用，不影响计划配置 |
+
+留空则自动分配当前空闲实例（负载均衡）。
 
 **停止**
 
@@ -247,17 +260,27 @@ docker-compose --profile celery up -d
 | 后端 | FastAPI + SQLAlchemy 2.0 (async) |
 | 数据库 | SQLite（默认）/ PostgreSQL |
 | 任务队列 | asyncio（单机）/ Celery + Redis（分布式） |
-| 浏览器 | Chrome + CDP（供 opencli 登录态采集） |
+| 浏览器 | Chrome + CDP（供 opencli 登录态采集，支持动态多实例池） |
 | 部署 | 原生 Shell / Docker Compose |
 
 ## 采集流水线
 
 ```
-数据源配置
+触发方式
+  ├─ 手动触发（可指定 Chrome 实例）
+  ├─ 定时计划（cron，可指定 Chrome 实例）
+  └─ Webhook（HMAC 签名验证）
     ↓
-渠道采集（opencli / RSS / API / Web Scraper / CLI）
+渠道采集
+  ├─ opencli  — Chrome 浏览器池（LocalPool / RedisPool）按路由分配实例
+  ├─ RSS       — feedparser
+  ├─ API       — REST / GraphQL 直连
+  ├─ Web 爬虫 — httpx + BeautifulSoup
+  └─ CLI       — 通用命令行工具包装
     ↓
-数据归一化（title / url / content / author / published_at + extra_* 扩展字段）
+数据归一化
+  └─ 标准字段：title / url / content / author / published_at
+     扩展字段：extra_* （各站点特有，如 rank / heat / play 等）
     ↓
 去重存储（SHA-256 内容哈希）
     ↓
@@ -268,11 +291,38 @@ AI 智能体处理（可选）
   └─ 渠道：Webhook · 飞书 · 钉钉 · 企业微信 · Email
 ```
 
+## Chrome 浏览器池架构
+
+opencli 渠道通过 CDP 驱动 Chrome 完成登录态采集，系统内置浏览器池管理并发与路由：
+
+```
+采集任务
+  │  chrome_endpoint=None        → LocalBrowserPool._acquire_any()
+  │                                 竞争所有空闲实例，取最先释放的
+  │  chrome_endpoint="http://chrome-2:19222"
+  │                              → LocalBrowserPool.acquire(endpoint=...)
+  │                                 等待指定实例专属 slot 释放
+  ↓
+BrowserPool（单机：asyncio.Queue / 分布式：Redis BLPOP）
+  ├─ chrome    (slot: 1 token)
+  ├─ chrome-2  (slot: 1 token)   ← 每实例同一时刻最多执行 1 个任务
+  └─ chrome-N  (slot: 1 token)
+    ↓
+opencli 进程（OPENCLI_CDP_ENDPOINT=<acquired_endpoint>）
+    ↓
+nginx CDP 代理（Host 重写 → localhost:9222）
+    ↓
+Chromium（带登录态 Profile）
+```
+
+`chrome_endpoint` 通过任务 `parameters` 传递，在定时计划和手动触发时均可配置，不影响数据源本身的定义。
+
 ## 项目结构
 
 ```
 ├── backend/
 │   ├── api/v1/          # FastAPI 路由
+│   ├── browser_pool.py  # Chrome 浏览器池（LocalBrowserPool / RedisBrowserPool）
 │   ├── channels/        # 渠道实现（opencli / rss / api / web_scraper / cli）
 │   ├── executor/        # 任务执行器（local / celery）
 │   ├── pipeline/        # 采集流水线（collect → normalize → store → ai → notify）
