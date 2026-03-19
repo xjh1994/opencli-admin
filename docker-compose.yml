@@ -124,34 +124,9 @@ services:
       - chrome_profile:/home/chrome/.config/chromium
     restart: unless-stopped
 
-  # Additional Chrome instances — start with: docker-compose --profile multi-chrome up -d
-  # Login to each instance via noVNC: chrome-2 → :3011, chrome-3 → :3012
-  # Then set: CHROME_POOL_ENDPOINTS=http://chrome:19222,http://chrome-2:19222,http://chrome-3:19222
-  chrome-2:
-    profiles: ["multi-chrome"]
-    build:
-      context: ./chrome
-      dockerfile: Dockerfile
-      args:
-        REGISTRY: ${DOCKER_REGISTRY:-}
-    ports:
-      - "${NOVNC_PORT_2:-3011}:6080"
-    volumes:
-      - chrome_profile_2:/home/chrome/.config/chromium
-    restart: unless-stopped
-
-  chrome-3:
-    profiles: ["multi-chrome"]
-    build:
-      context: ./chrome
-      dockerfile: Dockerfile
-      args:
-        REGISTRY: ${DOCKER_REGISTRY:-}
-    ports:
-      - "${NOVNC_PORT_3:-3012}:6080"
-    volumes:
-      - chrome_profile_3:/home/chrome/.config/chromium
-    restart: unless-stopped
+  # Additional Chrome instances are managed dynamically via scripts/chrome-pool.sh
+  # Run: ./scripts/chrome-pool.sh start [N]
+  # See: ./scripts/chrome-pool.sh status
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
@@ -190,5 +165,3 @@ volumes:
   postgres_data:
   db_data:
   chrome_profile:
-  chrome_profile_2:
-  chrome_profile_3:
