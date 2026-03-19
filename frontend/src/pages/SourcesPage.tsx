@@ -307,6 +307,9 @@ function TriggerModal({
                       <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
                         {ep.available ? '●' : '○'}
                       </span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${ep.mode === 'bridge' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+                        {ep.mode === 'bridge' ? 'Bridge' : 'CDP'}
+                      </span>
                       {boundSites.map((site) => (
                         <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
                           {SITE_LABELS[site] ?? site}
