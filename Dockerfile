@@ -4,6 +4,10 @@ FROM ${REGISTRY}python:3.13-slim AS builder
 
 WORKDIR /app
 
+# Switch to Aliyun apt mirror for faster downloads in China
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
+
 # Install build deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev \
@@ -20,13 +24,28 @@ FROM ${REGISTRY}python:3.13-slim AS runtime
 
 WORKDIR /app
 
-# Runtime system deps (psycopg2 needs libpq, opencli needs Node.js)
+# Switch to Aliyun apt mirror for faster downloads in China
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
+
+# Runtime system deps (psycopg2 needs libpq, opencli needs Node.js 20+)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl nodejs npm \
+    libpq5 curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install opencli and playwright/mcp (separate layer — changes here don't re-run apt)
-RUN npm install -g @jackwener/opencli @playwright/mcp \
+# Install both opencli versions into separate prefixes so opencli_channel.py
+# can select the right binary at runtime based on source bridge_mode config:
+#   /opt/opencli-bridge  →  1.0.0  (daemon+WebSocket, for bridge_mode=true)
+#   /opt/opencli-cdp     →  0.9.6  (Playwright direct CDP, for bridge_mode=false)
+ARG OPENCLI_BRIDGE_VERSION=1.0.0
+ARG OPENCLI_CDP_VERSION=0.9.6
+COPY scripts/patch-opencli.js /tmp/patch-opencli.js
+RUN npm install -g --prefix /opt/opencli-bridge @jackwener/opencli@${OPENCLI_BRIDGE_VERSION} \
+    && node /tmp/patch-opencli.js /opt/opencli-bridge \
+    && npm install -g --prefix /opt/opencli-cdp @jackwener/opencli@${OPENCLI_CDP_VERSION} \
+    && rm /tmp/patch-opencli.js \
     && rm -rf /root/.npm
 
 # Copy installed packages from builder

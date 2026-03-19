@@ -108,22 +108,6 @@ export default function WorkersPage() {
                   </span>
                 ),
               },
-              {
-                key: 'created_at', header: t('common.createdAt'), width: '130px',
-                render: (w) => (
-                  <span className="text-xs text-gray-500">
-                    {formatInTimeZone(new Date(w.created_at), 'Asia/Shanghai', 'MM-dd HH:mm:ss')}
-                  </span>
-                ),
-              },
-              {
-                key: 'updated_at', header: t('common.updatedAt'), width: '130px',
-                render: (w) => (
-                  <span className="text-xs text-gray-500">
-                    {formatInTimeZone(new Date(w.updated_at), 'Asia/Shanghai', 'MM-dd HH:mm:ss')}
-                  </span>
-                ),
-              },
             ]}
           />
         )}

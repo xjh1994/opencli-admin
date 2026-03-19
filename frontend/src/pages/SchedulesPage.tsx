@@ -292,36 +292,36 @@ function AddScheduleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl">
         <div className="p-6 border-b border-gray-100 dark:border-gray-700">
           <h2 className="text-lg font-semibold dark:text-white">{t('schedules.addScheduleTitle')}</h2>
         </div>
 
-        <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
-          {/* Source */}
-          <div>
-            <label className={labelCls}>
-              数据源 <span className="text-red-500">*</span>
-            </label>
-            <select className={inputCls} value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-              <option value="">— 选择数据源 —</option>
-              {sources.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}（{formatInTimeZone(new Date(s.created_at), 'Asia/Shanghai', 'MM-dd HH:mm')}）
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Name */}
-          <div>
-            <label className={labelCls}>{t('common.name')} <span className="text-red-500">*</span></label>
-            <input
-              className={inputCls}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="每天早上9点"
-            />
+        <div className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
+          {/* Source + Name */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>
+                数据源 <span className="text-red-500">*</span>
+              </label>
+              <select className={inputCls} value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
+                <option value="">— 选择数据源 —</option>
+                {sources.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}（{formatInTimeZone(new Date(s.created_at), 'Asia/Shanghai', 'MM-dd HH:mm')}）
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>{t('common.name')} <span className="text-red-500">*</span></label>
+              <input
+                className={inputCls}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="每天早上9点"
+              />
+            </div>
           </div>
 
           {/* Cron builder */}
@@ -332,41 +332,41 @@ function AddScheduleModal({
             </div>
           </div>
 
-          {/* Timezone */}
-          <div>
-            <label className={labelCls}>{t('schedules.timezone')}</label>
-            <select className={inputCls} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>{tz}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Agent */}
-          <div>
-            <label className={labelCls}>{t('agents.selectAgent')}</label>
-            <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-              <option value="">{t('agents.noAgent')}</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  [{a.processor_type}] {a.name}
-                </option>
-              ))}
-            </select>
+          {/* Timezone + Agent */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>{t('schedules.timezone')}</label>
+              <select className={inputCls} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+                {TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz}>{tz}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>{t('agents.selectAgent')}</label>
+              <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+                <option value="">{t('agents.noAgent')}</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    [{a.processor_type}] {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {showChromeSelector && (
             <div>
               <label className={labelCls}>{t('channelConfig.chromeEndpoint')}</label>
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer py-1">
                   <input
                     type="radio"
                     name="chrome-ep-sched"
                     value=""
                     checked={chromeEndpoint === ''}
                     onChange={() => setChromeEndpoint('')}
-                    className="accent-blue-600"
+                    className="accent-blue-600 shrink-0"
                   />
                   <span className="text-sm text-gray-600 dark:text-gray-300">{t('channelConfig.chromeEndpointAny')}</span>
                 </label>
@@ -376,35 +376,54 @@ function AddScheduleModal({
                   const label = ep.url.replace('http://', '').replace(':19222', '')
                   const boundSites = endpointBoundSites[ep.url] ?? []
                   return (
-                    <label key={ep.url} className="flex items-center gap-2 cursor-pointer">
+                    <label
+                      key={ep.url}
+                      className={`flex gap-3 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
+                        chromeEndpoint === ep.url
+                          ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                      }`}
+                    >
                       <input
                         type="radio"
                         name="chrome-ep-sched"
                         value={ep.url}
                         checked={chromeEndpoint === ep.url}
                         onChange={() => setChromeEndpoint(ep.url)}
-                        className="accent-blue-600"
+                        className="accent-blue-600 shrink-0 mt-0.5"
                       />
-                      <span className={`text-sm ${ep.available ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
-                        {label}
-                      </span>
-                      <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
-                        {ep.available ? '●' : '○'}
-                      </span>
-                      {boundSites.map((site) => (
-                        <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
-                          {SITE_LABELS[site] ?? site}
-                        </span>
-                      ))}
-                      <a
-                        href={novncUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="ml-auto text-xs text-blue-500 hover:underline font-mono"
-                      >
-                        {window.location.hostname}:{novncPort} ↗
-                      </a>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-medium ${ep.available ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
+                            {label}
+                          </span>
+                          <span className={`text-xs ${ep.available ? 'text-green-500' : 'text-red-400'}`}>
+                            {ep.available ? '● 在线' : '○ 离线'}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${ep.mode === 'bridge' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+                            {ep.mode === 'bridge' ? 'Bridge' : 'CDP'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {boundSites.map((site) => (
+                            <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                              {SITE_LABELS[site] ?? site}
+                            </span>
+                          ))}
+                          {boundSites.length === 0 && (
+                            <span className="text-xs text-gray-400">暂无绑定站点</span>
+                          )}
+                          <a
+                            href={novncUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-auto text-xs text-blue-500 hover:underline font-mono shrink-0"
+                          >
+                            noVNC ↗
+                          </a>
+                        </div>
+                      </div>
                     </label>
                   )
                 })}

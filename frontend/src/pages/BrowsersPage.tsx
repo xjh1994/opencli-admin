@@ -9,6 +9,7 @@ import {
   addChromeInstance,
   removeChromeInstance,
   restartApi,
+  updateChromeEndpointMode,
 } from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -16,7 +17,7 @@ import Card from '../components/Card'
 import PageHeader from '../components/PageHeader'
 import { SITE_LABELS } from '../components/ChannelConfigForm'
 import { Plus, X, ExternalLink, RefreshCw, Trash2, Minus } from 'lucide-react'
-import type { BrowserBinding } from '../api/types'
+import type { BrowserBinding, ChromeEndpoint } from '../api/types'
 
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
   try {
@@ -112,14 +113,44 @@ function StatusBadge({ containerStatus, available, isStarting }: StatusBadgeProp
 
 interface AddInstanceModalProps {
   currentCount: number
-  onConfirm: (count: number, withRestart: boolean) => void
+  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp') => void
   onClose: () => void
   isPending: boolean
 }
 
+const MODE_OPTIONS: {
+  value: 'bridge' | 'cdp'
+  label: string
+  badge: string
+  badgeCls: string
+  tech: string
+  desc: string
+  pros: string[]
+}[] = [
+  {
+    value: 'bridge',
+    label: 'Browser Bridge 模式',
+    badge: 'Bridge',
+    badgeCls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    tech: 'opencli 1.0 · daemon.js + opencli Browser Bridge 扩展',
+    desc: 'Chrome 内置 "opencli Browser Bridge" 扩展通过 WebSocket 连接 daemon.js 常驻进程，由 daemon 代理执行浏览器操作。Cookie、登录态由真实 Chrome 保存，容器重启不丢失。',
+    pros: ['登录状态持久保留，适合需要账号的站点（B站、小红书等）', '浏览器行为接近真实用户，抗检测能力强', 'daemon 常驻保持连接，任务触发延迟低'],
+  },
+  {
+    value: 'cdp',
+    label: 'CDP 直连模式',
+    badge: 'CDP',
+    badgeCls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    tech: 'opencli 0.9 · Playwright 直连 Chrome DevTools Protocol',
+    desc: 'API 容器通过 Playwright 直接连接 Chrome 的 DevTools Protocol 端口（:19222）控制浏览器，不经过扩展或 daemon 中转。',
+    pros: ['无需扩展参与，链路更简单，故障点更少', '适合无需登录的公开页面抓取', '每次任务独立连接，状态隔离'],
+  },
+]
+
 function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddInstanceModalProps) {
   const { t } = useTranslation()
   const [count, setCount] = useState(1)
+  const [mode, setMode] = useState<'bridge' | 'cdp'>('bridge')
 
   const preview = Array.from({ length: count }, (_, i) => {
     const N = currentCount + 1 + i
@@ -127,15 +158,15 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
   })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-80 p-5"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-sm font-semibold dark:text-white mb-4">{t('browsers.addInstanceTitle')}</h3>
 
         {/* Count picker */}
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-5">
           <span className="text-xs text-gray-500 dark:text-gray-400 flex-1">{t('browsers.instanceCount')}</span>
           <div className="flex items-center gap-2">
             <button
@@ -156,6 +187,48 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
           </div>
         </div>
 
+        {/* Mode selector */}
+        <div className="mb-5">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">控制模式</p>
+          <div className="flex flex-col gap-2">
+            {MODE_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex gap-3 cursor-pointer rounded-lg border px-3 py-3 transition-colors ${
+                  mode === opt.value
+                    ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="instance-mode"
+                  value={opt.value}
+                  checked={mode === opt.value}
+                  onChange={() => setMode(opt.value)}
+                  className="accent-blue-600 shrink-0 mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium dark:text-white">{opt.label}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${opt.badgeCls}`}>{opt.badge}</span>
+                  </div>
+                  <p className="text-xs font-mono text-gray-400 dark:text-gray-500 mb-1">{opt.tech}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">{opt.desc}</p>
+                  <ul className="space-y-0.5">
+                    {opt.pros.map((pro) => (
+                      <li key={pro} className="text-xs text-gray-500 dark:text-gray-400 flex items-start gap-1">
+                        <span className="text-green-500 shrink-0">✓</span>
+                        {pro}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
         {/* Preview */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 mb-5">
           <p className="text-xs text-gray-400 mb-1.5">{t('browsers.instancePreview')}</p>
@@ -168,17 +241,17 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
           </div>
         </div>
 
-        {/* Actions — two confirm buttons */}
+        {/* Actions */}
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => onConfirm(count, true)}
+            onClick={() => onConfirm(count, true, mode)}
             disabled={isPending}
             className="w-full px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             {isPending ? t('browsers.adding') : t('browsers.createAndRestart')}
           </button>
           <button
-            onClick={() => onConfirm(count, false)}
+            onClick={() => onConfirm(count, false, mode)}
             disabled={isPending}
             className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
@@ -323,12 +396,45 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
 
 // ── Instance card ─────────────────────────────────────────────────────────────
 
+function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSuccess: () => void }) {
+  const { t } = useTranslation()
+  const [optimisticMode, setOptimisticMode] = useState<'bridge' | 'cdp' | null>(null)
+  const mode = optimisticMode ?? endpoint.mode
+
+  const mutation = useMutation({
+    mutationFn: (newMode: 'bridge' | 'cdp') => updateChromeEndpointMode(endpoint.url, newMode),
+    onMutate: (newMode) => setOptimisticMode(newMode),
+    onSuccess: () => { setOptimisticMode(null); onSuccess() },
+    onError: () => setOptimisticMode(null),
+  })
+
+  return (
+    <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
+      {(['bridge', 'cdp'] as const).map((m) => (
+        <button
+          key={m}
+          title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
+          disabled={mutation.isPending}
+          onClick={() => mode !== m && mutation.mutate(m)}
+          className={[
+            'px-2.5 py-1 transition-colors',
+            mode === m
+              ? m === 'bridge'
+                ? 'bg-blue-600 text-white'
+                : 'bg-amber-500 text-white'
+              : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
+          ].join(' ')}
+        >
+          {t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 interface InstanceCardProps {
-  url: string
-  available: boolean
-  containerStatus?: string
+  endpoint: ChromeEndpoint
   isStarting?: boolean
-  novncPort: number
   bindings: BrowserBinding[]
   boundSites: Set<string>
   onBind: (site: string) => void
@@ -336,21 +442,23 @@ interface InstanceCardProps {
   onRemove?: () => void
   isBindPending: boolean
   isRemovePending: boolean
+  onModeChanged: () => void
 }
 
 function InstanceCard({
-  url, available, containerStatus, isStarting, novncPort, bindings, boundSites,
-  onBind, onUnbind, onRemove, isBindPending, isRemovePending,
+  endpoint, isStarting, bindings, boundSites,
+  onBind, onUnbind, onRemove, isBindPending, isRemovePending, onModeChanged,
 }: InstanceCardProps) {
   const { t } = useTranslation()
+  const { url, available, container_status: containerStatus, novnc_port: novncPort } = endpoint
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
   const idx = instanceIndex(url)
-  const canRemove = idx !== null && idx > 1 && onRemove  // chrome-1 is compose-managed
+  const canRemove = idx !== null && idx > 1 && onRemove
 
   return (
     <Card>
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
         <StatusBadge containerStatus={containerStatus} available={available} isStarting={isStarting} />
         <span className="font-semibold text-sm dark:text-white">{label}</span>
         <a
@@ -362,16 +470,19 @@ function InstanceCard({
           :{novncPort}
           <ExternalLink size={11} />
         </a>
-        {canRemove && (
-          <button
-            onClick={onRemove}
-            disabled={isRemovePending}
-            title={t('browsers.removeInstance')}
-            className="ml-auto text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-          >
-            <Trash2 size={14} />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} />
+          {canRemove && (
+            <button
+              onClick={onRemove}
+              disabled={isRemovePending}
+              title={t('browsers.removeInstance')}
+              className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 min-h-[2rem]">
@@ -429,7 +540,7 @@ export default function BrowsersPage() {
   })
 
   const addInstanceMutation = useMutation({
-    mutationFn: ({ count }: { count: number; withRestart: boolean }) => addChromeInstance(count),
+    mutationFn: ({ count, mode }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp' }) => addChromeInstance(count, mode),
     onSuccess: (result, { withRestart }) => {
       setShowAddModal(false)
       invalidatePool()
@@ -522,16 +633,12 @@ export default function BrowsersPage() {
       {/* Instance cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {endpoints.map((ep) => {
-          const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
           const idx = instanceIndex(ep.url)
           return (
             <InstanceCard
               key={ep.url}
-              url={ep.url}
-              available={ep.available}
-              containerStatus={ep.container_status}
+              endpoint={ep}
               isStarting={startingEndpoints.has(ep.url)}
-              novncPort={novncPort}
               bindings={bindingsByEndpoint[ep.url] ?? []}
               boundSites={boundSites}
               onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
@@ -539,6 +646,7 @@ export default function BrowsersPage() {
               onRemove={idx !== null ? () => setRemovingIdx(idx) : undefined}
               isBindPending={addMutation.isPending}
               isRemovePending={removeInstanceMutation.isPending}
+              onModeChanged={invalidatePool}
             />
           )
         })}
@@ -584,7 +692,7 @@ export default function BrowsersPage() {
       {showAddModal && (
         <AddInstanceModal
           currentCount={endpoints.length}
-          onConfirm={(count, withRestart) => addInstanceMutation.mutate({ count, withRestart })}
+          onConfirm={(count, withRestart, mode) => addInstanceMutation.mutate({ count, withRestart, mode })}
           onClose={() => { if (!addInstanceMutation.isPending) setShowAddModal(false) }}
           isPending={addInstanceMutation.isPending}
         />

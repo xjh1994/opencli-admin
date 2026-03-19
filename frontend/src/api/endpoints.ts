@@ -160,8 +160,8 @@ export const createBrowserBinding = (data: { browser_endpoint: string; site: str
 export const deleteBrowserBinding = (id: string) =>
   apiClient.delete<ApiResponse<null>>(`/browsers/bindings/${id}`).then((r) => r.data)
 
-export const addChromeInstance = (count = 1) =>
-  apiClient.post<ApiResponse<{ created: { endpoint: string; novnc_port: number }[]; total: number }>>(`/browsers/chrome-instances?count=${count}`).then((r) => r.data.data)
+export const addChromeInstance = (count = 1, mode: 'bridge' | 'cdp' = 'bridge') =>
+  apiClient.post<ApiResponse<{ created: { endpoint: string; novnc_port: number }[]; total: number }>>(`/browsers/chrome-instances?count=${count}&mode=${mode}`).then((r) => r.data.data)
 
 export const removeChromeInstance = (n: number) =>
   apiClient.delete<ApiResponse<{ removed: string; total: number }>>(`/browsers/chrome-instances/${n}`).then((r) => r.data)
@@ -184,3 +184,10 @@ export const getChromePool = () =>
   apiClient
     .get<ApiResponse<{ endpoints: ChromeEndpoint[]; total: number; available: number }>>('/workers/chrome-pool')
     .then((r) => r.data.data)
+
+export const updateChromeEndpointMode = (endpoint: string, mode: 'bridge' | 'cdp') => {
+  const b64 = btoa(endpoint).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+  return apiClient
+    .patch<ApiResponse<{ endpoint: string; mode: string }>>(`/workers/chrome-pool/${b64}/mode`, { mode })
+    .then((r) => r.data.data)
+}

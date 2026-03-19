@@ -13,3 +13,15 @@ class BrowserBinding(TimestampMixin):
     browser_endpoint: Mapped[str] = mapped_column(String(255), nullable=False)
     site: Mapped[str] = mapped_column(String(100), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class BrowserInstance(TimestampMixin):
+    """Metadata for each Chrome pool instance (mode, label)."""
+
+    __tablename__ = "browser_instances"
+
+    endpoint: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    # "bridge" → opencli 1.0.0 via daemon+extension
+    # "cdp"    → opencli 0.9.6 via Playwright direct CDP
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="bridge")
+    label: Mapped[str] = mapped_column(String(100), nullable=False, default="")

@@ -27,7 +27,28 @@ nginx -g 'daemon off;' &
 x11vnc -display :99 -nopw -listen 0.0.0.0 -xkb -forever -shared &
 websockify --web /usr/share/novnc 6080 localhost:5900 &
 
+# Start Browser Bridge daemon (always enabled).
+# Listens on 0.0.0.0 so the API/worker containers can reach it via chrome-{N}:19825.
+# The extension connects to ws://localhost:19825/ext.
+DAEMON_JS="$(npm root -g)/@jackwener/opencli/dist/daemon.js"
+if [ -f "$DAEMON_JS" ]; then
+  (while true; do
+    OPENCLI_DAEMON_LISTEN=0.0.0.0 node "$DAEMON_JS"
+    echo "[entrypoint] Browser Bridge daemon exited, restarting in 1s..."
+    sleep 1
+  done) &
+  echo "[entrypoint] Browser Bridge daemon started on 0.0.0.0:${OPENCLI_DAEMON_PORT:-19825}"
+else
+  echo "[entrypoint] WARNING: Browser Bridge daemon not found at $DAEMON_JS"
+fi
+
 # Keep Chromium running; restart on crash
+CHROME_EXTRA_FLAGS=""
+if [ -f /home/chrome/extension/manifest.json ]; then
+  CHROME_EXTRA_FLAGS="--load-extension=/home/chrome/extension"
+  echo "[entrypoint] Browser Bridge extension loaded from /home/chrome/extension"
+fi
+
 start_chrome() {
   find /home/chrome/.config/chromium -name 'SingletonLock' -o -name 'SingletonCookie' -o -name 'SingletonSocket' 2>/dev/null | xargs rm -f 2>/dev/null || true
   chromium \
@@ -38,6 +59,7 @@ start_chrome() {
     --disable-dev-shm-usage \
     --user-data-dir=/home/chrome/.config/chromium \
     --window-size=1280,900 \
+    $CHROME_EXTRA_FLAGS \
     "$@"
 }
 

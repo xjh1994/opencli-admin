@@ -138,6 +138,7 @@ export interface ChromeEndpoint {
   available: boolean
   novnc_port: number
   container_status?: string
+  mode: 'bridge' | 'cdp'
 }
 
 export interface BrowserBinding {

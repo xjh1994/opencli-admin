@@ -43,6 +43,8 @@ class LocalBrowserPool:
             q.put_nowait(ep)
             self._slots[ep] = q
         self._total = len(endpoints)
+        # mode per endpoint: "bridge" (opencli 1.0.0 daemon) or "cdp" (opencli 0.9.6 Playwright)
+        self._modes: dict[str, str] = {ep: "bridge" for ep in endpoints}
         logger.info(
             "BrowserPool (local): %d Chrome instance(s): %s",
             self._total,
@@ -110,6 +112,15 @@ class LocalBrowserPool:
         q = self._slots.get(endpoint)
         return q is not None and not q.empty()
 
+    def get_mode(self, endpoint: str) -> str:
+        """Return the connection mode for the given endpoint ("bridge" or "cdp")."""
+        return self._modes.get(endpoint, "bridge")
+
+    def set_mode(self, endpoint: str, mode: str) -> None:
+        """Update the connection mode for an endpoint at runtime."""
+        self._modes[endpoint] = mode
+        logger.info("BrowserPool: endpoint %s mode set to %s", endpoint, mode)
+
     def add_endpoint(self, endpoint: str) -> None:
         """Hot-add a new Chrome instance to the pool without restarting."""
         if endpoint in self._slots:
@@ -117,6 +128,7 @@ class LocalBrowserPool:
         q: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
         q.put_nowait(endpoint)
         self._slots[endpoint] = q
+        self._modes.setdefault(endpoint, "bridge")
         self._total += 1
         logger.info("BrowserPool: added endpoint %s (total: %d)", endpoint, self._total)
 
@@ -125,6 +137,7 @@ class LocalBrowserPool:
         if endpoint not in self._slots:
             return
         self._slots.pop(endpoint)
+        self._modes.pop(endpoint, None)
         self._total -= 1
         logger.info("BrowserPool: removed endpoint %s (total: %d)", endpoint, self._total)
 

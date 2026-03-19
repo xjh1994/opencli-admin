@@ -6,8 +6,8 @@ import io
 import json
 import logging
 import os
-import shutil
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -15,6 +15,10 @@ from backend.channels.base import AbstractChannel, ChannelResult
 from backend.channels.registry import register_channel
 
 logger = logging.getLogger(__name__)
+
+_DAEMON_PORT = 19825
+_BRIDGE_BIN = "/opt/opencli-bridge/bin/opencli"
+_CDP_BIN = "/opt/opencli-cdp/bin/opencli"
 
 
 def _parse_json(raw: str) -> list[dict]:
@@ -85,6 +89,23 @@ _PARSERS = {
 }
 
 
+async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
+    """Run opencli subprocess, return (returncode, stdout, stderr)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        return proc.returncode, stdout.decode(), stderr.decode().strip()
+    except asyncio.TimeoutError:
+        raise
+    except FileNotFoundError:
+        raise
+
+
 @register_channel
 class OpenCLIChannel(AbstractChannel):
     """Collect data by running the opencli CLI tool."""
@@ -102,46 +123,50 @@ class OpenCLIChannel(AbstractChannel):
         cli_params = {k: v for k, v in parameters.items() if k != "chrome_endpoint"}
         args: dict = {**config.get("args", {}), **cli_params}
 
-        cmd = ["opencli", site, command]
-        for key, value in args.items():
-            cmd.extend([f"--{key}", str(value)])
-        cmd.extend(["-f", output_format])
-
         env = os.environ.copy()
 
         from backend.browser_pool import get_pool
-        async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:
-            env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
-            logger.info("opencli exec | cmd=%s cdp=%s", " ".join(cmd), cdp_endpoint)
+        pool = get_pool()
+
+        async with pool.acquire(endpoint=chrome_endpoint) as cdp_endpoint:
+            mode = pool.get_mode(cdp_endpoint)
+            opencli_bin = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
+
+            cmd = [opencli_bin, site, command]
+            for key, value in args.items():
+                cmd.extend([f"--{key}", str(value)])
+            cmd.extend(["-f", output_format])
+
+            if mode == "bridge":
+                daemon_host = urlparse(cdp_endpoint).hostname or "chrome-1"
+                env.pop("OPENCLI_CDP_ENDPOINT", None)
+                env["OPENCLI_DAEMON_HOST"] = daemon_host
+                env["OPENCLI_DAEMON_PORT"] = str(_DAEMON_PORT)
+                logger.info("opencli bridge | cmd=%s daemon=%s:%s", " ".join(cmd), daemon_host, _DAEMON_PORT)
+            else:
+                env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
+                logger.info("opencli cdp | cmd=%s cdp=%s", " ".join(cmd), cdp_endpoint)
+
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env=env,
-                )
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+                returncode, stdout_text, stderr_text = await _run_opencli(cmd, env)
             except asyncio.TimeoutError:
                 logger.error("opencli timeout | cmd=%s", " ".join(cmd))
-                return ChannelResult.fail("opencli command timed out after 60s")
+                return ChannelResult.fail("opencli command timed out after 120s")
             except FileNotFoundError:
-                logger.error("opencli not found in PATH")
-                return ChannelResult.fail("opencli binary not found in PATH")
+                logger.error("opencli binary not found: %s", opencli_bin)
+                return ChannelResult.fail(f"opencli binary not found: {opencli_bin}")
             except Exception as exc:
                 logger.exception("opencli subprocess error | %s", exc)
                 return ChannelResult.fail(f"Failed to run opencli: {exc}")
 
-            stderr_text = stderr.decode().strip()
             if stderr_text:
                 logger.warning("opencli stderr | %s", stderr_text[:500])
 
-            if proc.returncode != 0:
-                logger.error("opencli exit=%d | stderr=%s", proc.returncode, stderr_text[:500])
-                return ChannelResult.fail(
-                    f"opencli exited with code {proc.returncode}: {stderr_text}"
-                )
+            if returncode != 0:
+                logger.error("opencli exit=%d | stderr=%s", returncode, stderr_text[:500])
+                return ChannelResult.fail(f"opencli exited with code {returncode}: {stderr_text}")
 
-            raw = stdout.decode()
+            raw = stdout_text
             logger.debug("opencli stdout | %d chars | preview=%s", len(raw), raw[:200])
 
         parser = _PARSERS.get(output_format, _PARSERS["json"])
@@ -150,11 +175,9 @@ class OpenCLIChannel(AbstractChannel):
         except Exception as exc:
             logger.error("opencli parse error | format=%s error=%s output_preview=%s",
                          output_format, exc, raw[:300])
-            return ChannelResult.fail(
-                f"Failed to parse opencli {output_format} output: {exc}"
-            )
+            return ChannelResult.fail(f"Failed to parse opencli {output_format} output: {exc}")
 
-        logger.info("opencli done | site=%s cmd=%s items=%d", site, command, len(items))
+        logger.info("opencli done | site=%s cmd=%s mode=%s items=%d", site, command, mode, len(items))
         return ChannelResult.ok(items, site=site, command=command)
 
     async def validate_config(self, config: dict[str, Any]) -> list[str]:
@@ -166,4 +189,4 @@ class OpenCLIChannel(AbstractChannel):
         return errors
 
     async def health_check(self) -> bool:
-        return shutil.which("opencli") is not None
+        return os.path.isfile(_BRIDGE_BIN) or os.path.isfile(_CDP_BIN)
