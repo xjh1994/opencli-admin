@@ -270,9 +270,8 @@ function TriggerModal({
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
                         className="ml-auto text-xs text-blue-500 hover:underline font-mono"
-                        title={novncUrl}
                       >
-                        :{ep.novnc_port} ↗
+                        {window.location.hostname}:{ep.novnc_port} ↗
                       </a>
                     </label>
                   )
