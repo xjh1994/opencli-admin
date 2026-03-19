@@ -2,6 +2,10 @@
 /**
  * Post-install patch for @jackwener/opencli (CommonJS, works on Node 18+).
  *
+ * Usage:
+ *   node patch-opencli.js               # patch the default global install
+ *   node patch-opencli.js /opt/my-dir   # patch a specific npm prefix dir
+ *
  * Adds two env-var hooks that the published package lacks:
  *
  *   OPENCLI_DAEMON_LISTEN  (daemon.js)
@@ -18,7 +22,16 @@
 const fs = require('fs');
 const path = require('path');
 
-function resolvePackageDir() {
+function resolvePackageDir(prefixDir) {
+  if (prefixDir) {
+    // Explicit prefix supplied (e.g. /opt/opencli-bridge)
+    const candidate = path.join(prefixDir, 'lib', 'node_modules', '@jackwener', 'opencli');
+    if (fs.existsSync(candidate)) return candidate;
+    // Some npm versions omit the 'lib/' level
+    const candidate2 = path.join(prefixDir, 'node_modules', '@jackwener', 'opencli');
+    if (fs.existsSync(candidate2)) return candidate2;
+    throw new Error('Could not find @jackwener/opencli under prefix: ' + prefixDir);
+  }
   try {
     return path.dirname(require.resolve('@jackwener/opencli/package.json'));
   } catch (_) {
@@ -44,7 +57,8 @@ function patch(filePath, search, replace, label) {
   console.log('  [ok]   ' + label);
 }
 
-const pkgDir = resolvePackageDir();
+const prefixDir = process.argv[2] || null;
+const pkgDir = resolvePackageDir(prefixDir);
 console.log('Patching opencli at ' + pkgDir + ' ...');
 
 // ── 1. daemon.js: honour OPENCLI_DAEMON_LISTEN ───────────────────────────────

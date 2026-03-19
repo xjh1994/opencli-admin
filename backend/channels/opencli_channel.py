@@ -6,7 +6,6 @@ import io
 import json
 import logging
 import os
-import shutil
 from typing import Any
 
 import yaml
@@ -104,7 +103,11 @@ class OpenCLIChannel(AbstractChannel):
         cli_params = {k: v for k, v in parameters.items() if k != "chrome_endpoint"}
         args: dict = {**config.get("args", {}), **cli_params}
 
-        cmd = ["opencli", site, command]
+        if bridge_mode:
+            _opencli_bin = "/opt/opencli-bridge/bin/opencli"
+        else:
+            _opencli_bin = "/opt/opencli-cdp/bin/opencli"
+        cmd = [_opencli_bin, site, command]
         for key, value in args.items():
             cmd.extend([f"--{key}", str(value)])
         cmd.extend(["-f", output_format])
@@ -165,10 +168,10 @@ class OpenCLIChannel(AbstractChannel):
                         stderr=asyncio.subprocess.PIPE,
                         env=env,
                     )
-                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
                 except asyncio.TimeoutError:
                     logger.error("opencli timeout | cmd=%s", " ".join(cmd))
-                    return ChannelResult.fail("opencli command timed out after 60s")
+                    return ChannelResult.fail("opencli command timed out after 120s")
                 except FileNotFoundError:
                     logger.error("opencli not found in PATH")
                     return ChannelResult.fail("opencli binary not found in PATH")
@@ -211,4 +214,8 @@ class OpenCLIChannel(AbstractChannel):
         return errors
 
     async def health_check(self) -> bool:
-        return shutil.which("opencli") is not None
+        import os
+        return (
+            os.path.isfile("/opt/opencli-bridge/bin/opencli")
+            or os.path.isfile("/opt/opencli-cdp/bin/opencli")
+        )
