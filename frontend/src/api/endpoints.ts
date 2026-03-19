@@ -2,6 +2,7 @@ import { apiClient } from './client'
 import type {
   AIAgent,
   ApiResponse,
+  ModelProvider,
   BrowserBinding,
   ChromeEndpoint,
   CollectedRecord,
@@ -122,6 +123,19 @@ export const listNotificationLogs = (params?: { rule_id?: string }) =>
   apiClient
     .get<ApiResponse<NotificationLog[]>>('/notifications/logs', { params })
     .then((r) => r.data)
+
+// ── Model Providers ────────────────────────────────────────────────────────────
+export const listProviders = () =>
+  apiClient.get<ApiResponse<ModelProvider[]>>('/providers').then((r) => r.data)
+
+export const createProvider = (data: Partial<ModelProvider>) =>
+  apiClient.post<ApiResponse<ModelProvider>>('/providers', data).then((r) => r.data.data)
+
+export const updateProvider = (id: string, data: Partial<ModelProvider>) =>
+  apiClient.patch<ApiResponse<ModelProvider>>(`/providers/${id}`, data).then((r) => r.data.data)
+
+export const deleteProvider = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/providers/${id}`).then((r) => r.data)
 
 // ── Agents ─────────────────────────────────────────────────────────────────────
 export const listAgents = (params?: { enabled?: boolean }) =>

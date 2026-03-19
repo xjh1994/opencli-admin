@@ -14,6 +14,7 @@ class AIAgentCreate(BaseModel):
     prompt_template: str = ""
     processor_config: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+    provider_id: Optional[str] = None
 
 
 class AIAgentUpdate(BaseModel):
@@ -24,6 +25,7 @@ class AIAgentUpdate(BaseModel):
     prompt_template: Optional[str] = None
     processor_config: Optional[dict[str, Any]] = None
     enabled: Optional[bool] = None
+    provider_id: Optional[str] = None
 
 
 class AIAgentRead(UTCModel):
@@ -35,6 +37,7 @@ class AIAgentRead(UTCModel):
     prompt_template: str
     processor_config: dict[str, Any]
     enabled: bool
+    provider_id: Optional[str]
     created_at: datetime
     updated_at: datetime
 

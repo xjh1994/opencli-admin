@@ -8,6 +8,7 @@ import SchedulesPage from './pages/SchedulesPage'
 import NotificationsPage from './pages/NotificationsPage'
 import WorkersPage from './pages/WorkersPage'
 import AgentsPage from './pages/AgentsPage'
+import ProvidersPage from './pages/ProvidersPage'
 import BrowsersPage from './pages/BrowsersPage'
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="workers" element={<WorkersPage />} />
           <Route path="agents" element={<AgentsPage />} />
+          <Route path="providers" element={<ProvidersPage />} />
           <Route path="browsers" element={<BrowsersPage />} />
         </Route>
       </Routes>

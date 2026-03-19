@@ -1,3 +1,16 @@
+export interface ModelProvider {
+  id: string
+  name: string
+  provider_type: 'claude' | 'openai' | 'local'
+  base_url?: string
+  api_key?: string
+  default_model?: string
+  notes?: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface AIAgent {
   id: string
   name: string
@@ -7,6 +20,7 @@ export interface AIAgent {
   prompt_template: string
   processor_config: Record<string, unknown>
   enabled: boolean
+  provider_id?: string
   created_at: string
   updated_at: string
 }

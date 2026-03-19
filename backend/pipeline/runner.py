@@ -74,13 +74,24 @@ async def run_collection_pipeline(
         agent_config = None
         if agent_id:
             from backend.models.agent import AIAgent
+            from backend.models.provider import ModelProvider
             agent = await session.get(AIAgent, agent_id)
             if agent and agent.enabled:
+                # Start with provider credentials (if linked), then overlay agent's own config
+                provider_config: dict = {}
+                if agent.provider_id:
+                    provider = await session.get(ModelProvider, agent.provider_id)
+                    if provider and provider.enabled:
+                        if provider.api_key:
+                            provider_config["api_key"] = provider.api_key
+                        if provider.base_url:
+                            provider_config["base_url"] = provider.base_url
                 agent_config = {
                     "processor_type": agent.processor_type,
                     "model": agent.model,
                     "prompt_template": agent.prompt_template,
-                    **agent.processor_config,
+                    **provider_config,
+                    **agent.processor_config,  # agent-level overrides provider
                 }
         # Detach source from session so it can be used after session closes
         session.expunge(source)
