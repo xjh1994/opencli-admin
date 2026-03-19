@@ -77,6 +77,15 @@ export const listRecords = (params?: {
 export const getRecord = (id: string) =>
   apiClient.get<ApiResponse<CollectedRecord>>(`/records/${id}`).then((r) => r.data.data)
 
+export const deleteRecord = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/records/${id}`).then((r) => r.data)
+
+export const batchDeleteRecords = (ids: string[]) =>
+  apiClient.post<ApiResponse<{ deleted: number }>>('/records/batch-delete', { ids }).then((r) => r.data)
+
+export const clearAllRecords = (source_id?: string) =>
+  apiClient.delete<ApiResponse<{ deleted: number }>>('/records', { params: source_id ? { source_id } : {} }).then((r) => r.data)
+
 // ── Schedules ──────────────────────────────────────────────────────────────────
 export const listSchedules = (params?: { source_id?: string; enabled?: boolean }) =>
   apiClient.get<ApiResponse<CronSchedule[]>>('/schedules', { params }).then((r) => r.data)

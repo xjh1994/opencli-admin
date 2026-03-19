@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.record import CollectedRecord
@@ -43,3 +43,26 @@ async def get_record(
         select(CollectedRecord).where(CollectedRecord.id == record_id)
     )
     return result.scalar_one_or_none()
+
+
+async def delete_records(
+    session: AsyncSession,
+    record_ids: list[str],
+) -> int:
+    """Delete records by IDs. Returns deleted count."""
+    result = await session.execute(
+        delete(CollectedRecord).where(CollectedRecord.id.in_(record_ids))
+    )
+    return result.rowcount
+
+
+async def delete_all_records(
+    session: AsyncSession,
+    source_id: Optional[str] = None,
+) -> int:
+    """Delete all records, optionally filtered by source. Returns deleted count."""
+    stmt = delete(CollectedRecord)
+    if source_id:
+        stmt = stmt.where(CollectedRecord.source_id == source_id)
+    result = await session.execute(stmt)
+    return result.rowcount
