@@ -194,11 +194,17 @@ const en: Translations = {
   },
   browsers: {
     title: 'Browser Management',
-    description: 'Assign dedicated Chrome instances to sites for isolated sessions',
+    description: 'Manage Chrome instances and bind sites for isolated login sessions',
+    addInstance: 'Add instance',
+    adding: 'Starting…',
+    removeInstance: 'Remove instance',
+    restartApi: 'Restart API',
+    restarting: 'Restarting, please wait…',
     addSite: 'Add site',
     searchSite: 'Search site…',
     noAvailable: 'No available sites',
     noBindings: 'No sites bound',
+    noInstances: 'No running Chrome instances detected',
     orphaned: 'Orphaned bindings (instance no longer exists)',
   },
   channelConfig: {

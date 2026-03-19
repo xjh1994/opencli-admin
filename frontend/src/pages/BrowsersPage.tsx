@@ -1,13 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { getChromePool, listBrowserBindings, createBrowserBinding, deleteBrowserBinding } from '../api/endpoints'
+import {
+  getChromePool,
+  listBrowserBindings,
+  createBrowserBinding,
+  deleteBrowserBinding,
+  addChromeInstance,
+  removeChromeInstance,
+  restartApi,
+} from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
 import PageHeader from '../components/PageHeader'
 import { SITE_LABELS } from '../components/ChannelConfigForm'
-import { Plus, X, ExternalLink } from 'lucide-react'
+import { Plus, X, ExternalLink, RefreshCw, Trash2 } from 'lucide-react'
 import type { BrowserBinding } from '../api/types'
 
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
@@ -25,6 +33,17 @@ function instanceLabel(cdpUrl: string): string {
   return cdpUrl.replace('http://', '').replace(':19222', '')
 }
 
+function instanceIndex(cdpUrl: string): number | null {
+  try {
+    const hostname = new URL(cdpUrl).hostname
+    const m = hostname.match(/^chrome(?:-(\d+))?$/)
+    if (!m) return null
+    return m[1] ? parseInt(m[1], 10) : null  // null = instance 1 (compose-managed)
+  } catch {
+    return null
+  }
+}
+
 // ── Site dropdown ─────────────────────────────────────────────────────────────
 
 interface SiteDropdownProps {
@@ -39,7 +58,6 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
@@ -52,17 +70,11 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const available = Object.entries(SITE_LABELS)
-    .filter(([key]) => !boundSites.has(key))
-    .filter(([key, label]) =>
-      !query || key.includes(query.toLowerCase()) || label.includes(query)
-    )
-
-  const handleSelect = (site: string) => {
-    onSelect(site)
-    setOpen(false)
-    setQuery('')
-  }
+  const available = Object.entries(SITE_LABELS).filter(
+    ([key, label]) =>
+      !boundSites.has(key) &&
+      (!query || key.includes(query.toLowerCase()) || label.includes(query))
+  )
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -92,7 +104,7 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
             ) : available.map(([key, label]) => (
               <li key={key}>
                 <button
-                  onClick={() => handleSelect(key)}
+                  onClick={() => { onSelect(key); setOpen(false); setQuery('') }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between"
                 >
                   <span className="font-medium dark:text-white">{label}</span>
@@ -117,16 +129,23 @@ interface InstanceCardProps {
   boundSites: Set<string>
   onBind: (site: string) => void
   onUnbind: (id: string) => void
-  isPending: boolean
+  onRemove?: () => void
+  isBindPending: boolean
+  isRemovePending: boolean
 }
 
-function InstanceCard({ url, available, novncPort, bindings, boundSites, onBind, onUnbind, isPending }: InstanceCardProps) {
+function InstanceCard({
+  url, available, novncPort, bindings, boundSites,
+  onBind, onUnbind, onRemove, isBindPending, isRemovePending,
+}: InstanceCardProps) {
+  const { t } = useTranslation()
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
+  const idx = instanceIndex(url)
+  const canRemove = idx !== null && onRemove  // instance 1 is compose-managed
 
   return (
     <Card>
-      {/* Header */}
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
         <span className={`w-2 h-2 rounded-full shrink-0 ${available ? 'bg-green-500' : 'bg-red-400'}`} />
         <span className="font-semibold text-sm dark:text-white">{label}</span>
@@ -134,14 +153,23 @@ function InstanceCard({ url, available, novncPort, bindings, boundSites, onBind,
           href={novncUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono shrink-0"
+          className="flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono"
         >
-          {window.location.hostname}:{novncPort}
+          :{novncPort}
           <ExternalLink size={11} />
         </a>
+        {canRemove && (
+          <button
+            onClick={onRemove}
+            disabled={isRemovePending}
+            title={t('browsers.removeInstance')}
+            className="ml-auto text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
 
-      {/* Bound sites as tags */}
       <div className="flex flex-wrap gap-2 min-h-[2rem]">
         {bindings.map((b) => (
           <span
@@ -149,20 +177,12 @@ function InstanceCard({ url, available, novncPort, bindings, boundSites, onBind,
             className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700"
           >
             {SITE_LABELS[b.site] ?? b.site}
-            <button
-              onClick={() => onUnbind(b.id)}
-              className="hover:text-red-500 transition-colors ml-0.5"
-            >
+            <button onClick={() => onUnbind(b.id)} className="hover:text-red-500 transition-colors ml-0.5">
               <X size={10} />
             </button>
           </span>
         ))}
-
-        <SiteDropdown
-          boundSites={boundSites}
-          onSelect={onBind}
-          isPending={isPending}
-        />
+        <SiteDropdown boundSites={boundSites} onSelect={onBind} isPending={isBindPending} />
       </div>
     </Card>
   )
@@ -173,6 +193,12 @@ function InstanceCard({ url, available, novncPort, bindings, boundSites, onBind,
 export default function BrowsersPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [restartMsg, setRestartMsg] = useState<string | null>(null)
+
+  const invalidatePool = () => {
+    queryClient.invalidateQueries({ queryKey: ['chrome-pool'] })
+    queryClient.invalidateQueries({ queryKey: ['browser-bindings'] })
+  }
 
   const { data: poolData, isLoading: poolLoading, error: poolError, refetch } = useQuery({
     queryKey: ['chrome-pool'],
@@ -185,10 +211,39 @@ export default function BrowsersPage() {
     queryFn: listBrowserBindings,
   })
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] })
+  const addMutation = useMutation({
+    mutationFn: createBrowserBinding,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }),
+  })
 
-  const addMutation = useMutation({ mutationFn: createBrowserBinding, onSuccess: invalidate })
-  const deleteMutation = useMutation({ mutationFn: deleteBrowserBinding, onSuccess: invalidate })
+  const deleteMutation = useMutation({
+    mutationFn: deleteBrowserBinding,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }),
+  })
+
+  const addInstanceMutation = useMutation({
+    mutationFn: addChromeInstance,
+    onSuccess: () => { invalidatePool(); setTimeout(() => invalidatePool(), 3000) },
+  })
+
+  const removeInstanceMutation = useMutation({
+    mutationFn: removeChromeInstance,
+    onSuccess: invalidatePool,
+  })
+
+  const restartMutation = useMutation({
+    mutationFn: restartApi,
+    onSuccess: () => {
+      setRestartMsg(t('browsers.restarting'))
+      // Poll until API is back
+      const poll = setInterval(() => {
+        fetch('/api/v1/health').then((r) => {
+          if (r.ok) { clearInterval(poll); setRestartMsg(null); invalidatePool() }
+        }).catch(() => {})
+      }, 2000)
+      setTimeout(() => { clearInterval(poll); setRestartMsg(null) }, 30_000)
+    },
+  })
 
   if (poolLoading || bindingsLoading) return <PageLoader />
   if (poolError) return <ErrorAlert error={poolError as Error} onRetry={refetch} />
@@ -210,9 +265,38 @@ export default function BrowsersPage() {
     <div>
       <PageHeader title={t('browsers.title')} description={t('browsers.description')} />
 
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 mb-5">
+        <button
+          onClick={() => addInstanceMutation.mutate()}
+          disabled={addInstanceMutation.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          <Plus size={15} />
+          {addInstanceMutation.isPending ? t('browsers.adding') : t('browsers.addInstance')}
+        </button>
+
+        <button
+          onClick={() => restartMutation.mutate()}
+          disabled={restartMutation.isPending || !!restartMsg}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+        >
+          <RefreshCw size={15} className={restartMsg ? 'animate-spin' : ''} />
+          {restartMsg ?? t('browsers.restartApi')}
+        </button>
+
+        {addInstanceMutation.isError && (
+          <span className="text-xs text-red-500">
+            {(addInstanceMutation.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('common.error')}
+          </span>
+        )}
+      </div>
+
+      {/* Instance cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {endpoints.map((ep) => {
           const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
+          const idx = instanceIndex(ep.url)
           return (
             <InstanceCard
               key={ep.url}
@@ -223,12 +307,21 @@ export default function BrowsersPage() {
               boundSites={boundSites}
               onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
               onUnbind={(id) => deleteMutation.mutate(id)}
-              isPending={addMutation.isPending}
+              onRemove={idx !== null ? () => removeInstanceMutation.mutate(idx) : undefined}
+              isBindPending={addMutation.isPending}
+              isRemovePending={removeInstanceMutation.isPending}
             />
           )
         })}
+
+        {endpoints.length === 0 && (
+          <div className="col-span-full text-center py-12 text-gray-400 text-sm">
+            {t('browsers.noInstances')}
+          </div>
+        )}
       </div>
 
+      {/* Orphaned bindings */}
       {orphaned.length > 0 && (
         <div className="mt-6">
           <p className="text-xs font-medium text-gray-400 mb-2">{t('browsers.orphaned')}</p>

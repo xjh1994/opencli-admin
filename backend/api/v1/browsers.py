@@ -1,3 +1,9 @@
+import asyncio
+import logging
+import os
+import re
+import socket
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,7 +13,9 @@ from backend.schemas.common import ApiResponse
 from backend.services import browser_service
 
 router = APIRouter(prefix="/browsers", tags=["browsers"])
+logger = logging.getLogger(__name__)
 
+# ── Bindings ──────────────────────────────────────────────────────────────────
 
 @router.get("/bindings", response_model=ApiResponse[list[BrowserBindingRead]])
 async def list_bindings(db: AsyncSession = Depends(get_db)) -> ApiResponse:
@@ -38,3 +46,146 @@ async def delete_binding(
         raise HTTPException(status_code=404, detail="Binding not found")
     await db.commit()
     return ApiResponse.ok(None)
+
+
+# ── Chrome pool management ────────────────────────────────────────────────────
+
+def _docker_client():
+    try:
+        import docker  # type: ignore[import]
+        return docker.from_env()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Docker socket not available: {exc}")
+
+
+def _project_name() -> str:
+    return os.environ.get("COMPOSE_PROJECT_NAME", "opencli-admin")
+
+
+def _update_env_file(key: str, value: str, path: str = "/app/.env") -> None:
+    """Update or append KEY=value in the .env file."""
+    try:
+        with open(path) as f:
+            content = f.read()
+    except FileNotFoundError:
+        content = ""
+    new_line = f"{key}={value}"
+    pattern = rf"^{re.escape(key)}=.*$"
+    if re.search(pattern, content, re.MULTILINE):
+        content = re.sub(pattern, new_line, content, flags=re.MULTILINE)
+    else:
+        content = content.rstrip("\n") + f"\n{new_line}\n"
+    with open(path, "w") as f:
+        f.write(content)
+
+
+@router.post("/chrome-instances", response_model=ApiResponse[dict])
+async def add_chrome_instance() -> ApiResponse:
+    """Start a new Chrome instance (chrome-N) and hot-add it to the pool."""
+    from backend.browser_pool import get_pool, LocalBrowserPool
+
+    pool = get_pool()
+    current = pool.endpoints  # e.g. ['http://chrome:19222', 'http://chrome-2:19222']
+    N = len(current) + 1
+
+    project = _project_name()
+    name = f"chrome-{N}"
+    novnc_base = int(os.environ.get("NOVNC_BASE_PORT", 3010))
+    novnc_port = novnc_base + N - 1
+    volume = f"{project}_chrome_profile_{N}"
+    network = f"{project}_default"
+    image = f"{project}-chrome"
+    new_endpoint = f"http://{name}:19222"
+
+    client = _docker_client()
+
+    try:
+        # Container already exists — just start it
+        existing = client.containers.get(name)
+        if existing.status != "running":
+            existing.start()
+            logger.info("chrome-pool: restarted existing container %s", name)
+        else:
+            logger.info("chrome-pool: %s already running", name)
+    except Exception:
+        # Container doesn't exist — create it
+        try:
+            client.containers.run(
+                image,
+                detach=True,
+                name=name,
+                network=network,
+                labels={"chrome.pool.extra": "true", "chrome.pool.index": str(N)},
+                ports={"6080/tcp": novnc_port},
+                volumes={volume: {"bind": "/home/chrome/.config/chromium", "mode": "rw"}},
+                restart_policy={"Name": "unless-stopped"},
+            )
+            logger.info("chrome-pool: started new container %s on noVNC :%d", name, novnc_port)
+        except Exception as exc:
+            logger.exception("chrome-pool: failed to start %s", name)
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    # Hot-add to in-memory pool
+    if isinstance(pool, LocalBrowserPool) and new_endpoint not in pool.endpoints:
+        pool.add_endpoint(new_endpoint)
+
+    # Persist to .env so the pool survives API restarts
+    all_endpoints = ",".join(pool.endpoints)
+    try:
+        _update_env_file("CHROME_POOL_ENDPOINTS", all_endpoints)
+    except Exception as exc:
+        logger.warning("chrome-pool: could not update .env: %s", exc)
+
+    return ApiResponse.ok({
+        "endpoint": new_endpoint,
+        "novnc_port": novnc_port,
+        "total": len(pool.endpoints),
+    })
+
+
+@router.delete("/chrome-instances/{n}", response_model=ApiResponse[dict])
+async def remove_chrome_instance(n: int) -> ApiResponse:
+    """Stop and remove chrome-N (N >= 2). Instance 1 is managed by docker-compose."""
+    if n < 2:
+        raise HTTPException(status_code=400, detail="Instance 1 is managed by docker-compose")
+
+    from backend.browser_pool import get_pool, LocalBrowserPool
+
+    pool = get_pool()
+    name = f"chrome-{n}"
+    endpoint = f"http://{name}:19222"
+
+    client = _docker_client()
+    try:
+        container = client.containers.get(name)
+        container.remove(force=True)
+        logger.info("chrome-pool: removed container %s", name)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=f"Container {name} not found: {exc}")
+
+    if isinstance(pool, LocalBrowserPool):
+        pool.remove_endpoint(endpoint)
+
+    all_endpoints = ",".join(ep for ep in pool.endpoints if ep != endpoint)
+    try:
+        _update_env_file("CHROME_POOL_ENDPOINTS", all_endpoints)
+    except Exception as exc:
+        logger.warning("chrome-pool: could not update .env: %s", exc)
+
+    return ApiResponse.ok({"removed": name, "total": len(pool.endpoints)})
+
+
+@router.post("/restart-api", response_model=ApiResponse[dict])
+async def restart_api() -> ApiResponse:
+    """Restart the API container (e.g. after manually editing .env)."""
+    container_id = socket.gethostname()
+    client = _docker_client()
+    try:
+        container = client.containers.get(container_id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Could not find own container: {exc}")
+
+    logger.info("API restart requested — restarting container %s in 1s", container_id)
+    # Delay restart so the HTTP response can be sent first
+    asyncio.get_event_loop().call_later(1.0, container.restart)
+    return ApiResponse.ok({"restarting": True, "container": container_id})

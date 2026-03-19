@@ -110,6 +110,24 @@ class LocalBrowserPool:
         q = self._slots.get(endpoint)
         return q is not None and not q.empty()
 
+    def add_endpoint(self, endpoint: str) -> None:
+        """Hot-add a new Chrome instance to the pool without restarting."""
+        if endpoint in self._slots:
+            return
+        q: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
+        q.put_nowait(endpoint)
+        self._slots[endpoint] = q
+        self._total += 1
+        logger.info("BrowserPool: added endpoint %s (total: %d)", endpoint, self._total)
+
+    def remove_endpoint(self, endpoint: str) -> None:
+        """Remove a Chrome instance from the pool (best-effort; waits for slot to be free)."""
+        if endpoint not in self._slots:
+            return
+        self._slots.pop(endpoint)
+        self._total -= 1
+        logger.info("BrowserPool: removed endpoint %s (total: %d)", endpoint, self._total)
+
 
 class RedisBrowserPool:
     """Distributed pool backed by Redis lists (BLPOP/RPUSH).

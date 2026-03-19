@@ -48,6 +48,9 @@ services:
   # ── Backend API ───────────────────────────────────────────────────────────
   api:
     <<: *backend-common
+    # Run as root so the API can manage Docker containers (chrome pool) via
+    # the mounted socket. Acceptable for a self-hosted admin panel.
+    user: root
     environment:
       DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////data/opencli_admin.db}
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -61,6 +64,15 @@ services:
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
       # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
       CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
+      # Passed to the chrome pool manager so it can name containers/networks correctly
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-opencli-admin}
+    volumes:
+      - db_data:/data
+      - ./backend:/app/backend
+      # Docker socket: lets the API start/stop Chrome pool containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # .env mount: lets the API persist CHROME_POOL_ENDPOINTS after pool changes
+      - ./.env:/app/.env:rw
     ports:
       - "${API_PORT:-8031}:8000"
     healthcheck:

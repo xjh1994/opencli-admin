@@ -146,6 +146,15 @@ export const createBrowserBinding = (data: { browser_endpoint: string; site: str
 export const deleteBrowserBinding = (id: string) =>
   apiClient.delete<ApiResponse<null>>(`/browsers/bindings/${id}`).then((r) => r.data)
 
+export const addChromeInstance = () =>
+  apiClient.post<ApiResponse<{ endpoint: string; novnc_port: number; total: number }>>('/browsers/chrome-instances').then((r) => r.data.data)
+
+export const removeChromeInstance = (n: number) =>
+  apiClient.delete<ApiResponse<{ removed: string; total: number }>>(`/browsers/chrome-instances/${n}`).then((r) => r.data)
+
+export const restartApi = () =>
+  apiClient.post<ApiResponse<{ restarting: boolean }>>('/browsers/restart-api').then((r) => r.data)
+
 // ── System ─────────────────────────────────────────────────────────────────────
 export const getHealth = () =>
   apiClient.get<{ status: string; version: string; task_executor: string }>('/health').then((r) => r.data)

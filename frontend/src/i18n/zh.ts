@@ -192,11 +192,17 @@ const zh = {
   },
   browsers: {
     title: '浏览器管理',
-    description: '为各站点指定专用 Chrome 实例，实现登录态隔离与稳定采集',
+    description: '管理 Chrome 实例、为各站点指定专用实例，实现登录态隔离与稳定采集',
+    addInstance: '新增实例',
+    adding: '启动中…',
+    removeInstance: '移除实例',
+    restartApi: '重启 API',
+    restarting: '重启中，请稍候…',
     addSite: '添加站点',
     searchSite: '搜索站点…',
     noAvailable: '暂无可用站点',
     noBindings: '暂无绑定站点',
+    noInstances: '未检测到运行中的 Chrome 实例',
     orphaned: '孤立绑定（实例已不存在）',
   },
   channelConfig: {
