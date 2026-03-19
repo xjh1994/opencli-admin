@@ -49,10 +49,20 @@ function instanceIndex(cdpUrl: string): number | null {
 interface StatusBadgeProps {
   containerStatus?: string
   available: boolean
+  isStarting?: boolean
 }
 
-function StatusBadge({ containerStatus, available }: StatusBadgeProps) {
+function StatusBadge({ containerStatus, available, isStarting }: StatusBadgeProps) {
   const { t } = useTranslation()
+
+  if (isStarting) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs">
+        <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse shrink-0" />
+        <span className="text-orange-600 dark:text-orange-400">{t('browsers.statusStarting')}</span>
+      </span>
+    )
+  }
 
   if (containerStatus === 'running') {
     if (available) {
@@ -102,7 +112,7 @@ function StatusBadge({ containerStatus, available }: StatusBadgeProps) {
 
 interface AddInstanceModalProps {
   currentCount: number
-  onConfirm: (count: number) => void
+  onConfirm: (count: number, withRestart: boolean) => void
   onClose: () => void
   isPending: boolean
 }
@@ -113,7 +123,7 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
 
   const preview = Array.from({ length: count }, (_, i) => {
     const N = currentCount + 1 + i
-    return N === 1 ? 'chrome' : `chrome-${N}`
+    return `chrome-${N}`
   })
 
   return (
@@ -158,21 +168,28 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2 justify-end">
+        {/* Actions — two confirm buttons */}
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => onConfirm(count, true)}
+            disabled={isPending}
+            className="w-full px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
+          >
+            {isPending ? t('browsers.adding') : t('browsers.createAndRestart')}
+          </button>
+          <button
+            onClick={() => onConfirm(count, false)}
+            disabled={isPending}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            {t('browsers.createLaterRestart')}
+          </button>
           <button
             onClick={onClose}
             disabled={isPending}
-            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+            className="w-full px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
           >
             {t('common.cancel')}
-          </button>
-          <button
-            onClick={() => onConfirm(count)}
-            disabled={isPending}
-            className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isPending ? t('browsers.adding') : t('common.create')}
           </button>
         </div>
       </div>
@@ -261,6 +278,7 @@ interface InstanceCardProps {
   url: string
   available: boolean
   containerStatus?: string
+  isStarting?: boolean
   novncPort: number
   bindings: BrowserBinding[]
   boundSites: Set<string>
@@ -272,7 +290,7 @@ interface InstanceCardProps {
 }
 
 function InstanceCard({
-  url, available, containerStatus, novncPort, bindings, boundSites,
+  url, available, containerStatus, isStarting, novncPort, bindings, boundSites,
   onBind, onUnbind, onRemove, isBindPending, isRemovePending,
 }: InstanceCardProps) {
   const { t } = useTranslation()
@@ -284,7 +302,7 @@ function InstanceCard({
   return (
     <Card>
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
-        <StatusBadge containerStatus={containerStatus} available={available} />
+        <StatusBadge containerStatus={containerStatus} available={available} isStarting={isStarting} />
         <span className="font-semibold text-sm dark:text-white">{label}</span>
         <a
           href={novncUrl}
@@ -332,6 +350,7 @@ export default function BrowsersPage() {
   const queryClient = useQueryClient()
   const [restartMsg, setRestartMsg] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [startingEndpoints, setStartingEndpoints] = useState<Set<string>>(new Set())
 
   const invalidatePool = () => {
     queryClient.invalidateQueries({ queryKey: ['chrome-pool'] })
@@ -360,11 +379,25 @@ export default function BrowsersPage() {
   })
 
   const addInstanceMutation = useMutation({
-    mutationFn: (count: number) => addChromeInstance(count),
-    onSuccess: () => {
+    mutationFn: ({ count }: { count: number; withRestart: boolean }) => addChromeInstance(count),
+    onSuccess: (result, { withRestart }) => {
       setShowAddModal(false)
       invalidatePool()
-      setTimeout(() => invalidatePool(), 5000)
+      if (withRestart) {
+        restartMutation.mutate()
+      } else {
+        const newUrls = new Set(result.created.map((c) => c.endpoint))
+        setStartingEndpoints((prev) => new Set([...prev, ...newUrls]))
+        // After 30s clear the "启动中" hint and refresh
+        setTimeout(() => {
+          setStartingEndpoints((prev) => {
+            const next = new Set(prev)
+            newUrls.forEach((url) => next.delete(url))
+            return next
+          })
+          invalidatePool()
+        }, 30_000)
+      }
     },
   })
 
@@ -443,6 +476,7 @@ export default function BrowsersPage() {
               url={ep.url}
               available={ep.available}
               containerStatus={ep.container_status}
+              isStarting={startingEndpoints.has(ep.url)}
               novncPort={novncPort}
               bindings={bindingsByEndpoint[ep.url] ?? []}
               boundSites={boundSites}
@@ -486,7 +520,7 @@ export default function BrowsersPage() {
       {showAddModal && (
         <AddInstanceModal
           currentCount={endpoints.length}
-          onConfirm={(count) => addInstanceMutation.mutate(count)}
+          onConfirm={(count, withRestart) => addInstanceMutation.mutate({ count, withRestart })}
           onClose={() => { if (!addInstanceMutation.isPending) setShowAddModal(false) }}
           isPending={addInstanceMutation.isPending}
         />
