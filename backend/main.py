@@ -33,6 +33,24 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _read_chrome_endpoints() -> list[str]:
+    """Read CHROME_POOL_ENDPOINTS from the .env file directly.
+
+    `docker restart` reuses the env vars baked in at container creation time,
+    so the env var value is stale after the chrome-pool API updates .env.
+    Reading the file directly always gets the current value.
+    """
+    try:
+        from dotenv import dotenv_values
+        env = dotenv_values("/app/.env")
+        raw = env.get("CHROME_POOL_ENDPOINTS", "").strip()
+        if raw:
+            return [ep.strip() for ep in raw.split(",") if ep.strip()]
+    except Exception:
+        pass
+    return []
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_migrations()
@@ -40,10 +58,15 @@ async def lifespan(app: FastAPI):
     # and uvicorn's dictConfig disables pre-existing loggers
     _configure_logging()
 
-    # Initialise Chrome browser pool
+    # Initialise Chrome browser pool.
+    # Read CHROME_POOL_ENDPOINTS directly from the .env file so that updates
+    # written by the chrome-pool API survive a plain `docker restart` — docker
+    # restart reuses the env vars injected at container creation time, so the
+    # pydantic-settings value (which comes from those env vars) would be stale.
     from backend import browser_pool
+    endpoints = _read_chrome_endpoints() or settings.cdp_endpoints
     browser_pool.init_pool(
-        endpoints=settings.cdp_endpoints,
+        endpoints=endpoints,
         use_redis=settings.task_executor == "celery",
         redis_url=settings.redis_url,
     )
