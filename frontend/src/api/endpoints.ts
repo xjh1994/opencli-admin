@@ -135,3 +135,8 @@ export const listWorkers = () =>
 
 export const getCeleryStats = () =>
   apiClient.get<ApiResponse<Record<string, unknown>>>('/workers/celery-stats').then((r) => r.data.data)
+
+export const getChromePool = () =>
+  apiClient
+    .get<ApiResponse<{ endpoints: { url: string; available: boolean }[]; total: number; available: number }>>('/workers/chrome-pool')
+    .then((r) => r.data.data)

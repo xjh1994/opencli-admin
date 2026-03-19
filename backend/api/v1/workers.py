@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.schemas.common import ApiResponse
+from backend.browser_pool import get_pool
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
@@ -34,6 +35,24 @@ async def list_workers(db: AsyncSession = Depends(get_db)) -> ApiResponse:
         return ApiResponse.ok(workers)
     except Exception as exc:
         return ApiResponse.ok([])
+
+
+@router.get("/chrome-pool", response_model=ApiResponse[dict])
+async def chrome_pool_status() -> ApiResponse:
+    """Return Chrome browser pool status and available endpoints."""
+    pool = get_pool()
+    endpoints = [
+        {
+            "url": ep,
+            "available": pool.available_for(ep),
+        }
+        for ep in pool.endpoints
+    ]
+    return ApiResponse.ok({
+        "endpoints": endpoints,
+        "total": pool.total,
+        "available": pool.available,
+    })
 
 
 @router.get("/celery-stats", response_model=ApiResponse[dict])

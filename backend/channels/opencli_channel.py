@@ -105,8 +105,10 @@ class OpenCLIChannel(AbstractChannel):
 
         env = os.environ.copy()
 
+        chrome_endpoint: str | None = config.get("chrome_endpoint") or None
+
         from backend.browser_pool import get_pool
-        async with get_pool().acquire() as cdp_endpoint:
+        async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:
             env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
             try:
                 proc = await asyncio.create_subprocess_exec(
