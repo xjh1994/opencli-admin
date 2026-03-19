@@ -184,3 +184,10 @@ export const getChromePool = () =>
   apiClient
     .get<ApiResponse<{ endpoints: ChromeEndpoint[]; total: number; available: number }>>('/workers/chrome-pool')
     .then((r) => r.data.data)
+
+export const updateChromeEndpointMode = (endpoint: string, mode: 'bridge' | 'cdp') => {
+  const b64 = btoa(endpoint).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+  return apiClient
+    .patch<ApiResponse<{ endpoint: string; mode: string }>>(`/workers/chrome-pool/${b64}/mode`, { mode })
+    .then((r) => r.data.data)
+}

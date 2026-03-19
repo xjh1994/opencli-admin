@@ -135,10 +135,6 @@ services:
       - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
     volumes:
       - chrome_profile_1:/home/chrome/.config/chromium
-    environment:
-      # Set to true to start the Browser Bridge daemon on port 19825.
-      # Allows API/worker containers to use bridge_mode sources via chrome-{N}:19825.
-      BROWSER_BRIDGE_ENABLED: ${BROWSER_BRIDGE_ENABLED:-false}
     restart: unless-stopped
 
   # Additional Chrome instances are managed dynamically via scripts/chrome-pool.sh

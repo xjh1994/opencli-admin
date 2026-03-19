@@ -1,8 +1,11 @@
 import re
 from urllib.parse import urlparse
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from backend.config import get_settings
 from backend.database import get_db
@@ -37,7 +40,7 @@ async def list_workers(db: AsyncSession = Depends(get_db)) -> ApiResponse:
                 "celery_version": info.get("versions", {}).get("celery"),
             })
         return ApiResponse.ok(workers)
-    except Exception as exc:
+    except Exception:
         return ApiResponse.ok([])
 
 
@@ -54,11 +57,7 @@ def _novnc_port(cdp_url: str, base_port: int) -> int:
 
 
 def _container_status(hostname: str) -> str:
-    """Return Docker container status string, or 'unknown' if unavailable.
-
-    Possible values from Docker API: 'running', 'created', 'restarting',
-    'paused', 'exited', 'dead'.  We also return 'unknown' on any error.
-    """
+    """Return Docker container status string, or 'unknown' if unavailable."""
     try:
         import docker  # type: ignore[import]
         client = docker.from_env()
@@ -78,6 +77,7 @@ async def chrome_pool_status() -> ApiResponse:
             "available": pool.available_for(ep),
             "novnc_port": _novnc_port(ep, base_port),
             "container_status": _container_status(urlparse(ep).hostname or ""),
+            "mode": pool.get_mode(ep),
         }
         for ep in pool.endpoints
     ]
@@ -86,6 +86,45 @@ async def chrome_pool_status() -> ApiResponse:
         "total": pool.total,
         "available": pool.available,
     })
+
+
+class EndpointModeUpdate(BaseModel):
+    mode: Literal["bridge", "cdp"]
+
+
+@router.patch("/chrome-pool/{endpoint_b64}/mode", response_model=ApiResponse[dict])
+async def update_endpoint_mode(
+    endpoint_b64: str,
+    body: EndpointModeUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """Update the connection mode (bridge/cdp) for a Chrome pool endpoint."""
+    import base64
+    from backend.models.browser import BrowserInstance
+
+    try:
+        endpoint = base64.urlsafe_b64decode(endpoint_b64.encode()).decode()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid endpoint encoding")
+
+    pool = get_pool()
+    if endpoint not in pool.endpoints:
+        raise HTTPException(status_code=404, detail=f"Endpoint {endpoint!r} not in pool")
+
+    # Update in-memory pool
+    pool.set_mode(endpoint, body.mode)
+
+    # Persist to DB
+    result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == endpoint))
+    inst = result.scalar_one_or_none()
+    if inst:
+        inst.mode = body.mode
+    else:
+        inst = BrowserInstance(endpoint=endpoint, mode=body.mode, label="")
+        db.add(inst)
+    await db.commit()
+
+    return ApiResponse.ok({"endpoint": endpoint, "mode": body.mode})
 
 
 @router.get("/celery-stats", response_model=ApiResponse[dict])
