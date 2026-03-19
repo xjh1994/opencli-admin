@@ -323,7 +323,7 @@ function AddScheduleModal({
                 {chromeEndpoints.map((ep) => (
                   <option key={ep.url} value={ep.url}>
                     {ep.url.replace('http://', '').replace(':19222', '')}
-                    {ep.available ? ' ✓' : ' (占用中)'}
+                    {ep.available ? ' 🟢' : ' 🔴'}
                   </option>
                 ))}
               </select>
