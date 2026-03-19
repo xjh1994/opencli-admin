@@ -33,20 +33,11 @@ RUN useradd -m -u 1000 chrome \
 COPY chrome/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Build Browser Bridge extension (optional — only included if source was copied
-# by running ./scripts/build-extension.sh before docker compose build chrome-1).
-COPY chrome/extension-src/ /tmp/extension-src/
-RUN if [ -f /tmp/extension-src/package.json ]; then \
-      cd /tmp/extension-src && npm install && npm run build \
-      && mkdir -p /home/chrome/extension/dist \
-      && cp manifest.json /home/chrome/extension/ \
-      && cp -r icons /home/chrome/extension/ \
-      && cp dist/background.js /home/chrome/extension/dist/ \
-      && echo "Browser Bridge extension built OK"; \
-    else \
-      echo "No extension source found — skipping extension build"; \
-    fi \
-    && rm -rf /tmp/extension-src
+# Install Browser Bridge extension (pre-built dist/background.js is committed).
+# To update: sync chrome/extension-src/ from the opencli repo and rebuild.
+COPY chrome/extension-src/manifest.json /home/chrome/extension/manifest.json
+COPY chrome/extension-src/icons/ /home/chrome/extension/icons/
+COPY chrome/extension-src/dist/background.js /home/chrome/extension/dist/background.js
 
 EXPOSE 9222 6080
 

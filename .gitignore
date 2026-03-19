@@ -64,7 +64,6 @@ redis-data/
 celerybeat-schedule
 celerybeat.pid
 
-# Ignore compiled extension artifacts; keep source
-chrome/extension-src/dist/
+# Ignore extension build intermediates; dist/background.js is committed
 chrome/extension-src/node_modules/
 chrome/extension-src/store-assets/
