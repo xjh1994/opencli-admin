@@ -6,6 +6,8 @@
 
 **多实例多账号同时采集**
 <img width="3410" height="1188" alt="image" src="https://github.com/user-attachments/assets/d456fd3d-1d2d-4846-b38a-1a86cbbf298a" />
+支持 chrome 实例自动/手动路由
+<img width="3340" height="1834" alt="image" src="https://github.com/user-attachments/assets/dedebdcc-871b-4dbe-a671-fc6011017d90" />
 
 
 ## 功能概览
