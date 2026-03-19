@@ -73,6 +73,12 @@ async def run_pipeline(
     effective_ai_config = agent_config or source.ai_config
     ai_count = 0
     if enable_ai and effective_ai_config and new_records:
+        # Signal that collection is done and AI is now running
+        from backend.models.task import CollectionTask
+        task_row = await session.get(CollectionTask, task_id)
+        if task_row:
+            task_row.status = "ai_processing"
+            await session.flush()
         try:
             await ai_processor.process_with_ai(new_records, effective_ai_config)
             ai_count = len(new_records)
