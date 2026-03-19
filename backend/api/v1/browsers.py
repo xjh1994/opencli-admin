@@ -80,12 +80,20 @@ def _update_env_file(key: str, value: str, path: str = "/app/.env") -> None:
 
 
 @router.post("/chrome-instances", response_model=ApiResponse[dict])
-async def add_chrome_instance(count: int = 1) -> ApiResponse:
+async def add_chrome_instance(
+    count: int = 1,
+    mode: str = "bridge",
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
     """Start one or more new Chrome instances (chrome-N) and hot-add them to the pool."""
     from backend.browser_pool import get_pool, LocalBrowserPool
+    from backend.models.browser import BrowserInstance
+    from sqlalchemy import select
 
     if count < 1 or count > 10:
         raise HTTPException(status_code=400, detail="count must be between 1 and 10")
+    if mode not in ("bridge", "cdp"):
+        raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
 
     pool = get_pool()
     project = _project_name()
@@ -129,7 +137,20 @@ async def add_chrome_instance(count: int = 1) -> ApiResponse:
 
         if isinstance(pool, LocalBrowserPool) and new_endpoint not in pool.endpoints:
             pool.add_endpoint(new_endpoint)
+        pool.set_mode(new_endpoint, mode)
+
+        # Persist mode to DB
+        result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == new_endpoint))
+        inst = result.scalar_one_or_none()
+        if inst:
+            inst.mode = mode
+        else:
+            inst = BrowserInstance(endpoint=new_endpoint, mode=mode, label="")
+            db.add(inst)
+
         created.append({"endpoint": new_endpoint, "novnc_port": novnc_port})
+
+    await db.commit()
 
     all_endpoints = ",".join(pool.endpoints)
     try:
