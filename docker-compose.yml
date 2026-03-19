@@ -57,8 +57,10 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # opencli CDP: points to Chrome sidecar container
+      # opencli CDP: single-instance fallback
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+      # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
+      CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
     ports:
       - "${API_PORT:-8031}:8000"
     healthcheck:
@@ -83,6 +85,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome:19222}
+      CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -108,6 +111,7 @@ services:
         condition: service_healthy
 
   # ── Chrome sidecar (noVNC web UI + persistent profile for opencli) ────────
+  # Default single instance — always started.
   chrome:
     build:
       context: ./chrome
@@ -116,9 +120,37 @@ services:
         REGISTRY: ${DOCKER_REGISTRY:-}
     ports:
       - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
-      - "19222:19222"               # CDP proxy (socat 0.0.0.0:19222 → 127.0.0.1:9222)
     volumes:
       - chrome_profile:/home/chrome/.config/chromium
+    restart: unless-stopped
+
+  # Additional Chrome instances — start with: docker-compose --profile multi-chrome up -d
+  # Login to each instance via noVNC: chrome-2 → :3011, chrome-3 → :3012
+  # Then set: CHROME_POOL_ENDPOINTS=http://chrome:19222,http://chrome-2:19222,http://chrome-3:19222
+  chrome-2:
+    profiles: ["multi-chrome"]
+    build:
+      context: ./chrome
+      dockerfile: Dockerfile
+      args:
+        REGISTRY: ${DOCKER_REGISTRY:-}
+    ports:
+      - "${NOVNC_PORT_2:-3011}:6080"
+    volumes:
+      - chrome_profile_2:/home/chrome/.config/chromium
+    restart: unless-stopped
+
+  chrome-3:
+    profiles: ["multi-chrome"]
+    build:
+      context: ./chrome
+      dockerfile: Dockerfile
+      args:
+        REGISTRY: ${DOCKER_REGISTRY:-}
+    ports:
+      - "${NOVNC_PORT_3:-3012}:6080"
+    volumes:
+      - chrome_profile_3:/home/chrome/.config/chromium
     restart: unless-stopped
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
@@ -158,3 +190,5 @@ volumes:
   postgres_data:
   db_data:
   chrome_profile:
+  chrome_profile_2:
+  chrome_profile_3:

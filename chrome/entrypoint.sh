@@ -10,6 +10,13 @@ sleep 1
 # Remove stale profile locks (left by crashed/restarted containers)
 find /home/chrome/.config/chromium -name 'SingletonLock' -o -name 'SingletonCookie' -o -name 'SingletonSocket' 2>/dev/null | xargs rm -f 2>/dev/null || true
 
+# Generate nginx config with this container's hostname so CDP WebSocket URLs
+# are rewritten to the correct container name (supports multi-instance pools).
+export CHROME_HOSTNAME="${CHROME_HOSTNAME:-${HOSTNAME:-chrome}}"
+envsubst '${CHROME_HOSTNAME}' \
+  < /etc/nginx/conf.d/cdp.conf.template \
+  > /etc/nginx/conf.d/cdp.conf
+
 # nginx proxy: rewrites Host header to localhost so Chrome accepts CDP requests
 nginx -g 'daemon off;' &
 

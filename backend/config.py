@@ -45,6 +45,20 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
 
+    # Chrome / CDP
+    # Single-instance (legacy): used when chrome_pool_endpoints is empty.
+    opencli_cdp_endpoint: str = "http://chrome:19222"
+    # Multi-instance pool: comma-separated CDP endpoints, e.g.
+    #   http://chrome-1:19222,http://chrome-2:19222,http://chrome-3:19222
+    # When set, overrides opencli_cdp_endpoint.
+    chrome_pool_endpoints: str = ""
+
+    @property
+    def cdp_endpoints(self) -> list[str]:
+        if self.chrome_pool_endpoints.strip():
+            return [ep.strip() for ep in self.chrome_pool_endpoints.split(",") if ep.strip()]
+        return [self.opencli_cdp_endpoint]
+
     # Webhooks
     webhook_secret: str = "change-me-webhook-secret"
 

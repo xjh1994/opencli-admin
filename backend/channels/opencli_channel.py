@@ -105,29 +105,32 @@ class OpenCLIChannel(AbstractChannel):
 
         env = os.environ.copy()
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
-        except asyncio.TimeoutError:
-            return ChannelResult.fail("opencli command timed out after 60s")
-        except FileNotFoundError:
-            return ChannelResult.fail("opencli binary not found in PATH")
-        except Exception as exc:
-            return ChannelResult.fail(f"Failed to run opencli: {exc}")
+        from backend.browser_pool import get_pool
+        async with get_pool().acquire() as cdp_endpoint:
+            env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            except asyncio.TimeoutError:
+                return ChannelResult.fail("opencli command timed out after 60s")
+            except FileNotFoundError:
+                return ChannelResult.fail("opencli binary not found in PATH")
+            except Exception as exc:
+                return ChannelResult.fail(f"Failed to run opencli: {exc}")
 
-        if proc.returncode != 0:
-            return ChannelResult.fail(
-                f"opencli exited with code {proc.returncode}: {stderr.decode()}"
-            )
+            if proc.returncode != 0:
+                return ChannelResult.fail(
+                    f"opencli exited with code {proc.returncode}: {stderr.decode()}"
+                )
 
-        raw = stdout.decode()
+            raw = stdout.decode()
+
         parser = _PARSERS.get(output_format, _PARSERS["json"])
-
         try:
             items = parser(raw)
         except Exception as exc:

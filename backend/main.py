@@ -20,6 +20,16 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_migrations()
+
+    # Initialise Chrome browser pool
+    from backend import browser_pool
+    browser_pool.init_pool(
+        endpoints=settings.cdp_endpoints,
+        use_redis=settings.task_executor == "celery",
+        redis_url=settings.redis_url,
+    )
+    await browser_pool.ensure_ready()
+
     if settings.task_executor == "local":
         from backend.scheduler import start_scheduler
         start_scheduler()
