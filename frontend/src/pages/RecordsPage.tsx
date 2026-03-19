@@ -168,7 +168,7 @@ export default function RecordsPage() {
                 />
               </th>
               <th className="px-3 py-3 text-left font-medium text-gray-500 text-xs w-20">{t('common.id')}</th>
-              <th className="px-3 py-3 text-left font-medium text-gray-500 text-xs">{t('records.titleCol')}</th>
+              <th className="px-3 py-3 text-left font-medium text-gray-500 text-xs w-80 max-w-xs">{t('records.titleCol')}</th>
               <th className="px-3 py-3 text-left font-medium text-gray-500 text-xs w-24">{t('common.status')}</th>
               <th className="px-3 py-3 text-left font-medium text-gray-500 text-xs w-40">{t('records.aiEnrichment')}</th>
               <th className="px-3 py-3 text-left font-medium text-gray-500 text-xs w-32">{t('records.collectedAt')}</th>
@@ -199,9 +199,9 @@ export default function RecordsPage() {
                 <td className="px-3 py-2.5">
                   <span className="font-mono text-xs text-gray-400">{r.id.slice(0, 8)}</span>
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-2.5 w-80 max-w-xs">
                   <div className="space-y-1">
-                    <p className="font-medium text-sm">
+                    <p className="font-medium text-sm truncate" title={(r.normalized_data.title as string) || ''}>
                       {(r.normalized_data.title as string) || '—'}
                     </p>
                     {typeof r.normalized_data.url === 'string' && r.normalized_data.url && (
@@ -209,7 +209,7 @@ export default function RecordsPage() {
                         href={r.normalized_data.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-blue-500 hover:underline block"
+                        className="text-xs text-blue-500 hover:underline block truncate"
                       >
                         {r.normalized_data.url.slice(0, 60)}
                       </a>

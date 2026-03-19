@@ -94,6 +94,16 @@ async def run_pipeline(
                 await session.commit()
         try:
             await ai_processor.process_with_ai(new_records, effective_ai_config)
+            # Persist enrichments — new_records are detached after step3 session closed
+            from backend.models.record import CollectedRecord
+            async with AsyncSessionLocal() as session:
+                for rec in new_records:
+                    if rec.ai_enrichment is not None:
+                        db_rec = await session.get(CollectedRecord, rec.id)
+                        if db_rec:
+                            db_rec.ai_enrichment = rec.ai_enrichment
+                            db_rec.status = "ai_processed"
+                await session.commit()
             ai_count = len(new_records)
             logger.info("[task:%s] step4/ai done | processed=%d", task_id, ai_count)
         except Exception as exc:
