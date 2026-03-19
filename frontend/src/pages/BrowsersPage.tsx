@@ -9,6 +9,7 @@ import {
   addChromeInstance,
   removeChromeInstance,
   restartApi,
+  updateChromeEndpointMode,
 } from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -16,7 +17,7 @@ import Card from '../components/Card'
 import PageHeader from '../components/PageHeader'
 import { SITE_LABELS } from '../components/ChannelConfigForm'
 import { Plus, X, ExternalLink, RefreshCw, Trash2, Minus } from 'lucide-react'
-import type { BrowserBinding } from '../api/types'
+import type { BrowserBinding, ChromeEndpoint } from '../api/types'
 
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
   try {
@@ -323,12 +324,45 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
 
 // ── Instance card ─────────────────────────────────────────────────────────────
 
+function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSuccess: () => void }) {
+  const { t } = useTranslation()
+  const [optimisticMode, setOptimisticMode] = useState<'bridge' | 'cdp' | null>(null)
+  const mode = optimisticMode ?? endpoint.mode
+
+  const mutation = useMutation({
+    mutationFn: (newMode: 'bridge' | 'cdp') => updateChromeEndpointMode(endpoint.url, newMode),
+    onMutate: (newMode) => setOptimisticMode(newMode),
+    onSuccess: () => { setOptimisticMode(null); onSuccess() },
+    onError: () => setOptimisticMode(null),
+  })
+
+  return (
+    <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
+      {(['bridge', 'cdp'] as const).map((m) => (
+        <button
+          key={m}
+          title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
+          disabled={mutation.isPending}
+          onClick={() => mode !== m && mutation.mutate(m)}
+          className={[
+            'px-2.5 py-1 transition-colors',
+            mode === m
+              ? m === 'bridge'
+                ? 'bg-blue-600 text-white'
+                : 'bg-amber-500 text-white'
+              : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
+          ].join(' ')}
+        >
+          {t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 interface InstanceCardProps {
-  url: string
-  available: boolean
-  containerStatus?: string
+  endpoint: ChromeEndpoint
   isStarting?: boolean
-  novncPort: number
   bindings: BrowserBinding[]
   boundSites: Set<string>
   onBind: (site: string) => void
@@ -336,21 +370,23 @@ interface InstanceCardProps {
   onRemove?: () => void
   isBindPending: boolean
   isRemovePending: boolean
+  onModeChanged: () => void
 }
 
 function InstanceCard({
-  url, available, containerStatus, isStarting, novncPort, bindings, boundSites,
-  onBind, onUnbind, onRemove, isBindPending, isRemovePending,
+  endpoint, isStarting, bindings, boundSites,
+  onBind, onUnbind, onRemove, isBindPending, isRemovePending, onModeChanged,
 }: InstanceCardProps) {
   const { t } = useTranslation()
+  const { url, available, container_status: containerStatus, novnc_port: novncPort } = endpoint
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
   const idx = instanceIndex(url)
-  const canRemove = idx !== null && idx > 1 && onRemove  // chrome-1 is compose-managed
+  const canRemove = idx !== null && idx > 1 && onRemove
 
   return (
     <Card>
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
         <StatusBadge containerStatus={containerStatus} available={available} isStarting={isStarting} />
         <span className="font-semibold text-sm dark:text-white">{label}</span>
         <a
@@ -362,16 +398,19 @@ function InstanceCard({
           :{novncPort}
           <ExternalLink size={11} />
         </a>
-        {canRemove && (
-          <button
-            onClick={onRemove}
-            disabled={isRemovePending}
-            title={t('browsers.removeInstance')}
-            className="ml-auto text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-          >
-            <Trash2 size={14} />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} />
+          {canRemove && (
+            <button
+              onClick={onRemove}
+              disabled={isRemovePending}
+              title={t('browsers.removeInstance')}
+              className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 min-h-[2rem]">
@@ -522,16 +561,12 @@ export default function BrowsersPage() {
       {/* Instance cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {endpoints.map((ep) => {
-          const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
           const idx = instanceIndex(ep.url)
           return (
             <InstanceCard
               key={ep.url}
-              url={ep.url}
-              available={ep.available}
-              containerStatus={ep.container_status}
+              endpoint={ep}
               isStarting={startingEndpoints.has(ep.url)}
-              novncPort={novncPort}
               bindings={bindingsByEndpoint[ep.url] ?? []}
               boundSites={boundSites}
               onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
@@ -539,6 +574,7 @@ export default function BrowsersPage() {
               onRemove={idx !== null ? () => setRemovingIdx(idx) : undefined}
               isBindPending={addMutation.isPending}
               isRemovePending={removeInstanceMutation.isPending}
+              onModeChanged={invalidatePool}
             />
           )
         })}
