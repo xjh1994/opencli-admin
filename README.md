@@ -14,6 +14,12 @@
 - **通知推送** — 按触发事件（新记录入库 / AI 处理完成 / 任务失败）向 Webhook、邮件、飞书、钉钉、企业微信推送，各渠道结构化配置表单，支持签名验证
 - **工作节点** — 分布式模式下查看 Celery Worker 状态
 
+<img width="3360" height="1958" alt="image" src="https://github.com/user-attachments/assets/db302792-5593-4199-bcad-0982e860ec41" />
+<img width="3360" height="1864" alt="image" src="https://github.com/user-attachments/assets/ce644c00-c8dd-492b-97f1-172516e3d78d" />
+<img width="3360" height="1864" alt="image" src="https://github.com/user-attachments/assets/d7a865c5-760d-43e5-9cff-5fe8b415d8c8" />
+<img width="3360" height="2128" alt="image" src="https://github.com/user-attachments/assets/c2860e1c-23f0-4ce5-94de-599f4b9de062" />
+<img width="3360" height="1856" alt="image" src="https://github.com/user-attachments/assets/1236b60d-b682-4327-bbfd-4e6da1f857cf" />
+
 ### 支持平台（opencli 渠道）
 
 | 分类 | 平台 |
