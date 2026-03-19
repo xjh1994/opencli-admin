@@ -288,6 +288,15 @@ const zh = {
     command: '命令',
     args: '命令参数',
     argsHint: '以 --key value 形式传入',
+    bridgeMode: 'Browser Bridge 扩展模式',
+    bridgeModeHint: '使用本地 Chrome 扩展代替 Docker Chrome 容器，适合需要真实登录态的场景',
+    daemonPort: 'Daemon 端口',
+    daemonPortHint: 'Browser Bridge 守护进程监听端口（默认 19825）',
+    bridgeSetupTitle: '安装 Browser Bridge 扩展',
+    bridgeSetupStep1: '打开 Chrome → 扩展程序管理 → 开启开发者模式',
+    bridgeSetupStep2: '点击「加载已解压的扩展程序」→ 选择 opencli/extension 目录',
+    bridgeSetupStep3: '扩展启用后会自动与守护进程建立连接',
+    bridgeDockerNote: 'Docker 部署：需将 API 服务配置为 network_mode: host 才能与扩展通信',
   },
 }
 

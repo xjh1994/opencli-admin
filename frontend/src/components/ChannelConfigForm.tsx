@@ -858,6 +858,61 @@ function OpenCLIConfig({
         />
       </Field>
 
+      {/* Browser Bridge mode */}
+      <div className="pt-3 border-t border-gray-200 dark:border-gray-600 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('channelConfig.bridgeMode')}
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">{t('channelConfig.bridgeModeHint')}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange({ ...config, bridge_mode: !config.bridge_mode })}
+            className={`relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              config.bridge_mode ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
+            }`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                config.bridge_mode ? 'translate-x-4' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        {config.bridge_mode && (
+          <div className="space-y-3">
+            <Field label={t('channelConfig.daemonPort')} hint={t('channelConfig.daemonPortHint')}>
+              <input
+                type="number"
+                className={input}
+                value={(config.daemon_port as number) ?? 19825}
+                onChange={(e) =>
+                  onChange({ ...config, daemon_port: parseInt(e.target.value) || 19825 })
+                }
+                min={1024}
+                max={65535}
+              />
+            </Field>
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 space-y-1.5">
+              <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                {t('channelConfig.bridgeSetupTitle')}
+              </p>
+              <ol className="text-xs text-blue-600 dark:text-blue-400 list-decimal list-inside space-y-0.5">
+                <li>{t('channelConfig.bridgeSetupStep1')}</li>
+                <li>{t('channelConfig.bridgeSetupStep2')}</li>
+                <li>{t('channelConfig.bridgeSetupStep3')}</li>
+              </ol>
+              <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">
+                ⚠ {t('channelConfig.bridgeDockerNote')}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
     </div>
   )
 }

@@ -97,6 +97,8 @@ class OpenCLIChannel(AbstractChannel):
         site = config.get("site", "")
         command = config.get("command", "")
         output_format = config.get("format", "json")
+        bridge_mode: bool = bool(config.get("bridge_mode", False))
+        daemon_port: int = int(config.get("daemon_port", 19825))
 
         chrome_endpoint: str | None = parameters.get("chrome_endpoint") or None
         cli_params = {k: v for k, v in parameters.items() if k != "chrome_endpoint"}
@@ -109,10 +111,12 @@ class OpenCLIChannel(AbstractChannel):
 
         env = os.environ.copy()
 
-        from backend.browser_pool import get_pool
-        async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:
-            env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
-            logger.info("opencli exec | cmd=%s cdp=%s", " ".join(cmd), cdp_endpoint)
+        if bridge_mode:
+            # Browser Bridge mode: CLI auto-starts daemon; extension controls the browser.
+            # Do NOT set OPENCLI_CDP_ENDPOINT so the CLI falls back to Browser Bridge.
+            env.pop("OPENCLI_CDP_ENDPOINT", None)
+            env["OPENCLI_DAEMON_PORT"] = str(daemon_port)
+            logger.info("opencli bridge | cmd=%s daemon_port=%s", " ".join(cmd), daemon_port)
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -120,29 +124,64 @@ class OpenCLIChannel(AbstractChannel):
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
                 )
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
             except asyncio.TimeoutError:
-                logger.error("opencli timeout | cmd=%s", " ".join(cmd))
-                return ChannelResult.fail("opencli command timed out after 60s")
+                logger.error("opencli bridge timeout | cmd=%s", " ".join(cmd))
+                return ChannelResult.fail("opencli command timed out after 120s")
             except FileNotFoundError:
                 logger.error("opencli not found in PATH")
                 return ChannelResult.fail("opencli binary not found in PATH")
             except Exception as exc:
-                logger.exception("opencli subprocess error | %s", exc)
+                logger.exception("opencli bridge subprocess error | %s", exc)
                 return ChannelResult.fail(f"Failed to run opencli: {exc}")
 
             stderr_text = stderr.decode().strip()
             if stderr_text:
-                logger.warning("opencli stderr | %s", stderr_text[:500])
+                logger.warning("opencli bridge stderr | %s", stderr_text[:500])
 
             if proc.returncode != 0:
-                logger.error("opencli exit=%d | stderr=%s", proc.returncode, stderr_text[:500])
+                logger.error("opencli bridge exit=%d | stderr=%s", proc.returncode, stderr_text[:500])
                 return ChannelResult.fail(
                     f"opencli exited with code {proc.returncode}: {stderr_text}"
                 )
 
             raw = stdout.decode()
-            logger.debug("opencli stdout | %d chars | preview=%s", len(raw), raw[:200])
+            logger.debug("opencli bridge stdout | %d chars | preview=%s", len(raw), raw[:200])
+        else:
+            from backend.browser_pool import get_pool
+            async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:
+                env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
+                logger.info("opencli exec | cmd=%s cdp=%s", " ".join(cmd), cdp_endpoint)
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env=env,
+                    )
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+                except asyncio.TimeoutError:
+                    logger.error("opencli timeout | cmd=%s", " ".join(cmd))
+                    return ChannelResult.fail("opencli command timed out after 60s")
+                except FileNotFoundError:
+                    logger.error("opencli not found in PATH")
+                    return ChannelResult.fail("opencli binary not found in PATH")
+                except Exception as exc:
+                    logger.exception("opencli subprocess error | %s", exc)
+                    return ChannelResult.fail(f"Failed to run opencli: {exc}")
+
+                stderr_text = stderr.decode().strip()
+                if stderr_text:
+                    logger.warning("opencli stderr | %s", stderr_text[:500])
+
+                if proc.returncode != 0:
+                    logger.error("opencli exit=%d | stderr=%s", proc.returncode, stderr_text[:500])
+                    return ChannelResult.fail(
+                        f"opencli exited with code {proc.returncode}: {stderr_text}"
+                    )
+
+                raw = stdout.decode()
+                logger.debug("opencli stdout | %d chars | preview=%s", len(raw), raw[:200])
 
         parser = _PARSERS.get(output_format, _PARSERS["json"])
         try:

@@ -242,7 +242,8 @@ function AddScheduleModal({
   })
   const chromeEndpoints = chromePool?.endpoints ?? []
   const selectedSource = sources.find((s) => s.id === sourceId)
-  const showChromeSelector = selectedSource?.channel_type === 'opencli' && chromeEndpoints.length >= 1
+  const bridgeMode = selectedSource?.channel_type === 'opencli' && !!(selectedSource?.channel_config as Record<string, unknown>)?.bridge_mode
+  const showChromeSelector = selectedSource?.channel_type === 'opencli' && !bridgeMode && chromeEndpoints.length >= 1
 
   const { data: bindingsData } = useQuery({
     queryKey: ['browser-bindings'],

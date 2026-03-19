@@ -290,6 +290,15 @@ const en: Translations = {
     command: 'Command',
     args: 'Arguments',
     argsHint: 'Passed as --key value flags',
+    bridgeMode: 'Browser Bridge Extension Mode',
+    bridgeModeHint: 'Use local Chrome extension instead of Docker Chrome container — ideal for sites requiring real login sessions',
+    daemonPort: 'Daemon Port',
+    daemonPortHint: 'Browser Bridge daemon listen port (default 19825)',
+    bridgeSetupTitle: 'Install Browser Bridge Extension',
+    bridgeSetupStep1: 'Open Chrome → Extensions → Enable Developer Mode',
+    bridgeSetupStep2: 'Click "Load unpacked" → select opencli/extension directory',
+    bridgeSetupStep3: 'Extension will auto-connect to the daemon once enabled',
+    bridgeDockerNote: 'Docker: API service must use network_mode: host to communicate with the extension',
   },
 }
 
