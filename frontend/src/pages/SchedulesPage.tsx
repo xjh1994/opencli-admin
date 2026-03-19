@@ -11,6 +11,18 @@ import PageHeader from '../components/PageHeader'
 import { Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { formatInTimeZone } from 'date-fns-tz'
 
+/** Derive noVNC port from CDP URL using chrome-N hostname convention. */
+function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
+  try {
+    const hostname = new URL(cdpUrl).hostname
+    const m = hostname.match(/^chrome(?:-(\d+))?$/)
+    const n = m ? parseInt(m[1] ?? '1', 10) : 1
+    return basePort + (n - 1)
+  } catch {
+    return basePort
+  }
+}
+
 // ── Cron builder ───────────────────────────────────────────────────────────────
 
 type FreqType = 'once' | 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'
@@ -327,7 +339,8 @@ function AddScheduleModal({
                   <span className="text-sm text-gray-600 dark:text-gray-300">{t('channelConfig.chromeEndpointAny')}</span>
                 </label>
                 {chromeEndpoints.map((ep) => {
-                  const novncUrl = `http://${window.location.hostname}:${ep.novnc_port}`
+                  const novncPort = ep.novnc_port ?? chromeNovncPort(ep.url)
+                  const novncUrl = `http://${window.location.hostname}:${novncPort}`
                   const label = ep.url.replace('http://', '').replace(':19222', '')
                   return (
                     <label key={ep.url} className="flex items-center gap-2 cursor-pointer">
@@ -352,7 +365,7 @@ function AddScheduleModal({
                         onClick={(e) => e.stopPropagation()}
                         className="ml-auto text-xs text-blue-500 hover:underline font-mono"
                       >
-                        {window.location.hostname}:{ep.novnc_port} ↗
+                        {window.location.hostname}:{novncPort} ↗
                       </a>
                     </label>
                   )
