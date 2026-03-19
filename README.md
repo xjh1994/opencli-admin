@@ -10,6 +10,9 @@
 支持 chrome 实例自动/手动路由
 <img width="3340" height="1834" alt="image" src="https://github.com/user-attachments/assets/dedebdcc-871b-4dbe-a671-fc6011017d90" />
 
+**支持自定义 agent 智能体对采集的数据打标签**
+<img width="3358" height="884" alt="image" src="https://github.com/user-attachments/assets/994046c5-88ae-436f-8108-3327108cb2cc" />
+
 ## 功能概览
 
 - **数据源管理** — 支持 opencli、RSS、API、Web 爬虫、CLI 五种渠道类型，可视化配置、一键触发
