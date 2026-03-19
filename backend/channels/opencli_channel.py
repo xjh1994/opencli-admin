@@ -112,41 +112,47 @@ class OpenCLIChannel(AbstractChannel):
         env = os.environ.copy()
 
         if bridge_mode:
-            # Browser Bridge mode: CLI auto-starts daemon; extension controls the browser.
-            # Do NOT set OPENCLI_CDP_ENDPOINT so the CLI falls back to Browser Bridge.
-            env.pop("OPENCLI_CDP_ENDPOINT", None)
-            env["OPENCLI_DAEMON_PORT"] = str(daemon_port)
-            logger.info("opencli bridge | cmd=%s daemon_port=%s", " ".join(cmd), daemon_port)
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env=env,
-                )
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-            except asyncio.TimeoutError:
-                logger.error("opencli bridge timeout | cmd=%s", " ".join(cmd))
-                return ChannelResult.fail("opencli command timed out after 120s")
-            except FileNotFoundError:
-                logger.error("opencli not found in PATH")
-                return ChannelResult.fail("opencli binary not found in PATH")
-            except Exception as exc:
-                logger.exception("opencli bridge subprocess error | %s", exc)
-                return ChannelResult.fail(f"Failed to run opencli: {exc}")
+            # Browser Bridge mode: acquire a Chrome pool slot so we know which
+            # chrome-N container to target, then point the CLI at that container's
+            # daemon (pre-running when BROWSER_BRIDGE_ENABLED=true on that container).
+            from backend.browser_pool import get_pool
+            async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:
+                from urllib.parse import urlparse
+                daemon_host = urlparse(cdp_endpoint).hostname or "chrome-1"
+                env.pop("OPENCLI_CDP_ENDPOINT", None)
+                env["OPENCLI_DAEMON_HOST"] = daemon_host
+                env["OPENCLI_DAEMON_PORT"] = str(daemon_port)
+                logger.info("opencli bridge | cmd=%s daemon=%s:%s", " ".join(cmd), daemon_host, daemon_port)
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env=env,
+                    )
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+                except asyncio.TimeoutError:
+                    logger.error("opencli bridge timeout | cmd=%s", " ".join(cmd))
+                    return ChannelResult.fail("opencli command timed out after 120s")
+                except FileNotFoundError:
+                    logger.error("opencli not found in PATH")
+                    return ChannelResult.fail("opencli binary not found in PATH")
+                except Exception as exc:
+                    logger.exception("opencli bridge subprocess error | %s", exc)
+                    return ChannelResult.fail(f"Failed to run opencli: {exc}")
 
-            stderr_text = stderr.decode().strip()
-            if stderr_text:
-                logger.warning("opencli bridge stderr | %s", stderr_text[:500])
+                stderr_text = stderr.decode().strip()
+                if stderr_text:
+                    logger.warning("opencli bridge stderr | %s", stderr_text[:500])
 
-            if proc.returncode != 0:
-                logger.error("opencli bridge exit=%d | stderr=%s", proc.returncode, stderr_text[:500])
-                return ChannelResult.fail(
-                    f"opencli exited with code {proc.returncode}: {stderr_text}"
-                )
+                if proc.returncode != 0:
+                    logger.error("opencli bridge exit=%d | stderr=%s", proc.returncode, stderr_text[:500])
+                    return ChannelResult.fail(
+                        f"opencli exited with code {proc.returncode}: {stderr_text}"
+                    )
 
-            raw = stdout.decode()
-            logger.debug("opencli bridge stdout | %d chars | preview=%s", len(raw), raw[:200])
+                raw = stdout.decode()
+                logger.debug("opencli bridge stdout | %d chars | preview=%s", len(raw), raw[:200])
         else:
             from backend.browser_pool import get_pool
             async with get_pool().acquire(endpoint=chrome_endpoint) as cdp_endpoint:

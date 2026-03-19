@@ -4,7 +4,9 @@ FROM ${REGISTRY}debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium x11vnc xvfb novnc websockify procps nginx \
     fonts-noto-cjk gettext-base \
-    && rm -rf /var/lib/apt/lists/*
+    nodejs npm \
+    && npm install -g @jackwener/opencli \
+    && rm -rf /root/.npm /var/lib/apt/lists/*
 
 COPY nginx-cdp.conf.template /etc/nginx/conf.d/cdp.conf.template
 

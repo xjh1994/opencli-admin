@@ -211,8 +211,7 @@ function TriggerModal({
     enabled: source.channel_type === 'opencli',
   })
   const chromeEndpoints = chromePool?.endpoints ?? []
-  const bridgeMode = source.channel_type === 'opencli' && !!(source.channel_config as Record<string, unknown>)?.bridge_mode
-  const showChromeSelector = source.channel_type === 'opencli' && !bridgeMode && chromeEndpoints.length >= 1
+  const showChromeSelector = source.channel_type === 'opencli' && chromeEndpoints.length >= 1
 
   const { data: bindingsData } = useQuery({
     queryKey: ['browser-bindings'],
