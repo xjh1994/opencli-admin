@@ -24,14 +24,6 @@
 - **通知推送** — 按触发事件（新记录入库 / AI 处理完成 / 任务失败）向 Webhook、邮件、飞书、钉钉、企业微信推送，各渠道结构化配置表单，支持签名验证
 - **工作节点** — 分布式模式下查看 Celery Worker 状态
 
-<img width="3360" height="1958" alt="image" src="https://github.com/user-attachments/assets/db302792-5593-4199-bcad-0982e860ec41" />
-<img width="3360" height="1864" alt="image" src="https://github.com/user-attachments/assets/ce644c00-c8dd-492b-97f1-172516e3d78d" />
-<img width="3360" height="1854" alt="image" src="https://github.com/user-attachments/assets/16158af4-7f2b-4c40-a0cb-fda6c87a9929" />
-<img width="3360" height="2128" alt="image" src="https://github.com/user-attachments/assets/c2860e1c-23f0-4ce5-94de-599f4b9de062" />
-<img width="3360" height="1856" alt="image" src="https://github.com/user-attachments/assets/1236b60d-b682-4327-bbfd-4e6da1f857cf" />
-<img width="634" height="768" alt="image" src="https://github.com/user-attachments/assets/df369395-3e29-438b-ab8a-223f10211687" />
-
-
 ### 支持平台（opencli 渠道）
 
 | 分类 | 平台 |
@@ -359,6 +351,14 @@ Chromium（带登录态 Profile）
 ├── start.sh             # 原生 shell 启动脚本
 └── .env.example
 ```
+
+<img width="3360" height="1958" alt="565679904-db302792-5593-4199-bcad-0982e860ec41" src="https://github.com/user-attachments/assets/ea9c3b6f-e3f6-4792-a388-9e470bf3de7e" />
+<img width="3360" height="1864" alt="565680032-ce644c00-c8dd-492b-97f1-172516e3d78d" src="https://github.com/user-attachments/assets/c9694c60-90b2-4241-9d8b-5753a7066f8c" />
+<img width="3360" height="1856" alt="566009767-1236b60d-b682-4327-bbfd-4e6da1f857cf" src="https://github.com/user-attachments/assets/05712eda-5f7d-4cb8-b772-2b481b2f9f51" />
+<img width="3360" height="2128" alt="566026018-c2860e1c-23f0-4ce5-94de-599f4b9de062" src="https://github.com/user-attachments/assets/3b965d29-8783-49fc-a58f-30ef88213899" />
+<img width="3358" height="884" alt="566120897-994046c5-88ae-436f-8108-3327108cb2cc" src="https://github.com/user-attachments/assets/e8975aa7-206f-4880-9072-e93d913803d5" />
+
+
 
 ## License
 
