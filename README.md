@@ -4,6 +4,12 @@
 
 > **支持 Docker 一键运行，对本地环境零侵入。** opencli、Chrome、所有运行时依赖均已打包在镜像内，宿主机只需安装 Docker；也可直接原生运行，复用本地已有环境。
 
+**多实例多账号同时采集**
+<img width="3410" height="1188" alt="image" src="https://github.com/user-attachments/assets/d456fd3d-1d2d-4846-b38a-1a86cbbf298a" />
+
+支持 chrome 实例自动/手动路由
+<img width="3340" height="1834" alt="image" src="https://github.com/user-attachments/assets/dedebdcc-871b-4dbe-a671-fc6011017d90" />
+
 ## 功能概览
 
 - **数据源管理** — 支持 opencli、RSS、API、Web 爬虫、CLI 五种渠道类型，可视化配置、一键触发
