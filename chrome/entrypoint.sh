@@ -33,8 +33,12 @@ websockify --web /usr/share/novnc 6080 localhost:5900 &
 if [ "${BROWSER_BRIDGE_ENABLED:-false}" = "true" ]; then
   DAEMON_JS="$(npm root -g)/@jackwener/opencli/dist/daemon.js"
   if [ -f "$DAEMON_JS" ]; then
-    OPENCLI_DAEMON_LISTEN=0.0.0.0 node "$DAEMON_JS" &
-    echo "[entrypoint] Browser Bridge daemon started on 0.0.0.0:${OPENCLI_DAEMON_PORT:-19825}"
+    (while true; do
+      OPENCLI_DAEMON_LISTEN=0.0.0.0 node "$DAEMON_JS"
+      echo "[entrypoint] Browser Bridge daemon exited, restarting in 1s..."
+      sleep 1
+    done) &
+    echo "[entrypoint] Browser Bridge daemon started (auto-restart) on 0.0.0.0:${OPENCLI_DAEMON_PORT:-19825}"
   else
     echo "[entrypoint] WARNING: Browser Bridge daemon not found at $DAEMON_JS — skipping"
   fi
