@@ -35,7 +35,7 @@ async def test_feishu_send_success():
     payload = _payload()
 
     mock_resp = MagicMock()
-    mock_resp.json.return_value = {"StatusCode": 0}
+    mock_resp.json.return_value = {"code": 0}
 
     with patch("httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()

@@ -77,3 +77,67 @@ async def test_collect_text_output(channel):
     )
     assert result.success is True
     assert len(result.items) == 3
+
+
+@pytest.mark.asyncio
+async def test_collect_timeout(channel):
+    """asyncio.TimeoutError returns failed ChannelResult with timeout message."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    mock_proc = AsyncMock()
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()),
+    ):
+        result = await channel.collect(
+            {"binary": "sh", "command": ["-c", "sleep 10"], "timeout": 1},
+            {},
+        )
+
+    assert result.success is False
+    assert "timed out" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_collect_generic_exception(channel):
+    """Generic exception during subprocess exec returns failed ChannelResult."""
+    from unittest.mock import patch
+
+    with patch("asyncio.create_subprocess_exec", side_effect=OSError("unexpected error")):
+        result = await channel.collect(
+            {"binary": "sh", "command": ["-c", "echo hi"]},
+            {},
+        )
+
+    assert result.success is False
+    assert "CLI execution failed" in result.error
+
+
+@pytest.mark.asyncio
+async def test_collect_nonzero_exit_code(channel):
+    """Non-zero exit code from subprocess returns failed ChannelResult."""
+    result = await channel.collect(
+        {"binary": "sh", "command": ["-c", "exit 1"]},
+        {},
+    )
+    assert result.success is False
+    assert "exited with code" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_collect_invalid_json_output(channel):
+    """Invalid JSON output returns failed ChannelResult."""
+    result = await channel.collect(
+        {"binary": "sh", "command": ["-c", "echo 'not valid json'"], "output_format": "json"},
+        {},
+    )
+    assert result.success is False
+    assert "parse" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_health_check(channel):
+    """health_check always returns True (binary checked per collect)."""
+    result = await channel.health_check()
+    assert result is True
