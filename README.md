@@ -5,13 +5,13 @@
 > **支持 Docker 一键运行，对本地环境零侵入。** opencli、Chrome、所有运行时依赖均已打包在镜像内，宿主机只需安装 Docker；也可直接原生运行，复用本地已有环境。
 
 **多实例多账号同时采集**
-<img width="3410" height="1188" alt="image" src="https://github.com/user-attachments/assets/d456fd3d-1d2d-4846-b38a-1a86cbbf298a" />
+<img width="3410" height="1188" alt="566109092-d456fd3d-1d2d-4846-b38a-1a86cbbf298a" src="https://github.com/user-attachments/assets/205450a5-e0d8-495e-8d7b-0e05caa4af9a" />
 
 **支持 chrome 实例自动/手动路由**
-<img width="3360" height="1854" alt="image" src="https://github.com/user-attachments/assets/c147dfd9-24a8-47b2-bced-aafb7ae06b61" />
+<img width="3360" height="1854" alt="566335801-c147dfd9-24a8-47b2-bced-aafb7ae06b61" src="https://github.com/user-attachments/assets/1344c159-01dc-4582-b8f9-55212ba14439" />
 
 **支持自定义 agent 智能体对采集的数据打标签**
-<img width="3358" height="884" alt="image" src="https://github.com/user-attachments/assets/994046c5-88ae-436f-8108-3327108cb2cc" />
+<img width="3358" height="884" alt="566120897-994046c5-88ae-436f-8108-3327108cb2cc" src="https://github.com/user-attachments/assets/f0c59128-f74e-4cb7-84ee-87818743a4b6" />
 
 ## 功能概览
 
@@ -23,12 +23,6 @@
 - **AI 智能体** — 采集完成后自动调用 AI 对内容进行分析、摘要、打标等处理，结果附加到记录上；支持 Claude、OpenAI、DeepSeek、Kimi、GLM、MiniMax、Ollama 等模型提供商，内置预设 Prompt 模板，占位符自动匹配各站点实际字段
 - **通知推送** — 按触发事件（新记录入库 / AI 处理完成 / 任务失败）向 Webhook、邮件、飞书、钉钉、企业微信推送，各渠道结构化配置表单，支持签名验证
 - **工作节点** — 分布式模式下查看 Celery Worker 状态
-
-<img width="3360" height="1958" alt="image" src="https://github.com/user-attachments/assets/db302792-5593-4199-bcad-0982e860ec41" />
-<img width="3360" height="1864" alt="image" src="https://github.com/user-attachments/assets/ce644c00-c8dd-492b-97f1-172516e3d78d" />
-<img width="3360" height="1854" alt="image" src="https://github.com/user-attachments/assets/16158af4-7f2b-4c40-a0cb-fda6c87a9929" />
-<img width="3360" height="2128" alt="image" src="https://github.com/user-attachments/assets/c2860e1c-23f0-4ce5-94de-599f4b9de062" />
-<img width="3360" height="1856" alt="image" src="https://github.com/user-attachments/assets/1236b60d-b682-4327-bbfd-4e6da1f857cf" />
 
 ### 支持平台（opencli 渠道）
 
@@ -367,6 +361,12 @@ BrowserPool（单机：asyncio.Queue / 分布式：Redis BLPOP）
 ├── start.sh             # 原生 shell 启动脚本
 └── .env.example
 ```
+
+<img width="3360" height="1958" alt="565679904-db302792-5593-4199-bcad-0982e860ec41" src="https://github.com/user-attachments/assets/ea9c3b6f-e3f6-4792-a388-9e470bf3de7e" />
+<img width="3360" height="1864" alt="565680032-ce644c00-c8dd-492b-97f1-172516e3d78d" src="https://github.com/user-attachments/assets/c9694c60-90b2-4241-9d8b-5753a7066f8c" />
+<img width="3360" height="1856" alt="566009767-1236b60d-b682-4327-bbfd-4e6da1f857cf" src="https://github.com/user-attachments/assets/05712eda-5f7d-4cb8-b772-2b481b2f9f51" />
+<img width="3360" height="2128" alt="566026018-c2860e1c-23f0-4ce5-94de-599f4b9de062" src="https://github.com/user-attachments/assets/3b965d29-8783-49fc-a58f-30ef88213899" />
+<img width="3358" height="884" alt="566120897-994046c5-88ae-436f-8108-3327108cb2cc" src="https://github.com/user-attachments/assets/e8975aa7-206f-4880-9072-e93d913803d5" />
 
 ## License
 
