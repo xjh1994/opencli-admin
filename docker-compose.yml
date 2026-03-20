@@ -13,7 +13,7 @@ services:
   # ── Infrastructure (only needed for TASK_EXECUTOR=celery) ─────────────────
   redis:
     profiles: ["celery"]
-    image: redis:7-alpine
+    image: ${DOCKER_REGISTRY:-}redis:7-alpine
     volumes:
       - redis_data:/data
     healthcheck:
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: ${DOCKER_REGISTRY:-}postgres:16-alpine
     profiles: ["postgres"]
     ports:
       - "5432:5432"
@@ -145,7 +145,7 @@ services:
   # ── Frontend dev server (Vite HMR) — run with: docker compose --profile dev up frontend-dev
   frontend-dev:
     profiles: ["dev"]
-    image: node:22-alpine
+    image: ${DOCKER_REGISTRY:-}node:22-alpine
     working_dir: /app
     command: sh -c "npm ci --legacy-peer-deps && npm run dev -- --host"
     volumes:
