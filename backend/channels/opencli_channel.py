@@ -113,9 +113,10 @@ async def _collect_via_agent(
         "format": output_format,
         "mode": mode,
     }
+    from backend.config import get_settings
     logger.info("agent dispatch | url=%s site=%s cmd=%s", url, site, command)
     try:
-        async with httpx.AsyncClient(timeout=130) as client:
+        async with httpx.AsyncClient(timeout=get_settings().agent_http_timeout) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
@@ -210,7 +211,8 @@ async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        from backend.config import get_settings
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=get_settings().opencli_timeout)
         return proc.returncode, stdout.decode(), stderr.decode().strip()
     except asyncio.TimeoutError:
         if proc:

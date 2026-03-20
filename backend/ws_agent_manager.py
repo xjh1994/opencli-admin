@@ -56,7 +56,7 @@ async def dispatch_collect(
     args: dict[str, Any],
     output_format: str,
     mode: str,
-    timeout: float = 130.0,
+    timeout: float | None = None,
 ) -> dict[str, Any]:
     """Send a collect task to a WS agent and await the result dict.
 
@@ -64,6 +64,10 @@ async def dispatch_collect(
         RuntimeError: agent is not connected.
         TimeoutError: agent did not respond within *timeout* seconds.
     """
+    if timeout is None:
+        from backend.config import get_settings
+        timeout = float(get_settings().agent_ws_timeout)
+
     ws = _connections.get(agent_url)
     if ws is None:
         raise RuntimeError(f"No active WS connection for agent: {agent_url}")

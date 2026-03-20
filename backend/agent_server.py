@@ -32,6 +32,7 @@ Environment variables:
     OPENCLI_CDP_BIN         Path to opencli 0.9 binary (default: /opt/opencli-cdp/bin/opencli)
     OPENCLI_CDP_ENDPOINT    Default Chrome CDP endpoint (default: http://localhost:19222)
     OPENCLI_DAEMON_PORT     Bridge daemon port (default: 19825)
+    OPENCLI_TIMEOUT         opencli subprocess timeout in seconds (default: 120)
 """
 
 import asyncio
@@ -66,6 +67,8 @@ _AGENT_LABEL = os.environ.get("AGENT_LABEL", socket.gethostname())
 #   ws   — NAT/reverse-channel mode: agent opens WS to center, registration via WS handshake (Phase 2)
 #   off  — disable auto-registration entirely
 _AGENT_REGISTER = os.environ.get("AGENT_REGISTER", "http").lower()
+# opencli subprocess execution timeout in seconds
+_OPENCLI_TIMEOUT = int(os.environ.get("OPENCLI_TIMEOUT", "120"))
 
 
 def _detect_advertise_url() -> str:
@@ -321,7 +324,7 @@ async def collect(req: CollectRequest) -> dict:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_OPENCLI_TIMEOUT)
         rc = proc.returncode
     except asyncio.TimeoutError:
         logger.error("timeout | cmd=%s", " ".join(cmd))

@@ -68,6 +68,14 @@ class Settings(BaseSettings):
             return [ep.strip() for ep in self.agent_pool_endpoints.split(",") if ep.strip()]
         return [self.opencli_cdp_endpoint]
 
+    # Collect timeouts (seconds)
+    # opencli subprocess execution timeout (local mode and agent-side)
+    opencli_timeout: int = 120
+    # HTTP dispatch timeout when center POSTs to a LAN agent (should be > opencli_timeout)
+    agent_http_timeout: int = 130
+    # WS dispatch timeout when center sends a task over a reverse WS channel
+    agent_ws_timeout: int = 130
+
     # Webhooks
     webhook_secret: str = "change-me-webhook-secret"
 
