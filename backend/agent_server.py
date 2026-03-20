@@ -231,6 +231,31 @@ class CollectRequest(BaseModel):
     cdp_endpoint: str = ""
 
 
+async def _cleanup_cdp_tabs(cdp_endpoint: str) -> None:
+    """Close any navigated tabs left open in Chrome after a CDP collect.
+
+    Called after every CDP collect (success or failure) so stale tabs cannot
+    block the next CDP connection attempt.  Only pages with http/https URLs
+    are closed; chrome:// and extension pages are left untouched.
+    """
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{cdp_endpoint}/json/list")
+            tabs = resp.json()
+            for tab in tabs:
+                url = tab.get("url", "")
+                if tab.get("type") == "page" and url.startswith(("http://", "https://")):
+                    tab_id = tab["id"]
+                    try:
+                        await client.get(f"{cdp_endpoint}/json/close/{tab_id}")
+                        logger.info("cleanup: closed tab %s url=%s", tab_id, url[:80])
+                    except Exception:
+                        pass
+    except Exception as exc:
+        logger.warning("cleanup: could not close CDP tabs at %s: %s", cdp_endpoint, exc)
+
+
 def _parse_output(raw: str, fmt: str) -> list[dict]:
     if fmt == "json":
         start = next((i for i, c in enumerate(raw) if c in "{["), None)
@@ -288,6 +313,7 @@ async def collect(req: CollectRequest) -> dict:
         env["OPENCLI_CDP_ENDPOINT"] = cdp_ep
         logger.info("cdp | cmd=%s cdp=%s", " ".join(cmd), cdp_ep)
 
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -299,10 +325,20 @@ async def collect(req: CollectRequest) -> dict:
         rc = proc.returncode
     except asyncio.TimeoutError:
         logger.error("timeout | cmd=%s", " ".join(cmd))
+        if proc:
+            proc.kill()
+            await proc.wait()
+        if mode == "cdp":
+            await _cleanup_cdp_tabs(cdp_ep)
         return {"success": False, "items": [], "error": "opencli timed out after 120s"}
     except Exception as exc:
         logger.exception("subprocess error | %s", exc)
+        if mode == "cdp":
+            await _cleanup_cdp_tabs(cdp_ep)
         return {"success": False, "items": [], "error": str(exc)}
+
+    if mode == "cdp":
+        await _cleanup_cdp_tabs(cdp_ep)
 
     stderr_str = stderr.decode().strip()
     stdout_str = stdout.decode()

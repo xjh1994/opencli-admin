@@ -172,8 +172,37 @@ async def _collect_via_ws_agent(
     return ChannelResult.ok(items, site=site, command=command)
 
 
+async def _cleanup_cdp_tabs(cdp_endpoint: str) -> None:
+    """Close any navigated tabs left open in Chrome after a CDP collect.
+
+    Called after every CDP collect (success or failure) so stale tabs cannot
+    block the next CDP connection attempt.  Only pages with http/https URLs
+    are closed; chrome:// and extension pages are left untouched.
+    """
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{cdp_endpoint}/json/list")
+            tabs = resp.json()
+            for tab in tabs:
+                url = tab.get("url", "")
+                if tab.get("type") == "page" and url.startswith(("http://", "https://")):
+                    tab_id = tab["id"]
+                    try:
+                        await client.get(f"{cdp_endpoint}/json/close/{tab_id}")
+                        logger.info("cleanup: closed tab %s url=%s", tab_id, url[:80])
+                    except Exception:
+                        pass
+    except Exception as exc:
+        logger.warning("cleanup: could not close CDP tabs at %s: %s", cdp_endpoint, exc)
+
+
 async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
-    """Run opencli subprocess, return (returncode, stdout, stderr)."""
+    """Run opencli subprocess, return (returncode, stdout, stderr).
+
+    Kills the process on timeout before re-raising so it doesn't linger.
+    """
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -184,6 +213,9 @@ async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         return proc.returncode, stdout.decode(), stderr.decode().strip()
     except asyncio.TimeoutError:
+        if proc:
+            proc.kill()
+            await proc.wait()
         raise
     except FileNotFoundError:
         raise
@@ -253,13 +285,20 @@ class OpenCLIChannel(AbstractChannel):
                 returncode, stdout_text, stderr_text = await _run_opencli(cmd, env)
             except asyncio.TimeoutError:
                 logger.error("opencli timeout | cmd=%s", " ".join(cmd))
+                if mode == "cdp":
+                    await _cleanup_cdp_tabs(cdp_endpoint)
                 return ChannelResult.fail("opencli command timed out after 120s")
             except FileNotFoundError:
                 logger.error("opencli binary not found: %s", opencli_bin)
                 return ChannelResult.fail(f"opencli binary not found: {opencli_bin}")
             except Exception as exc:
                 logger.exception("opencli subprocess error | %s", exc)
+                if mode == "cdp":
+                    await _cleanup_cdp_tabs(cdp_endpoint)
                 return ChannelResult.fail(f"Failed to run opencli: {exc}")
+
+            if mode == "cdp":
+                await _cleanup_cdp_tabs(cdp_endpoint)
 
             if stderr_text:
                 logger.warning("opencli stderr | %s", stderr_text[:500])
