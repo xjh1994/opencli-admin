@@ -5,9 +5,9 @@
 #   ./scripts/chrome-pool.sh start [N]   Start N Chrome instances (default: 3)
 #   ./scripts/chrome-pool.sh stop        Stop all extra instances (keeps instance 1)
 #   ./scripts/chrome-pool.sh status      Show running instances + endpoints
-#   ./scripts/chrome-pool.sh endpoints   Print CHROME_POOL_ENDPOINTS value only
+#   ./scripts/chrome-pool.sh endpoints   Print AGENT_POOL_ENDPOINTS value only
 #
-# After running "start N", copy the printed CHROME_POOL_ENDPOINTS line into .env
+# After running "start N", copy the printed AGENT_POOL_ENDPOINTS line into .env
 # so the API picks up all instances on next restart.
 #
 # Each extra instance (2..N) gets:
@@ -151,7 +151,7 @@ cmd_start() {
   echo ""
   echo "Done. Add to .env and restart the API:"
   echo ""
-  echo "  CHROME_POOL_ENDPOINTS=$(build_endpoints)"
+  echo "  AGENT_POOL_ENDPOINTS=$(build_endpoints)"
   echo ""
   echo "Login each new instance via noVNC to authenticate site sessions:"
   for (( i=2; i<=N; i++ )); do
@@ -196,7 +196,7 @@ cmd_status() {
   local eps
   eps=$(build_endpoints)
   if [[ -n "$eps" ]]; then
-    echo "CHROME_POOL_ENDPOINTS=${eps}"
+    echo "AGENT_POOL_ENDPOINTS=${eps}"
   else
     echo "No running instances detected."
   fi

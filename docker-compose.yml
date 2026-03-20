@@ -59,7 +59,7 @@ services:
       # opencli CDP: single-instance fallback
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
       # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
-      CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
+      AGENT_POOL_ENDPOINTS: ${AGENT_POOL_ENDPOINTS:-}
       # Passed to the chrome pool manager so it can name containers/networks correctly
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-opencli-admin}
     volumes:
@@ -67,7 +67,7 @@ services:
       - ./backend:/app/backend
       # Docker socket: lets the API start/stop Chrome pool containers
       - /var/run/docker.sock:/var/run/docker.sock
-      # .env mount: lets the API persist CHROME_POOL_ENDPOINTS after pool changes
+      # .env mount: lets the API persist AGENT_POOL_ENDPOINTS after pool changes
       - ./.env:/app/.env:rw
     ports:
       - "${API_PORT:-8031}:8000"
@@ -93,7 +93,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
-      CHROME_POOL_ENDPOINTS: ${CHROME_POOL_ENDPOINTS:-}
+      AGENT_POOL_ENDPOINTS: ${AGENT_POOL_ENDPOINTS:-}
     depends_on:
       redis:
         condition: service_healthy

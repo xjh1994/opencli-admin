@@ -154,7 +154,7 @@ async def add_chrome_instance(
 
     all_endpoints = ",".join(pool.endpoints)
     try:
-        _update_env_file("CHROME_POOL_ENDPOINTS", all_endpoints)
+        _update_env_file("AGENT_POOL_ENDPOINTS", all_endpoints)
     except Exception as exc:
         logger.warning("chrome-pool: could not update .env: %s", exc)
 
@@ -189,7 +189,7 @@ async def remove_chrome_instance(n: int) -> ApiResponse:
 
     all_endpoints = ",".join(ep for ep in pool.endpoints if ep != endpoint)
     try:
-        _update_env_file("CHROME_POOL_ENDPOINTS", all_endpoints)
+        _update_env_file("AGENT_POOL_ENDPOINTS", all_endpoints)
     except Exception as exc:
         logger.warning("chrome-pool: could not update .env: %s", exc)
 

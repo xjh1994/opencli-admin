@@ -34,7 +34,7 @@ settings = get_settings()
 
 
 def _read_chrome_endpoints() -> list[str]:
-    """Read CHROME_POOL_ENDPOINTS from the .env file directly.
+    """Read AGENT_POOL_ENDPOINTS from the .env file directly.
 
     `docker restart` reuses the env vars baked in at container creation time,
     so the env var value is stale after the chrome-pool API updates .env.
@@ -43,7 +43,7 @@ def _read_chrome_endpoints() -> list[str]:
     try:
         from dotenv import dotenv_values
         env = dotenv_values("/app/.env")
-        raw = env.get("CHROME_POOL_ENDPOINTS", "").strip()
+        raw = env.get("AGENT_POOL_ENDPOINTS", "").strip()
         if raw:
             return [ep.strip() for ep in raw.split(",") if ep.strip()]
     except Exception:
@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
     _configure_logging()
 
     # Initialise Chrome browser pool.
-    # Read CHROME_POOL_ENDPOINTS directly from the .env file so that updates
+    # Read AGENT_POOL_ENDPOINTS directly from the .env file so that updates
     # written by the chrome-pool API survive a plain `docker restart` — docker
     # restart reuses the env vars injected at container creation time, so the
     # pydantic-settings value (which comes from those env vars) would be stale.
