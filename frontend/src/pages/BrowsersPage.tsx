@@ -292,7 +292,7 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
         {nodeType === 'agent' && (
           <div className="mb-5">
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">
-              Agent 地址 <span className="text-red-500">*</span>
+              Agent 地址 <span className="text-gray-400 font-normal">（可稍后在卡片中配置）</span>
             </label>
             <input
               type="url"
@@ -321,14 +321,14 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
         <div className="flex flex-col gap-2">
           <button
             onClick={() => onConfirm(count, true, mode, nodeType, agentUrl)}
-            disabled={isPending || (nodeType === 'agent' && !agentUrl.trim())}
+            disabled={isPending}
             className="w-full px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             {isPending ? t('browsers.adding') : t('browsers.createAndRestart')}
           </button>
           <button
             onClick={() => onConfirm(count, false, mode, nodeType, agentUrl)}
-            disabled={isPending || (nodeType === 'agent' && !agentUrl.trim())}
+            disabled={isPending}
             className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
             {t('browsers.createLaterRestart')}
