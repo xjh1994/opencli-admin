@@ -102,6 +102,63 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
 IMAGE_TAG=0.2.0 docker compose up -d
 ```
 
+**浏览器控制模式**
+
+Chrome 实例支持以下控制模式，在「浏览器管理」页面按实例配置，无需重启容器即可切换：
+
+| 模式 | 原理 | 适用场景 | 状态 |
+|------|------|----------|------|
+| **Bridge** | opencli 1.0 + daemon.js + opencli Browser Bridge 扩展 | 需要账号登录的站点（B站、小红书、微博等），Cookie 持久保存 | ✅ 已支持 |
+| **CDP** | opencli 0.9 + Playwright 直连 Chrome DevTools Protocol | 无需登录的公开页面，链路更简单 | ✅ 已支持 |
+| **Playwright MCP Bridge** | Playwright MCP Bridge 扩展（待接入） | — | 🚧 规划中 |
+
+扩展（opencli Browser Bridge）随容器启动自动加载，无需手动安装。
+
+**多实例 Chrome 并行采集**
+
+默认启动单个 Chrome 实例（chrome-1）。推荐通过「浏览器管理」页面动态新增实例，新增时可选择控制模式，无需重启。
+<img width="223" height="366" alt="566655820-29bd05db-40bc-4cd1-aca9-d5dbbb13c714 (1)" src="https://github.com/user-attachments/assets/5e37776c-22ba-49e6-b300-81ba97cf7471" />
+
+
+如界面操作不可用，也可通过脚本手动管理：
+
+```bash
+# 启动 3 个 Chrome 实例（含默认的 chrome-1，共扩展到 3 个）
+./scripts/chrome-pool.sh start 3
+
+# 查看所有实例状态
+./scripts/chrome-pool.sh status
+
+# 缩减回单实例（多余的自动停止）
+./scripts/chrome-pool.sh start 1
+
+# 停止所有额外实例
+./scripts/chrome-pool.sh stop
+```
+
+将输出的 `CHROME_POOL_ENDPOINTS` 写入 `.env`，重启 API 即生效：
+
+```bash
+docker compose restart api
+```
+
+每个实例拥有独立的浏览器 Profile 和 noVNC 端口（从 `NOVNC_PORT` 递增），首次启动后需分别通过 noVNC 登录各平台账号。
+
+**Chrome 实例路由**
+
+多实例模式下，可以将不同数据源的采集任务路由到指定的 Chrome 实例，实现登录态隔离（例如：小红书账号只登录在 chrome-2，Twitter 账号只登录在 chrome-3）。
+
+路由优先级（高 → 低）：
+
+| 优先级 | 入口 | 作用 |
+|--------|------|------|
+| 1（最高） | 数据源列表 → 触发 → Chrome 实例 | 仅本次手动触发使用，一次性覆盖 |
+| 2 | 定时计划 → 编辑计划 → Chrome 实例 | 该计划每次触发固定使用指定实例 |
+| 3 | **浏览器管理** → 站点绑定 | 按站点自动路由，无需每条计划单独配置 |
+| 4（兜底） | — | 自动分配当前空闲实例（负载均衡） |
+
+**推荐工作流**：在「浏览器管理」页将站点绑定到对应实例一次，之后所有涉及该站点的任务均自动路由，无需逐条配置计划。
+
 **停止**
 
 ```bash
