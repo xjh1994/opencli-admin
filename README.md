@@ -47,7 +47,7 @@ Mac Mini A（主控）              Mac Mini B                 Mac Mini C
 └──────────────────┘           └─────────────────┘       └─────────────────┘
 ```
 
-B / C 两台 Mac Mini 用 Shell 脚本一键安装 Agent（无需 Docker），WS 反向通道注册，NAT / 跨网段均可穿透。在「节点管理」按站点绑定 Agent，任务自动路由到对应机器。
+B / C 两台 Mac Mini 用 Shell / Docker 脚本一键安装 Agent，WebService 通道注册，NAT / 跨网段均可穿透。在「节点管理」按站点绑定 Agent，任务自动路由到对应机器。
 
 ---
 
