@@ -18,32 +18,12 @@ from backend.channels.registry import register_channel
 logger = logging.getLogger(__name__)
 
 _DAEMON_PORT = 19825
-# Env-var overrides (explicit wins always).
-_BRIDGE_BIN = os.environ.get("OPENCLI_BRIDGE_BIN", "")
-_CDP_BIN    = os.environ.get("OPENCLI_CDP_BIN",    "")
-# Docker image fixed paths (fallback when PATH has no opencli).
-_DOCKER_BRIDGE = "/opt/opencli-bridge/bin/opencli"
-_DOCKER_CDP    = "/opt/opencli-cdp/bin/opencli"
+# Binary to invoke. Override with OPENCLI_BIN env var if needed.
+_OPENCLI_BIN = os.environ.get("OPENCLI_BIN", "opencli")
 
 
-def _resolve_bin(mode: str) -> str:
-    """Resolve the opencli binary path for *mode* ('bridge' or 'cdp').
-
-    Priority:
-      1. Env var OPENCLI_BRIDGE_BIN / OPENCLI_CDP_BIN  (explicit override)
-      2. 'opencli' on PATH  (npm global install, npx, any standard install)
-      3. Docker fixed paths  (/opt/opencli-{bridge,cdp}/bin/opencli)
-    """
-    env_override = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
-    if env_override:
-        return env_override
-
-    path_bin = shutil.which("opencli")
-    if path_bin:
-        return path_bin
-
-    docker_bin = _DOCKER_BRIDGE if mode == "bridge" else _DOCKER_CDP
-    return docker_bin
+def _resolve_bin(mode: str) -> str:  # noqa: ARG001 — mode unused, kept for call-site compat
+    return _OPENCLI_BIN
 
 
 def _parse_json(raw: str) -> list[dict]:
@@ -378,8 +358,4 @@ class OpenCLIChannel(AbstractChannel):
         return errors
 
     async def health_check(self) -> bool:
-        return (
-            shutil.which("opencli") is not None
-            or os.path.isfile(_DOCKER_BRIDGE)
-            or os.path.isfile(_DOCKER_CDP)
-        )
+        return shutil.which(_OPENCLI_BIN) is not None or os.path.isfile(_OPENCLI_BIN)

@@ -56,21 +56,11 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("agent_server")
 
-_BRIDGE_BIN    = os.environ.get("OPENCLI_BRIDGE_BIN", "")
-_CDP_BIN       = os.environ.get("OPENCLI_CDP_BIN",    "")
-_DOCKER_BRIDGE = "/opt/opencli-bridge/bin/opencli"
-_DOCKER_CDP    = "/opt/opencli-cdp/bin/opencli"
+_OPENCLI_BIN = os.environ.get("OPENCLI_BIN", "opencli")
 
 
-def _resolve_bin(mode: str) -> str:
-    """Resolve opencli binary. Priority: env var → PATH → Docker fixed path."""
-    env_override = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
-    if env_override:
-        return env_override
-    path_bin = shutil.which("opencli")
-    if path_bin:
-        return path_bin
-    return _DOCKER_BRIDGE if mode == "bridge" else _DOCKER_CDP
+def _resolve_bin(mode: str) -> str:  # noqa: ARG001
+    return _OPENCLI_BIN
 _DEFAULT_CDP = os.environ.get("OPENCLI_CDP_ENDPOINT", "http://localhost:19222")
 _DAEMON_PORT = int(os.environ.get("OPENCLI_DAEMON_PORT", "19825"))
 _AGENT_PORT = int(os.environ.get("AGENT_PORT", "19823"))
@@ -334,14 +324,11 @@ def _parse_output(raw: str, fmt: str) -> list[dict]:
 
 @app.get("/health")
 def health() -> dict:
-    bridge_bin = _resolve_bin("bridge")
-    cdp_bin    = _resolve_bin("cdp")
+    bin_path = _OPENCLI_BIN
     return {
         "status": "ok",
-        "bridge_bin": bridge_bin,
-        "bridge_bin_exists": os.path.isfile(bridge_bin),
-        "cdp_bin": cdp_bin,
-        "cdp_bin_exists": os.path.isfile(cdp_bin),
+        "opencli_bin": bin_path,
+        "opencli_bin_exists": shutil.which(bin_path) is not None or os.path.isfile(bin_path),
         "default_cdp_endpoint": _DEFAULT_CDP,
     }
 
