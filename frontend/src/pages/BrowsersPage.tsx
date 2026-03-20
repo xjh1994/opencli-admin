@@ -114,7 +114,7 @@ function StatusBadge({ containerStatus, available, isStarting }: StatusBadgeProp
 
 interface AddInstanceModalProps {
   currentCount: number
-  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp', nodeType: 'local' | 'agent', agentUrl: string) => void
+  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp', agentUrl: string, agentProtocol: 'http' | 'ws' | '') => void
   onClose: () => void
   isPending: boolean
 }
@@ -148,35 +148,12 @@ const MODE_OPTIONS: {
   },
 ]
 
-const NODE_TYPE_OPTIONS: {
-  value: 'local' | 'agent'
-  label: string
-  badge: string
-  badgeCls: string
-  desc: string
-}[] = [
-  {
-    value: 'local',
-    label: '本地实例',
-    badge: 'Local',
-    badgeCls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-    desc: 'Chrome 容器运行在与 API 同一个 Docker 网络中，API 直接驱动浏览器。适合单机部署。',
-  },
-  {
-    value: 'agent',
-    label: '边缘节点',
-    badge: 'Agent',
-    badgeCls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-    desc: 'Chrome 运行在远程宿主机上，Agent 主动连接中心 API（WebSocket 反向通道）。适合分布式采集。',
-  },
-]
-
 function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddInstanceModalProps) {
   const { t } = useTranslation()
   const [count, setCount] = useState(1)
   const [mode, setMode] = useState<'bridge' | 'cdp'>('bridge')
-  const [nodeType, setNodeType] = useState<'local' | 'agent'>('local')
   const [agentUrl, setAgentUrl] = useState('')
+  const [agentProtocol, setAgentProtocol] = useState<'http' | 'ws' | ''>('')
 
   const preview = Array.from({ length: count }, (_, i) => {
     const N = currentCount + 1 + i
@@ -255,53 +232,56 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
           </div>
         </div>
 
-        {/* Node type selector */}
+        {/* Agent URL + protocol (optional — leave empty for local instance) */}
         <div className="mb-5">
-          <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">节点类型</p>
-          <div className="flex gap-2">
-            {NODE_TYPE_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                className={`flex-1 flex gap-2 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
-                  nodeType === opt.value
-                    ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
-                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="instance-node-type"
-                  value={opt.value}
-                  checked={nodeType === opt.value}
-                  onChange={() => setNodeType(opt.value)}
-                  className="accent-blue-600 shrink-0 mt-0.5"
-                />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-xs font-medium dark:text-white">{opt.label}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${opt.badgeCls}`}>{opt.badge}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{opt.desc}</p>
-                </div>
-              </label>
-            ))}
-          </div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">
+            Agent 地址 <span className="text-gray-400 font-normal">（可选，留空则为本地实例）</span>
+          </label>
+          <input
+            type="url"
+            value={agentUrl}
+            onChange={(e) => setAgentUrl(e.target.value)}
+            placeholder="http://192.168.1.100:19823"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+          />
+          <p className="mt-1 text-xs text-gray-400">填写后须选择连接协议（需配合 COLLECTION_MODE=agent）</p>
         </div>
 
-        {/* Agent URL (only for agent node type) */}
-        {nodeType === 'agent' && (
+        {/* Agent protocol (only shown when agent_url is filled) */}
+        {agentUrl && (
           <div className="mb-5">
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">
-              Agent 地址 <span className="text-gray-400 font-normal">（可稍后在卡片中配置）</span>
-            </label>
-            <input
-              type="url"
-              value={agentUrl}
-              onChange={(e) => setAgentUrl(e.target.value)}
-              placeholder="http://192.168.1.100:19823"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-            />
-            <p className="mt-1 text-xs text-gray-400">边缘节点上运行 <code className="font-mono bg-gray-100 dark:bg-gray-700 px-1 rounded">python -m backend.agent_server</code> 后的地址</p>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">连接协议</p>
+            <div className="flex gap-2">
+              {([
+                { value: 'http', label: 'HTTP', desc: '局域网 / 代理可达，无长连接' },
+                { value: 'ws', label: 'WS', desc: '反向 WebSocket，用于无法主动连通的节点（Phase 2）', disabled: true },
+              ] as const).map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex-1 flex gap-2 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
+                    opt.disabled
+                      ? 'opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-600'
+                      : agentProtocol === opt.value
+                        ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="agent-protocol"
+                    value={opt.value}
+                    checked={agentProtocol === opt.value}
+                    onChange={() => !opt.disabled && setAgentProtocol(opt.value)}
+                    disabled={opt.disabled}
+                    className="accent-blue-600 shrink-0 mt-0.5"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium dark:text-white">{opt.label}</span>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
           </div>
         )}
 
@@ -320,15 +300,15 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
         {/* Actions */}
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => onConfirm(count, true, mode, nodeType, agentUrl)}
-            disabled={isPending}
+            onClick={() => onConfirm(count, true, mode, agentUrl, agentProtocol)}
+            disabled={isPending || (!!agentUrl && !agentProtocol)}
             className="w-full px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             {isPending ? t('browsers.adding') : t('browsers.createAndRestart')}
           </button>
           <button
-            onClick={() => onConfirm(count, false, mode, nodeType, agentUrl)}
-            disabled={isPending}
+            onClick={() => onConfirm(count, false, mode, agentUrl, agentProtocol)}
+            disabled={isPending || (!!agentUrl && !agentProtocol)}
             className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
             {t('browsers.createLaterRestart')}
@@ -531,9 +511,11 @@ function InstanceCard({
   const { url, available, container_status: containerStatus, novnc_port: novncPort } = endpoint
   const [editingAgentUrl, setEditingAgentUrl] = useState(false)
   const [agentUrlDraft, setAgentUrlDraft] = useState(endpoint.agent_url ?? '')
+  const [agentProtocolDraft, setAgentProtocolDraft] = useState<'http' | 'ws'>(endpoint.agent_protocol === 'ws' ? 'ws' : 'http')
 
   const saveAgentUrlMutation = useMutation({
-    mutationFn: (agent_url: string) => updateChromeInstanceConfig(url, { agent_url: agent_url || null }),
+    mutationFn: ({ agent_url, agent_protocol }: { agent_url: string; agent_protocol: string }) =>
+      updateChromeInstanceConfig(url, { agent_url: agent_url || null, agent_protocol: agent_protocol || null }),
     onSuccess: () => { setEditingAgentUrl(false); onConfigChanged() },
   })
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
@@ -556,7 +538,7 @@ function InstanceCard({
           <ExternalLink size={11} />
         </a>
         <div className="ml-auto flex items-center gap-2">
-          {endpoint.node_type === 'agent' && (
+          {!!endpoint.agent_url && (
             <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
               Agent
             </span>
@@ -575,10 +557,10 @@ function InstanceCard({
         </div>
       </div>
 
-      {/* Agent URL row (agent nodes only) */}
-      {endpoint.node_type === 'agent' && (
-        <div className="mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
-          {editingAgentUrl ? (
+      {/* Agent URL row */}
+      <div className="mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
+        {editingAgentUrl ? (
+          <div className="space-y-2">
             <div className="flex gap-2 items-center">
               <input
                 autoFocus
@@ -588,38 +570,61 @@ function InstanceCard({
                 placeholder="http://192.168.1.100:19823"
                 className="flex-1 px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
               />
+            </div>
+            {agentUrlDraft && (
+              <div className="flex gap-2">
+                {(['http', 'ws'] as const).map((p) => (
+                  <label key={p} className={`flex items-center gap-1.5 px-2 py-1 rounded border cursor-pointer text-xs transition-colors ${
+                    agentProtocolDraft === p
+                      ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300'
+                  } ${p === 'ws' ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                    <input type="radio" name={`protocol-${url}`} value={p} checked={agentProtocolDraft === p}
+                      onChange={() => p !== 'ws' && setAgentProtocolDraft(p)} disabled={p === 'ws'}
+                      className="accent-blue-600" />
+                    {p === 'http' ? 'HTTP（局域网 / 代理）' : 'WS（Phase 2）'}
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
               <button
-                onClick={() => saveAgentUrlMutation.mutate(agentUrlDraft)}
+                onClick={() => saveAgentUrlMutation.mutate({ agent_url: agentUrlDraft, agent_protocol: agentProtocolDraft })}
                 disabled={saveAgentUrlMutation.isPending}
                 className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 保存
               </button>
               <button
-                onClick={() => { setEditingAgentUrl(false); setAgentUrlDraft(endpoint.agent_url ?? '') }}
+                onClick={() => { setEditingAgentUrl(false); setAgentUrlDraft(endpoint.agent_url ?? ''); setAgentProtocolDraft(endpoint.agent_protocol === 'ws' ? 'ws' : 'http') }}
                 className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 取消
               </button>
             </div>
-          ) : (
-            <button
-              onClick={() => { setAgentUrlDraft(endpoint.agent_url ?? ''); setEditingAgentUrl(true) }}
-              className="flex items-center gap-1.5 text-xs group"
-              title="点击编辑 Agent 地址"
-            >
-              <span className="text-gray-400 shrink-0">Agent:</span>
-              {endpoint.agent_url ? (
-                <span className="font-mono text-blue-600 dark:text-blue-400 group-hover:underline truncate max-w-[200px]">
+          </div>
+        ) : (
+          <button
+            onClick={() => { setAgentUrlDraft(endpoint.agent_url ?? ''); setAgentProtocolDraft(endpoint.agent_protocol === 'ws' ? 'ws' : 'http'); setEditingAgentUrl(true) }}
+            className="flex items-center gap-1.5 text-xs group"
+            title="点击编辑 Agent 地址"
+          >
+            <span className="text-gray-400 shrink-0">Agent:</span>
+            {endpoint.agent_url ? (
+              <>
+                <span className="font-mono text-blue-600 dark:text-blue-400 group-hover:underline truncate max-w-[160px]">
                   {endpoint.agent_url}
                 </span>
-              ) : (
-                <span className="text-gray-400 italic group-hover:text-blue-500">未配置 — 点击设置</span>
-              )}
-            </button>
-          )}
-        </div>
-      )}
+                <span className="px-1 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 font-mono">
+                  {endpoint.agent_protocol ?? 'http'}
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-400 italic group-hover:text-blue-500">未配置 — 点击设置</span>
+            )}
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-2 min-h-[2rem]">
         {bindings.map((b) => (
@@ -676,7 +681,7 @@ export default function BrowsersPage() {
   })
 
   const addInstanceMutation = useMutation({
-    mutationFn: ({ count, mode, nodeType, agentUrl }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp'; nodeType: 'local' | 'agent'; agentUrl: string }) => addChromeInstance(count, mode, nodeType, agentUrl),
+    mutationFn: ({ count, mode, agentUrl, agentProtocol }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp'; agentUrl: string; agentProtocol: 'http' | 'ws' | '' }) => addChromeInstance(count, mode, agentUrl, agentProtocol),
     onSuccess: (result, { withRestart }) => {
       setShowAddModal(false)
       invalidatePool()
@@ -829,7 +834,7 @@ export default function BrowsersPage() {
       {showAddModal && (
         <AddInstanceModal
           currentCount={endpoints.length}
-          onConfirm={(count, withRestart, mode, nodeType, agentUrl) => addInstanceMutation.mutate({ count, withRestart, mode, nodeType, agentUrl })}
+          onConfirm={(count, withRestart, mode, agentUrl, agentProtocol) => addInstanceMutation.mutate({ count, withRestart, mode, agentUrl, agentProtocol })}
           onClose={() => { if (!addInstanceMutation.isPending) setShowAddModal(false) }}
           isPending={addInstanceMutation.isPending}
         />

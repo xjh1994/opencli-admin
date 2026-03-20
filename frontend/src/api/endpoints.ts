@@ -160,15 +160,16 @@ export const createBrowserBinding = (data: { browser_endpoint: string; site: str
 export const deleteBrowserBinding = (id: string) =>
   apiClient.delete<ApiResponse<null>>(`/browsers/bindings/${id}`).then((r) => r.data)
 
-export const addChromeInstance = (count = 1, mode: 'bridge' | 'cdp' = 'bridge', node_type: 'local' | 'agent' = 'local', agent_url = '') => {
-  const params = new URLSearchParams({ count: String(count), mode, node_type })
+export const addChromeInstance = (count = 1, mode: 'bridge' | 'cdp' = 'bridge', agent_url = '', agent_protocol: 'http' | 'ws' | '' = '') => {
+  const params = new URLSearchParams({ count: String(count), mode })
   if (agent_url) params.set('agent_url', agent_url)
+  if (agent_protocol) params.set('agent_protocol', agent_protocol)
   return apiClient.post<ApiResponse<{ created: { endpoint: string; novnc_port: number }[]; total: number }>>(`/browsers/chrome-instances?${params}`).then((r) => r.data.data)
 }
 
-export const updateChromeInstanceConfig = (endpoint: string, data: { mode?: string; node_type?: string; agent_url?: string | null }) => {
+export const updateChromeInstanceConfig = (endpoint: string, data: { mode?: string; agent_url?: string | null; agent_protocol?: string | null }) => {
   const b64 = btoa(endpoint).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-  return apiClient.patch<ApiResponse<{ id: string; endpoint: string; mode: string; node_type: string; agent_url: string | null }>>(`/browsers/instances/${b64}`, data).then((r) => r.data.data)
+  return apiClient.patch<ApiResponse<{ id: string; endpoint: string; mode: string; agent_url: string | null; agent_protocol: string | null }>>(`/browsers/instances/${b64}`, data).then((r) => r.data.data)
 }
 
 export const removeChromeInstance = (n: number) =>

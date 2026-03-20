@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
     )
     await browser_pool.ensure_ready()
 
-    # Sync browser instance modes and node_types from DB into pool memory
+    # Sync browser instance modes and agent_urls from DB into pool memory
     from backend.database import AsyncSessionLocal
     from backend.models.browser import BrowserInstance
     from backend.browser_pool import LocalBrowserPool
@@ -84,8 +84,8 @@ async def lifespan(app: FastAPI):
             if inst.endpoint in pool.endpoints:
                 pool.set_mode(inst.endpoint, inst.mode)
                 if isinstance(pool, LocalBrowserPool):
-                    pool.set_node_type(inst.endpoint, inst.node_type)
                     pool.set_agent_url(inst.endpoint, inst.agent_url)
+                    pool.set_agent_protocol(inst.endpoint, inst.agent_protocol)
 
     # Mark stale pending/running tasks as failed (lost on previous restart)
     from backend.models.task import CollectionTask

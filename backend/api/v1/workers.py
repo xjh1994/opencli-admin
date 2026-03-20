@@ -79,8 +79,8 @@ async def chrome_pool_status() -> ApiResponse:
             "novnc_port": _novnc_port(ep, base_port),
             "container_status": _container_status(urlparse(ep).hostname or ""),
             "mode": pool.get_mode(ep),
-            "node_type": pool.get_node_type(ep) if isinstance(pool, LocalBrowserPool) else "local",
             "agent_url": pool.get_agent_url(ep) if isinstance(pool, LocalBrowserPool) else None,
+            "agent_protocol": pool.get_agent_protocol(ep) if isinstance(pool, LocalBrowserPool) else None,
         }
         for ep in pool.endpoints
     ]

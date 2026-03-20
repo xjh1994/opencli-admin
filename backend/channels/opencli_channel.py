@@ -173,19 +173,27 @@ class OpenCLIChannel(AbstractChannel):
         env = os.environ.copy()
 
         from backend.browser_pool import get_pool, LocalBrowserPool
+        from backend.config import get_settings
         pool = get_pool()
+        settings = get_settings()
 
         async with pool.acquire(endpoint=chrome_endpoint) as cdp_endpoint:
             mode = pool.get_mode(cdp_endpoint)
 
-            # LAN Agent mode: POST to remote agent server, skip local opencli
-            if isinstance(pool, LocalBrowserPool):
-                node_type = pool.get_node_type(cdp_endpoint)
-                agent_url = pool.get_agent_url(cdp_endpoint)
-                if node_type == "agent" and agent_url:
+            # Agent mode: dispatch to remote edge node
+            if settings.collection_mode == "agent":
+                protocol = pool.get_agent_protocol(cdp_endpoint) if isinstance(pool, LocalBrowserPool) else "http"
+                agent_url = pool.get_agent_url(cdp_endpoint) or cdp_endpoint
+                if protocol == "http":
                     return await _collect_via_agent(
                         agent_url, site, command, args, output_format, mode
                     )
+                elif protocol == "ws":
+                    logger.error("WS agent protocol not yet implemented")
+                    return ChannelResult.fail("WS agent protocol not yet implemented (Phase 2)")
+                else:
+                    logger.error("Unknown agent_protocol %r for endpoint %s", protocol, cdp_endpoint)
+                    return ChannelResult.fail(f"Unknown agent_protocol: {protocol!r}")
 
             opencli_bin = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
 

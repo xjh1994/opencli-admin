@@ -45,9 +45,10 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
 
-    # Collection mode: "local" (default, API directly drives Chrome containers)
-    # or "agent" (distributed edge nodes; each Chrome node runs its own opencli
-    # instance and POSTs results back / maintains a persistent WS to the center).
+    # Collection mode:
+    # local — default; API directly drives Chrome containers in the same Docker network
+    # agent — distributed edge nodes; collection is dispatched to remote agent servers
+    #         each agent runs opencli locally and returns results via HTTP or WS
     collection_mode: Literal["local", "agent"] = "local"
 
     # Agent pool: comma-separated agent/CDP endpoint URLs.

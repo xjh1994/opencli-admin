@@ -86,8 +86,8 @@ def _update_env_file(key: str, value: str, path: str = "/app/.env") -> None:
 async def add_chrome_instance(
     count: int = 1,
     mode: str = "bridge",
-    node_type: str = "local",
     agent_url: str = "",
+    agent_protocol: str = "",
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse:
     """Start one or more new Chrome instances (chrome-N) and hot-add them to the pool."""
@@ -99,9 +99,10 @@ async def add_chrome_instance(
         raise HTTPException(status_code=400, detail="count must be between 1 and 10")
     if mode not in ("bridge", "cdp"):
         raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
-    if node_type not in ("local", "agent"):
-        raise HTTPException(status_code=400, detail="node_type must be 'local' or 'agent'")
     clean_agent_url = agent_url.strip() or None
+    clean_agent_protocol = agent_protocol.strip() or None
+    if clean_agent_protocol and clean_agent_protocol not in ("http", "ws"):
+        raise HTTPException(status_code=400, detail="agent_protocol must be 'http' or 'ws'")
 
     pool = get_pool()
     project = _project_name()
@@ -147,19 +148,19 @@ async def add_chrome_instance(
             pool.add_endpoint(new_endpoint)
         pool.set_mode(new_endpoint, mode)
         if isinstance(pool, LocalBrowserPool):
-            pool.set_node_type(new_endpoint, node_type)
             pool.set_agent_url(new_endpoint, clean_agent_url)
+            pool.set_agent_protocol(new_endpoint, clean_agent_protocol)
 
-        # Persist mode, node_type, agent_url to DB
+        # Persist to DB
         result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == new_endpoint))
         inst = result.scalar_one_or_none()
         if inst:
             inst.mode = mode
-            inst.node_type = node_type
             inst.agent_url = clean_agent_url
+            inst.agent_protocol = clean_agent_protocol
         else:
-            inst = BrowserInstance(endpoint=new_endpoint, mode=mode, node_type=node_type,
-                                   agent_url=clean_agent_url, label="")
+            inst = BrowserInstance(endpoint=new_endpoint, mode=mode,
+                                   agent_url=clean_agent_url, agent_protocol=clean_agent_protocol, label="")
             db.add(inst)
 
         created.append({"endpoint": new_endpoint, "novnc_port": novnc_port})
@@ -179,9 +180,10 @@ async def add_chrome_instance(
 
 
 class AgentRegisterRequest(BaseModel):
-    agent_url: str          # e.g. http://192.168.1.100:19823
-    mode: str = "bridge"    # bridge | cdp
+    agent_url: str                  # e.g. http://192.168.1.100:19823
+    mode: str = "bridge"            # bridge | cdp
     label: str = ""
+    agent_protocol: str = "http"    # http | ws
 
 
 @router.post("/agents/register", response_model=ApiResponse[BrowserInstanceRead])
@@ -202,6 +204,8 @@ async def register_agent(
         raise HTTPException(status_code=400, detail="agent_url must be an http/https URL")
     if body.mode not in ("bridge", "cdp"):
         raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
+    if body.agent_protocol not in ("http", "ws"):
+        raise HTTPException(status_code=400, detail="agent_protocol must be 'http' or 'ws'")
 
     pool = get_pool()
 
@@ -210,22 +214,22 @@ async def register_agent(
         if agent_url not in pool.endpoints:
             pool.add_endpoint(agent_url)
         pool.set_mode(agent_url, body.mode)
-        pool.set_node_type(agent_url, "agent")
         pool.set_agent_url(agent_url, agent_url)
+        pool.set_agent_protocol(agent_url, body.agent_protocol)
 
     # Upsert in DB
     result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == agent_url))
     inst = result.scalar_one_or_none()
     if inst:
         inst.mode = body.mode
-        inst.node_type = "agent"
         inst.agent_url = agent_url
+        inst.agent_protocol = body.agent_protocol
         if body.label:
             inst.label = body.label
     else:
         inst = BrowserInstance(
             endpoint=agent_url, mode=body.mode,
-            node_type="agent", agent_url=agent_url, label=body.label,
+            agent_url=agent_url, agent_protocol=body.agent_protocol, label=body.label,
         )
         db.add(inst)
     await db.commit()
@@ -237,8 +241,8 @@ async def register_agent(
 
 class InstanceConfigUpdate(BaseModel):
     mode: str | None = None
-    node_type: str | None = None
     agent_url: str | None = None
+    agent_protocol: str | None = None
 
 
 @router.patch("/instances/{endpoint_b64}", response_model=ApiResponse[BrowserInstanceRead])
@@ -247,7 +251,7 @@ async def update_instance_config(
     body: InstanceConfigUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse:
-    """Update mode, node_type, or agent_url for a Chrome pool instance."""
+    """Update mode or agent_url for a Chrome pool instance."""
     import base64
     from backend.browser_pool import get_pool, LocalBrowserPool
 
@@ -265,15 +269,15 @@ async def update_instance_config(
             raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
         pool.set_mode(endpoint, body.mode)
 
-    if body.node_type is not None:
-        if body.node_type not in ("local", "agent"):
-            raise HTTPException(status_code=400, detail="node_type must be 'local' or 'agent'")
-        if isinstance(pool, LocalBrowserPool):
-            pool.set_node_type(endpoint, body.node_type)
-
     clean_agent_url = body.agent_url.strip() if body.agent_url else None
     if body.agent_url is not None and isinstance(pool, LocalBrowserPool):
         pool.set_agent_url(endpoint, clean_agent_url or None)
+
+    if body.agent_protocol is not None:
+        if body.agent_protocol not in ("http", "ws"):
+            raise HTTPException(status_code=400, detail="agent_protocol must be 'http' or 'ws'")
+        if isinstance(pool, LocalBrowserPool):
+            pool.set_agent_protocol(endpoint, body.agent_protocol)
 
     from backend.models.browser import BrowserInstance
     result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == endpoint))
@@ -283,10 +287,10 @@ async def update_instance_config(
         db.add(inst)
     if body.mode is not None:
         inst.mode = body.mode
-    if body.node_type is not None:
-        inst.node_type = body.node_type
     if body.agent_url is not None:
         inst.agent_url = clean_agent_url or None
+    if body.agent_protocol is not None:
+        inst.agent_protocol = body.agent_protocol
     await db.commit()
     await db.refresh(inst)
 

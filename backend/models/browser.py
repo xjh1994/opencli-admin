@@ -16,7 +16,7 @@ class BrowserBinding(TimestampMixin):
 
 
 class BrowserInstance(TimestampMixin):
-    """Metadata for each Chrome pool instance (mode, label, node_type)."""
+    """Metadata for each Chrome pool instance (mode, label)."""
 
     __tablename__ = "browser_instances"
 
@@ -25,9 +25,10 @@ class BrowserInstance(TimestampMixin):
     # "cdp"    → opencli 0.9.6 via Playwright direct CDP
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="bridge")
     label: Mapped[str] = mapped_column(String(100), nullable=False, default="")
-    # "local"  → Chrome runs on same host / docker network as API (current default)
-    # "agent"  → Chrome runs on a remote edge node
-    node_type: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
-    # HTTP base URL of the agent server running on the edge node (agent node_type only)
-    # e.g. http://192.168.1.100:19823  — center POSTs /collect here, no persistent connection needed
+    # HTTP base URL of the agent server on this edge node.
+    # e.g. http://192.168.1.100:19823
     agent_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Protocol used to reach this agent (only relevant when COLLECTION_MODE=agent):
+    # "http" — center HTTP POSTs /collect to agent_url (LAN / proxy-reachable)
+    # "ws"   — agent opens a reverse WS channel to center (NAT / unreachable, Phase 2)
+    agent_protocol: Mapped[str | None] = mapped_column(String(10), nullable=True)
