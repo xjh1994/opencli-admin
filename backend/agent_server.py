@@ -56,18 +56,21 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("agent_server")
 
-_BRIDGE_BIN = os.environ.get("OPENCLI_BRIDGE_BIN", "/opt/opencli-bridge/bin/opencli")
-_CDP_BIN    = os.environ.get("OPENCLI_CDP_BIN",    "/opt/opencli-cdp/bin/opencli")
+_BRIDGE_BIN    = os.environ.get("OPENCLI_BRIDGE_BIN", "")
+_CDP_BIN       = os.environ.get("OPENCLI_CDP_BIN",    "")
+_DOCKER_BRIDGE = "/opt/opencli-bridge/bin/opencli"
+_DOCKER_CDP    = "/opt/opencli-cdp/bin/opencli"
 
 
-def _resolve_bin(preferred: str) -> str:
-    """Return *preferred* if it exists, else fall back to 'opencli' on PATH."""
-    if os.path.isfile(preferred):
-        return preferred
-    found = shutil.which("opencli")
-    if found:
-        return found
-    return preferred
+def _resolve_bin(mode: str) -> str:
+    """Resolve opencli binary. Priority: env var → PATH → Docker fixed path."""
+    env_override = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
+    if env_override:
+        return env_override
+    path_bin = shutil.which("opencli")
+    if path_bin:
+        return path_bin
+    return _DOCKER_BRIDGE if mode == "bridge" else _DOCKER_CDP
 _DEFAULT_CDP = os.environ.get("OPENCLI_CDP_ENDPOINT", "http://localhost:19222")
 _DAEMON_PORT = int(os.environ.get("OPENCLI_DAEMON_PORT", "19825"))
 _AGENT_PORT = int(os.environ.get("AGENT_PORT", "19823"))
@@ -331,14 +334,14 @@ def _parse_output(raw: str, fmt: str) -> list[dict]:
 
 @app.get("/health")
 def health() -> dict:
-    bridge_ok = os.path.isfile(_BRIDGE_BIN)
-    cdp_ok = os.path.isfile(_CDP_BIN)
+    bridge_bin = _resolve_bin("bridge")
+    cdp_bin    = _resolve_bin("cdp")
     return {
         "status": "ok",
-        "bridge_bin": _BRIDGE_BIN,
-        "bridge_bin_exists": bridge_ok,
-        "cdp_bin": _CDP_BIN,
-        "cdp_bin_exists": cdp_ok,
+        "bridge_bin": bridge_bin,
+        "bridge_bin_exists": os.path.isfile(bridge_bin),
+        "cdp_bin": cdp_bin,
+        "cdp_bin_exists": os.path.isfile(cdp_bin),
         "default_cdp_endpoint": _DEFAULT_CDP,
     }
 
@@ -348,10 +351,7 @@ async def collect(req: CollectRequest) -> dict:
     cdp_ep = req.cdp_endpoint.strip() or _DEFAULT_CDP
     mode = req.mode
 
-    bin_path = _resolve_bin(_BRIDGE_BIN if mode == "bridge" else _CDP_BIN)
-    if not os.path.isfile(bin_path):
-        # fixed paths missing — _resolve_bin already tried PATH; use whichever fixed path exists
-        bin_path = _BRIDGE_BIN if os.path.isfile(_BRIDGE_BIN) else _CDP_BIN
+    bin_path = _resolve_bin(mode)
 
     cmd = [bin_path, req.site, req.command]
     cmd.extend([str(v) for v in req.positional_args])

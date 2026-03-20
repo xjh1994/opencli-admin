@@ -18,19 +18,32 @@ from backend.channels.registry import register_channel
 logger = logging.getLogger(__name__)
 
 _DAEMON_PORT = 19825
-# Prefer env-var overrides, then Docker fixed paths, then global PATH install.
-_BRIDGE_BIN = os.environ.get("OPENCLI_BRIDGE_BIN", "/opt/opencli-bridge/bin/opencli")
-_CDP_BIN    = os.environ.get("OPENCLI_CDP_BIN",    "/opt/opencli-cdp/bin/opencli")
+# Env-var overrides (explicit wins always).
+_BRIDGE_BIN = os.environ.get("OPENCLI_BRIDGE_BIN", "")
+_CDP_BIN    = os.environ.get("OPENCLI_CDP_BIN",    "")
+# Docker image fixed paths (fallback when PATH has no opencli).
+_DOCKER_BRIDGE = "/opt/opencli-bridge/bin/opencli"
+_DOCKER_CDP    = "/opt/opencli-cdp/bin/opencli"
 
 
-def _resolve_bin(preferred: str) -> str:
-    """Return *preferred* if it exists, else fall back to 'opencli' on PATH."""
-    if os.path.isfile(preferred):
-        return preferred
-    found = shutil.which("opencli")
-    if found:
-        return found
-    return preferred  # keep original so error message is informative
+def _resolve_bin(mode: str) -> str:
+    """Resolve the opencli binary path for *mode* ('bridge' or 'cdp').
+
+    Priority:
+      1. Env var OPENCLI_BRIDGE_BIN / OPENCLI_CDP_BIN  (explicit override)
+      2. 'opencli' on PATH  (npm global install, npx, any standard install)
+      3. Docker fixed paths  (/opt/opencli-{bridge,cdp}/bin/opencli)
+    """
+    env_override = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
+    if env_override:
+        return env_override
+
+    path_bin = shutil.which("opencli")
+    if path_bin:
+        return path_bin
+
+    docker_bin = _DOCKER_BRIDGE if mode == "bridge" else _DOCKER_CDP
+    return docker_bin
 
 
 def _parse_json(raw: str) -> list[dict]:
@@ -298,7 +311,7 @@ class OpenCLIChannel(AbstractChannel):
                     logger.error("Unknown agent_protocol %r for endpoint %s", protocol, cdp_endpoint)
                     return ChannelResult.fail(f"Unknown agent_protocol: {protocol!r}")
 
-            opencli_bin = _resolve_bin(_BRIDGE_BIN if mode == "bridge" else _CDP_BIN)
+            opencli_bin = _resolve_bin(mode)
 
             cmd = [opencli_bin, site, command]
             cmd.extend(positional_args)
@@ -366,7 +379,7 @@ class OpenCLIChannel(AbstractChannel):
 
     async def health_check(self) -> bool:
         return (
-            os.path.isfile(_BRIDGE_BIN)
-            or os.path.isfile(_CDP_BIN)
-            or shutil.which("opencli") is not None
+            shutil.which("opencli") is not None
+            or os.path.isfile(_DOCKER_BRIDGE)
+            or os.path.isfile(_DOCKER_CDP)
         )
