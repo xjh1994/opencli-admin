@@ -35,17 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install both opencli versions into separate prefixes so opencli_channel.py
-# can select the right binary at runtime based on source bridge_mode config:
-#   /opt/opencli-bridge  →  1.0.0  (daemon+WebSocket, for bridge_mode=true)
-#   /opt/opencli-cdp     →  0.9.6  (Playwright direct CDP, for bridge_mode=false)
-ARG OPENCLI_BRIDGE_VERSION=1.0.0
-ARG OPENCLI_CDP_VERSION=0.9.6
-COPY scripts/patch-opencli.js /tmp/patch-opencli.js
-RUN npm install -g --prefix /opt/opencli-bridge @jackwener/opencli@${OPENCLI_BRIDGE_VERSION} \
-    && node /tmp/patch-opencli.js /opt/opencli-bridge \
-    && npm install -g --prefix /opt/opencli-cdp @jackwener/opencli@${OPENCLI_CDP_VERSION} \
-    && rm /tmp/patch-opencli.js \
+# Install opencli globally — available as 'opencli' on PATH
+ARG OPENCLI_VERSION=1.1.0
+RUN npm install -g @jackwener/opencli@${OPENCLI_VERSION} \
     && rm -rf /root/.npm
 
 # Copy installed packages from builder

@@ -14,16 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install both opencli versions (same as main API image)
-#   /opt/opencli-bridge  →  1.0.0  (Browser Bridge / daemon mode)
-#   /opt/opencli-cdp     →  0.9.6  (Playwright direct CDP)
-ARG OPENCLI_BRIDGE_VERSION=1.0.0
-ARG OPENCLI_CDP_VERSION=0.9.6
-COPY scripts/patch-opencli.js /tmp/patch-opencli.js
-RUN npm install -g --prefix /opt/opencli-bridge @jackwener/opencli@${OPENCLI_BRIDGE_VERSION} \
-    && node /tmp/patch-opencli.js /opt/opencli-bridge \
-    && npm install -g --prefix /opt/opencli-cdp @jackwener/opencli@${OPENCLI_CDP_VERSION} \
-    && rm /tmp/patch-opencli.js \
+# Install opencli globally — available as 'opencli' on PATH
+ARG OPENCLI_VERSION=1.1.0
+RUN npm install -g @jackwener/opencli@${OPENCLI_VERSION} \
     && rm -rf /root/.npm
 
 # Python deps for agent_server only — intentionally minimal
@@ -56,8 +49,6 @@ ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     # Chrome runs inside this container — always localhost
     OPENCLI_CDP_ENDPOINT=http://localhost:9222 \
-    OPENCLI_BRIDGE_BIN=/opt/opencli-bridge/bin/opencli \
-    OPENCLI_CDP_BIN=/opt/opencli-cdp/bin/opencli \
     # Bridge daemon is local too
     OPENCLI_DAEMON_HOST=127.0.0.1 \
     OPENCLI_DAEMON_PORT=19825

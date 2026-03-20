@@ -1,6 +1,6 @@
 # Shared backend config (DRY)
 x-backend-common: &backend-common
-  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.2.0}
+  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.3.0}
   env_file:
     - path: .env
       required: false
@@ -127,7 +127,7 @@ services:
   # Default single instance — always started (local collection mode uses this).
   agent-1:
     container_name: agent-1
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-chrome:${IMAGE_TAG:-0.2.0}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-chrome:${IMAGE_TAG:-0.3.0}
     ports:
       - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
     volumes:
@@ -151,7 +151,7 @@ services:
   #   docker compose --profile agent up agent
   agent:
     profiles: ["agent"]
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.2.0}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.0}
     environment:
       CENTRAL_API_URL: ${CENTRAL_API_URL:-}
       AGENT_ADVERTISE_URL: ${AGENT_ADVERTISE_URL:-}
@@ -170,7 +170,7 @@ services:
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.2.0}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.3.0}
     ports:
       - "${FRONTEND_PORT:-8030}:80"
     depends_on:
