@@ -71,6 +71,7 @@ async def chrome_pool_status() -> ApiResponse:
     """Return Chrome browser pool status and available endpoints."""
     pool = get_pool()
     base_port = get_settings().novnc_base_port
+    from backend.browser_pool import LocalBrowserPool
     endpoints = [
         {
             "url": ep,
@@ -78,6 +79,7 @@ async def chrome_pool_status() -> ApiResponse:
             "novnc_port": _novnc_port(ep, base_port),
             "container_status": _container_status(urlparse(ep).hostname or ""),
             "mode": pool.get_mode(ep),
+            "node_type": pool.get_node_type(ep) if isinstance(pool, LocalBrowserPool) else "local",
         }
         for ep in pool.endpoints
     ]

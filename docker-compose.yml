@@ -60,6 +60,8 @@ services:
       OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
       # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
       AGENT_POOL_ENDPOINTS: ${AGENT_POOL_ENDPOINTS:-}
+      # Collection mode: "local" (direct Docker) or "agent" (distributed edge nodes)
+      COLLECTION_MODE: ${COLLECTION_MODE:-local}
       # Passed to the chrome pool manager so it can name containers/networks correctly
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-opencli-admin}
     volumes:

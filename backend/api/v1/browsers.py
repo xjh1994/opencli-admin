@@ -83,6 +83,7 @@ def _update_env_file(key: str, value: str, path: str = "/app/.env") -> None:
 async def add_chrome_instance(
     count: int = 1,
     mode: str = "bridge",
+    node_type: str = "local",
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse:
     """Start one or more new Chrome instances (chrome-N) and hot-add them to the pool."""
@@ -94,6 +95,8 @@ async def add_chrome_instance(
         raise HTTPException(status_code=400, detail="count must be between 1 and 10")
     if mode not in ("bridge", "cdp"):
         raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
+    if node_type not in ("local", "agent"):
+        raise HTTPException(status_code=400, detail="node_type must be 'local' or 'agent'")
 
     pool = get_pool()
     project = _project_name()
@@ -138,14 +141,17 @@ async def add_chrome_instance(
         if isinstance(pool, LocalBrowserPool) and new_endpoint not in pool.endpoints:
             pool.add_endpoint(new_endpoint)
         pool.set_mode(new_endpoint, mode)
+        if isinstance(pool, LocalBrowserPool):
+            pool.set_node_type(new_endpoint, node_type)
 
-        # Persist mode to DB
+        # Persist mode and node_type to DB
         result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == new_endpoint))
         inst = result.scalar_one_or_none()
         if inst:
             inst.mode = mode
+            inst.node_type = node_type
         else:
-            inst = BrowserInstance(endpoint=new_endpoint, mode=mode, label="")
+            inst = BrowserInstance(endpoint=new_endpoint, mode=mode, node_type=node_type, label="")
             db.add(inst)
 
         created.append({"endpoint": new_endpoint, "novnc_port": novnc_port})

@@ -45,6 +45,8 @@ class LocalBrowserPool:
         self._total = len(endpoints)
         # mode per endpoint: "bridge" (opencli 1.0.0 daemon) or "cdp" (opencli 0.9.6 Playwright)
         self._modes: dict[str, str] = {ep: "bridge" for ep in endpoints}
+        # node_type per endpoint: "local" (same host) or "agent" (remote edge node)
+        self._node_types: dict[str, str] = {ep: "local" for ep in endpoints}
         logger.info(
             "BrowserPool (local): %d Chrome instance(s): %s",
             self._total,
@@ -121,6 +123,15 @@ class LocalBrowserPool:
         self._modes[endpoint] = mode
         logger.info("BrowserPool: endpoint %s mode set to %s", endpoint, mode)
 
+    def get_node_type(self, endpoint: str) -> str:
+        """Return the node type for the given endpoint ("local" or "agent")."""
+        return self._node_types.get(endpoint, "local")
+
+    def set_node_type(self, endpoint: str, node_type: str) -> None:
+        """Update the node type for an endpoint at runtime."""
+        self._node_types[endpoint] = node_type
+        logger.info("BrowserPool: endpoint %s node_type set to %s", endpoint, node_type)
+
     def add_endpoint(self, endpoint: str) -> None:
         """Hot-add a new Chrome instance to the pool without restarting."""
         if endpoint in self._slots:
@@ -129,6 +140,7 @@ class LocalBrowserPool:
         q.put_nowait(endpoint)
         self._slots[endpoint] = q
         self._modes.setdefault(endpoint, "bridge")
+        self._node_types.setdefault(endpoint, "local")
         self._total += 1
         logger.info("BrowserPool: added endpoint %s (total: %d)", endpoint, self._total)
 
@@ -138,6 +150,7 @@ class LocalBrowserPool:
             return
         self._slots.pop(endpoint)
         self._modes.pop(endpoint, None)
+        self._node_types.pop(endpoint, None)
         self._total -= 1
         logger.info("BrowserPool: removed endpoint %s (total: %d)", endpoint, self._total)
 

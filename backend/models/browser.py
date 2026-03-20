@@ -16,7 +16,7 @@ class BrowserBinding(TimestampMixin):
 
 
 class BrowserInstance(TimestampMixin):
-    """Metadata for each Chrome pool instance (mode, label)."""
+    """Metadata for each Chrome pool instance (mode, label, node_type)."""
 
     __tablename__ = "browser_instances"
 
@@ -25,3 +25,6 @@ class BrowserInstance(TimestampMixin):
     # "cdp"    → opencli 0.9.6 via Playwright direct CDP
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="bridge")
     label: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    # "local"  → Chrome runs on same host / docker network as API (current default)
+    # "agent"  → Chrome runs on a remote edge node; agent connects back to center
+    node_type: Mapped[str] = mapped_column(String(20), nullable=False, default="local")

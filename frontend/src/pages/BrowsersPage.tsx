@@ -113,7 +113,7 @@ function StatusBadge({ containerStatus, available, isStarting }: StatusBadgeProp
 
 interface AddInstanceModalProps {
   currentCount: number
-  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp') => void
+  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp', nodeType: 'local' | 'agent') => void
   onClose: () => void
   isPending: boolean
 }
@@ -147,10 +147,34 @@ const MODE_OPTIONS: {
   },
 ]
 
+const NODE_TYPE_OPTIONS: {
+  value: 'local' | 'agent'
+  label: string
+  badge: string
+  badgeCls: string
+  desc: string
+}[] = [
+  {
+    value: 'local',
+    label: '本地实例',
+    badge: 'Local',
+    badgeCls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+    desc: 'Chrome 容器运行在与 API 同一个 Docker 网络中，API 直接驱动浏览器。适合单机部署。',
+  },
+  {
+    value: 'agent',
+    label: '边缘节点',
+    badge: 'Agent',
+    badgeCls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+    desc: 'Chrome 运行在远程宿主机上，Agent 主动连接中心 API（WebSocket 反向通道）。适合分布式采集。',
+  },
+]
+
 function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddInstanceModalProps) {
   const { t } = useTranslation()
   const [count, setCount] = useState(1)
   const [mode, setMode] = useState<'bridge' | 'cdp'>('bridge')
+  const [nodeType, setNodeType] = useState<'local' | 'agent'>('local')
 
   const preview = Array.from({ length: count }, (_, i) => {
     const N = currentCount + 1 + i
@@ -229,6 +253,39 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
           </div>
         </div>
 
+        {/* Node type selector */}
+        <div className="mb-5">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">节点类型</p>
+          <div className="flex gap-2">
+            {NODE_TYPE_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex-1 flex gap-2 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
+                  nodeType === opt.value
+                    ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="instance-node-type"
+                  value={opt.value}
+                  checked={nodeType === opt.value}
+                  onChange={() => setNodeType(opt.value)}
+                  className="accent-blue-600 shrink-0 mt-0.5"
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-xs font-medium dark:text-white">{opt.label}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${opt.badgeCls}`}>{opt.badge}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{opt.desc}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
         {/* Preview */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 mb-5">
           <p className="text-xs text-gray-400 mb-1.5">{t('browsers.instancePreview')}</p>
@@ -244,14 +301,14 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
         {/* Actions */}
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => onConfirm(count, true, mode)}
+            onClick={() => onConfirm(count, true, mode, nodeType)}
             disabled={isPending}
             className="w-full px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             {isPending ? t('browsers.adding') : t('browsers.createAndRestart')}
           </button>
           <button
-            onClick={() => onConfirm(count, false, mode)}
+            onClick={() => onConfirm(count, false, mode, nodeType)}
             disabled={isPending}
             className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
@@ -471,6 +528,11 @@ function InstanceCard({
           <ExternalLink size={11} />
         </a>
         <div className="ml-auto flex items-center gap-2">
+          {endpoint.node_type === 'agent' && (
+            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+              Agent
+            </span>
+          )}
           <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} />
           {canRemove && (
             <button
@@ -540,7 +602,7 @@ export default function BrowsersPage() {
   })
 
   const addInstanceMutation = useMutation({
-    mutationFn: ({ count, mode }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp' }) => addChromeInstance(count, mode),
+    mutationFn: ({ count, mode, nodeType }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp'; nodeType: 'local' | 'agent' }) => addChromeInstance(count, mode, nodeType),
     onSuccess: (result, { withRestart }) => {
       setShowAddModal(false)
       invalidatePool()
@@ -692,7 +754,7 @@ export default function BrowsersPage() {
       {showAddModal && (
         <AddInstanceModal
           currentCount={endpoints.length}
-          onConfirm={(count, withRestart, mode) => addInstanceMutation.mutate({ count, withRestart, mode })}
+          onConfirm={(count, withRestart, mode, nodeType) => addInstanceMutation.mutate({ count, withRestart, mode, nodeType })}
           onClose={() => { if (!addInstanceMutation.isPending) setShowAddModal(false) }}
           isPending={addInstanceMutation.isPending}
         />

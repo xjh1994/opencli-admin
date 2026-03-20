@@ -18,3 +18,15 @@ class BrowserBindingRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BrowserInstanceRead(BaseModel):
+    id: str
+    endpoint: str
+    mode: str
+    node_type: str
+    label: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

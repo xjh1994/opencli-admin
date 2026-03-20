@@ -72,15 +72,19 @@ async def lifespan(app: FastAPI):
     )
     await browser_pool.ensure_ready()
 
-    # Sync browser instance modes from DB into pool memory
+    # Sync browser instance modes and node_types from DB into pool memory
     from backend.database import AsyncSessionLocal
     from backend.models.browser import BrowserInstance
+    from backend.browser_pool import LocalBrowserPool
     from sqlalchemy import select
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(BrowserInstance))
+        pool = browser_pool.get_pool()
         for inst in result.scalars().all():
-            if inst.endpoint in [ep for ep in browser_pool.get_pool().endpoints]:
-                browser_pool.get_pool().set_mode(inst.endpoint, inst.mode)
+            if inst.endpoint in pool.endpoints:
+                pool.set_mode(inst.endpoint, inst.mode)
+                if isinstance(pool, LocalBrowserPool):
+                    pool.set_node_type(inst.endpoint, inst.node_type)
 
     # Mark stale pending/running tasks as failed (lost on previous restart)
     from backend.models.task import CollectionTask

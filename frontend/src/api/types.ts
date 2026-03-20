@@ -139,6 +139,7 @@ export interface ChromeEndpoint {
   novnc_port: number
   container_status?: string
   mode: 'bridge' | 'cdp'
+  node_type: 'local' | 'agent'
 }
 
 export interface BrowserBinding {
