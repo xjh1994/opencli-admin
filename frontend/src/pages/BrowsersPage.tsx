@@ -12,13 +12,16 @@ import {
   restartApi,
   updateChromeEndpointMode,
   updateChromeInstanceConfig,
+  getSystemConfig,
+  updateSystemConfig,
+  getWsAgentStatus,
 } from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
 import PageHeader from '../components/PageHeader'
 import { SITE_LABELS } from '../components/ChannelConfigForm'
-import { Plus, X, ExternalLink, RefreshCw, Trash2, Minus } from 'lucide-react'
+import { Plus, X, ExternalLink, RefreshCw, Trash2, Minus, Wifi, WifiOff } from 'lucide-react'
 import type { BrowserBinding, ChromeEndpoint } from '../api/types'
 
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
@@ -254,17 +257,15 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
             <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">连接协议</p>
             <div className="flex gap-2">
               {([
-                { value: 'http' as const, label: 'HTTP', desc: '局域网 / 代理可达，无长连接', disabled: false },
-                { value: 'ws', label: 'WS', desc: '反向 WebSocket，用于无法主动连通的节点（Phase 2）', disabled: true },
+                { value: 'http' as const, label: 'HTTP', desc: '局域网 / 代理可达，中心主动请求 Agent' },
+                { value: 'ws' as const, label: 'WS', desc: '反向 WebSocket，Agent 主动连中心，适合 NAT / 跨网场景' },
               ]).map((opt) => (
                 <label
                   key={opt.value}
                   className={`flex-1 flex gap-2 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
-                    opt.disabled
-                      ? 'opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-600'
-                      : agentProtocol === opt.value
-                        ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                    agentProtocol === opt.value
+                      ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                   }`}
                 >
                   <input
@@ -272,8 +273,7 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
                     name="agent-protocol"
                     value={opt.value}
                     checked={agentProtocol === opt.value}
-                    onChange={() => !opt.disabled && setAgentProtocol(opt.value as 'http' | 'ws')}
-                    disabled={opt.disabled}
+                    onChange={() => setAgentProtocol(opt.value)}
                     className="accent-blue-600 shrink-0 mt-0.5"
                   />
                   <div className="min-w-0">
@@ -492,6 +492,7 @@ function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSucce
 interface InstanceCardProps {
   endpoint: ChromeEndpoint
   isStarting?: boolean
+  wsConnected?: boolean
   bindings: BrowserBinding[]
   boundSites: Set<string>
   onBind: (site: string) => void
@@ -504,7 +505,7 @@ interface InstanceCardProps {
 }
 
 function InstanceCard({
-  endpoint, isStarting, bindings, boundSites,
+  endpoint, isStarting, wsConnected, bindings, boundSites,
   onBind, onUnbind, onRemove, isBindPending, isRemovePending, onModeChanged, onConfigChanged,
 }: InstanceCardProps) {
   const { t } = useTranslation()
@@ -539,9 +540,20 @@ function InstanceCard({
           <ExternalLink size={11} />
         </a>
         <div className="ml-auto flex items-center gap-2">
-          {!!endpoint.agent_url && (
+          {wsConnected ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+              <Wifi size={10} />
+              {t('browsers.statusWsConnected')}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+              <WifiOff size={10} />
+              {t('browsers.statusWsOffline')}
+            </span>
+          )}
+          {!!endpoint.agent_url && endpoint.agent_protocol === 'http' && (
             <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-              Agent
+              HTTP Agent
             </span>
           )}
           <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} />
@@ -574,16 +586,16 @@ function InstanceCard({
             </div>
             {agentUrlDraft && (
               <div className="flex gap-2">
-                {(['http', 'ws']).map((p) => (
+                {(['http', 'ws'] as const).map((p) => (
                   <label key={p} className={`flex items-center gap-1.5 px-2 py-1 rounded border cursor-pointer text-xs transition-colors ${
                     agentProtocolDraft === p
                       ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                       : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300'
-                  } ${p === 'ws' ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                  }`}>
                     <input type="radio" name={`protocol-${url}`} value={p} checked={agentProtocolDraft === p}
-                      onChange={() => p !== 'ws' && setAgentProtocolDraft(p as 'http' | 'ws')} disabled={p === 'ws'}
+                      onChange={() => setAgentProtocolDraft(p)}
                       className="accent-blue-600" />
-                    {p === 'http' ? 'HTTP（局域网 / 代理）' : 'WS（Phase 2）'}
+                    {p === 'http' ? 'HTTP（局域网 / 代理）' : 'WS（反向连接）'}
                   </label>
                 ))}
               </div>
@@ -659,6 +671,27 @@ export default function BrowsersPage() {
     queryClient.invalidateQueries({ queryKey: ['chrome-pool'] })
     queryClient.invalidateQueries({ queryKey: ['browser-bindings'] })
   }
+
+  const { data: sysConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: getSystemConfig,
+  })
+
+  const { data: wsStatus } = useQuery({
+    queryKey: ['ws-agent-status'],
+    queryFn: getWsAgentStatus,
+    refetchInterval: 10_000,
+  })
+  const wsConnectedSet = new Set(wsStatus?.connected ?? [])
+
+  const switchModeMutation = useMutation({
+    mutationFn: (mode: 'local' | 'agent') => updateSystemConfig({ collection_mode: mode }),
+    onSuccess: (newConfig) => {
+      queryClient.setQueryData(['system-config'], newConfig)
+      toast.success('采集模式已切换')
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '切换失败'),
+  })
 
   const { data: poolData, isLoading: poolLoading, error: poolError, refetch } = useQuery({
     queryKey: ['chrome-pool'],
@@ -752,7 +785,33 @@ export default function BrowsersPage() {
       <PageHeader title={t('browsers.title')} description={t('browsers.description')} />
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        {/* Collection mode toggle */}
+        {sysConfig && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800">
+            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{t('browsers.collectionMode')}:</span>
+            <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
+              {(['local', 'agent'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  disabled={switchModeMutation.isPending}
+                  onClick={() => sysConfig.collection_mode !== mode && switchModeMutation.mutate(mode)}
+                  className={[
+                    'px-2.5 py-1 transition-colors',
+                    sysConfig.collection_mode === mode
+                      ? mode === 'local'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-purple-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
+                  ].join(' ')}
+                >
+                  {mode === 'local' ? t('browsers.modeLocal') : t('browsers.modeAgent')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
@@ -786,6 +845,7 @@ export default function BrowsersPage() {
               key={ep.url}
               endpoint={ep}
               isStarting={startingEndpoints.has(ep.url)}
+              wsConnected={ep.agent_url ? wsConnectedSet.has(ep.agent_url) : false}
               bindings={bindingsByEndpoint[ep.url] ?? []}
               boundSites={boundSites}
               onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}

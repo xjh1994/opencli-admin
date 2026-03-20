@@ -10,8 +10,11 @@ import type {
   CronSchedule,
   DataSource,
   DashboardStats,
+  EdgeNode,
+  EdgeNodeEvent,
   NotificationLog,
   NotificationRule,
+  SystemConfig,
   TaskRun,
   WorkerNode,
 } from './types'
@@ -182,12 +185,34 @@ export const restartApi = () =>
 export const getHealth = () =>
   apiClient.get<{ status: string; version: string; task_executor: string }>('/health').then((r) => r.data)
 
+export const getSystemConfig = () =>
+  apiClient.get<ApiResponse<SystemConfig>>('/system/config').then((r) => r.data.data)
+
+export const updateSystemConfig = (data: Partial<SystemConfig>) =>
+  apiClient.patch<ApiResponse<SystemConfig>>('/system/config', data).then((r) => r.data.data)
+
+export const getWsAgentStatus = () =>
+  apiClient.get<ApiResponse<{ connected: string[] }>>('/browsers/agents/ws-status').then((r) => r.data.data)
+
 // ── Workers ────────────────────────────────────────────────────────────────────
 export const listWorkers = () =>
   apiClient.get<ApiResponse<WorkerNode[]>>('/workers').then((r) => r.data)
 
 export const getCeleryStats = () =>
   apiClient.get<ApiResponse<Record<string, unknown>>>('/workers/celery-stats').then((r) => r.data.data)
+
+// ── Edge Nodes ─────────────────────────────────────────────────────────────────
+export const listNodes = () =>
+  apiClient.get<ApiResponse<EdgeNode[]>>('/nodes').then((r) => r.data)
+
+export const getNodeEvents = (id: string) =>
+  apiClient.get<ApiResponse<EdgeNodeEvent[]>>(`/nodes/${id}/events`).then((r) => r.data)
+
+export const deleteNode = (id: string) =>
+  apiClient.delete<ApiResponse<null>>(`/nodes/${id}`).then((r) => r.data)
+
+export const getInstallScriptUrl = (base: string) =>
+  `${base}/api/v1/nodes/install/agent.sh`
 
 export const getChromePool = () =>
   apiClient

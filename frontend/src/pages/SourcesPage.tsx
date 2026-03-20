@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
+import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool, listBrowserBindings, getSystemConfig, getWsAgentStatus } from '../api/endpoints'
 import type { DataSource } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -189,16 +189,19 @@ function SourceModal({
 
 function TriggerModal({
   source,
+  isAgentMode,
   onClose,
   onTrigger,
 }: {
   source: DataSource
+  isAgentMode: boolean
   onClose: () => void
   onTrigger: (agentId?: string, parameters?: Record<string, unknown>) => void
 }) {
   const { t } = useTranslation()
   const [agentId, setAgentId] = useState('')
   const [chromeEndpoint, setChromeEndpoint] = useState('')
+  const [selectedAgentEndpoints, setSelectedAgentEndpoints] = useState<Set<string>>(new Set())
 
   const { data: agentsData } = useQuery({
     queryKey: ['agents', 'enabled'],
@@ -212,7 +215,21 @@ function TriggerModal({
     enabled: source.channel_type === 'opencli',
   })
   const chromeEndpoints = chromePool?.endpoints ?? []
-  const showChromeSelector = source.channel_type === 'opencli' && chromeEndpoints.length >= 1
+
+  // agent mode: show endpoints with agent_url configured
+  const agentEndpoints = isAgentMode ? chromeEndpoints.filter((ep) => ep.agent_url != null && ep.agent_url !== '') : []
+  const showAgentSelector = isAgentMode && agentEndpoints.length > 0
+
+  // local mode: show Chrome instance selector
+  const showChromeSelector = source.channel_type === 'opencli' && !isAgentMode && chromeEndpoints.length >= 1
+
+  const { data: wsStatus } = useQuery({
+    queryKey: ['ws-agent-status'],
+    queryFn: getWsAgentStatus,
+    enabled: isAgentMode,
+    refetchInterval: 10_000,
+  })
+  const wsConnectedSet = new Set(wsStatus?.connected ?? [])
 
   const { data: bindingsData } = useQuery({
     queryKey: ['browser-bindings'],
@@ -221,33 +238,57 @@ function TriggerModal({
   })
   const bindings = bindingsData?.data ?? []
 
-  // endpoint → bound site names map (for display)
   const endpointBoundSites: Record<string, string[]> = {}
   for (const b of bindings) {
     if (!endpointBoundSites[b.browser_endpoint]) endpointBoundSites[b.browser_endpoint] = []
     endpointBoundSites[b.browser_endpoint].push(b.site)
   }
 
-  // Auto-select: prefer endpoint bound to source's site, else single-endpoint fallback
+  // Auto-select Chrome endpoint from binding or single-endpoint fallback
   useEffect(() => {
+    if (isAgentMode) return
     const site = source.channel_config?.site as string | undefined
     if (site) {
       const binding = bindings.find((b) => b.site === site)
-      if (binding) {
-        setChromeEndpoint(binding.browser_endpoint)
-        return
-      }
+      if (binding) { setChromeEndpoint(binding.browser_endpoint); return }
     }
     if (chromeEndpoints.length === 1 && !chromeEndpoint) {
       setChromeEndpoint(chromeEndpoints[0].url)
     }
   }, [chromeEndpoints, bindingsData])
 
-  const handleTrigger = () => {
-    const params: Record<string, unknown> = {}
-    if (chromeEndpoint) params.chrome_endpoint = chromeEndpoint
-    onTrigger(agentId || undefined, Object.keys(params).length ? params : undefined)
+  const toggleAgentEndpoint = (url: string) => {
+    setSelectedAgentEndpoints((prev) => {
+      const next = new Set(prev)
+      if (next.has(url)) next.delete(url)
+      else next.add(url)
+      return next
+    })
   }
+
+  const handleTrigger = () => {
+    if (isAgentMode) {
+      const endpoints = [...selectedAgentEndpoints]
+      if (endpoints.length === 0) {
+        // auto: let the pool pick any agent
+        onTrigger(agentId || undefined, undefined)
+      } else if (endpoints.length === 1) {
+        onTrigger(agentId || undefined, { chrome_endpoint: endpoints[0] })
+      } else {
+        // multi: fire one task per selected agent, close immediately
+        endpoints.forEach((ep) => onTrigger(agentId || undefined, { chrome_endpoint: ep }))
+        onClose()
+      }
+    } else {
+      const params: Record<string, unknown> = {}
+      if (chromeEndpoint) params.chrome_endpoint = chromeEndpoint
+      onTrigger(agentId || undefined, Object.keys(params).length ? params : undefined)
+    }
+  }
+
+  const triggerLabel = isAgentMode && selectedAgentEndpoints.size > 1
+    ? `触发 ${selectedAgentEndpoints.size} 个节点`
+    : t('sources.triggerNow')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -258,19 +299,65 @@ function TriggerModal({
         <div className="p-6 space-y-4">
           <div>
             <label className={labelCls}>{t('agents.selectAgent')}</label>
-            <select
-              className={inputCls}
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-            >
+            <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
               <option value="">{t('agents.noAgent')}</option>
               {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  [{a.processor_type}] {a.name}
-                </option>
+                <option key={a.id} value={a.id}>[{a.processor_type}] {a.name}</option>
               ))}
             </select>
           </div>
+
+          {showAgentSelector && (
+            <div>
+              <label className={labelCls}>采集节点</label>
+              <div className="space-y-2">
+                {agentEndpoints.map((ep) => {
+                  const isWs = ep.agent_protocol === 'ws'
+                  const isConnected = isWs ? wsConnectedSet.has(ep.agent_url ?? '') : ep.available
+                  const label = (ep.agent_url ?? ep.url).replace(/^https?:\/\//, '')
+                  return (
+                    <label
+                      key={ep.url}
+                      className={`flex gap-3 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
+                        selectedAgentEndpoints.has(ep.url)
+                          ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAgentEndpoints.has(ep.url)}
+                        onChange={() => toggleAgentEndpoint(ep.url)}
+                        className="accent-blue-600 shrink-0 mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-medium font-mono ${isConnected ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
+                            {label}
+                          </span>
+                          <span className={`text-xs ${isConnected ? 'text-green-500' : 'text-red-400'}`}>
+                            {isConnected ? '● 在线' : '○ 离线'}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            isWs
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          }`}>
+                            {isWs ? 'WS' : 'HTTP'}
+                          </span>
+                        </div>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-xs text-gray-400">
+                {selectedAgentEndpoints.size === 0
+                  ? '未选择则自动分配'
+                  : `已选 ${selectedAgentEndpoints.size} 个节点，将触发 ${selectedAgentEndpoints.size} 个任务`}
+              </p>
+            </div>
+          )}
 
           {showChromeSelector && (
             <div>
@@ -321,27 +408,25 @@ function TriggerModal({
                             {ep.mode === 'bridge' ? 'Bridge' : 'CDP'}
                           </span>
                         </div>
-                        {(boundSites.length > 0 || true) && (
-                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                            {boundSites.map((site) => (
-                              <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
-                                {SITE_LABELS[site] ?? site}
-                              </span>
-                            ))}
-                            {boundSites.length === 0 && (
-                              <span className="text-xs text-gray-400">暂无绑定站点</span>
-                            )}
-                            <a
-                              href={novncUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="ml-auto text-xs text-blue-500 hover:underline font-mono shrink-0"
-                            >
-                              noVNC ↗
-                            </a>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {boundSites.map((site) => (
+                            <span key={site} className="px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                              {SITE_LABELS[site] ?? site}
+                            </span>
+                          ))}
+                          {boundSites.length === 0 && (
+                            <span className="text-xs text-gray-400">暂无绑定站点</span>
+                          )}
+                          <a
+                            href={novncUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-auto text-xs text-blue-500 hover:underline font-mono shrink-0"
+                          >
+                            noVNC ↗
+                          </a>
+                        </div>
                       </div>
                     </label>
                   )
@@ -362,7 +447,7 @@ function TriggerModal({
             onClick={handleTrigger}
             className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700"
           >
-            {t('sources.triggerNow')}
+            {triggerLabel}
           </button>
         </div>
       </div>
@@ -377,6 +462,12 @@ export default function SourcesPage() {
   const [triggerSource, setTriggerSource] = useState<DataSource | null>(null)
   const [page, setPage] = useState(1)
   const qc = useQueryClient()
+
+  const { data: sysConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: getSystemConfig,
+  })
+  const isAgentMode = sysConfig?.collection_mode === 'agent'
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['sources', page],
@@ -575,6 +666,7 @@ export default function SourcesPage() {
       {triggerSource && (
         <TriggerModal
           source={triggerSource}
+          isAgentMode={isAgentMode}
           onClose={() => setTriggerSource(null)}
           onTrigger={(agentId, parameters) =>
             triggerMut.mutate({ id: triggerSource.id, agentId, parameters })

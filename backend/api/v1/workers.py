@@ -47,11 +47,11 @@ async def list_workers(db: AsyncSession = Depends(get_db)) -> ApiResponse:
 def _novnc_port(cdp_url: str, base_port: int) -> int:
     """Derive the noVNC web-UI port from a CDP endpoint URL.
 
-    Naming convention: chrome → 1, chrome-2 → 2, chrome-N → N.
+    Naming convention: agent → 1, agent-2 → 2, agent-N → N.
     noVNC port = base_port + (N - 1).
     """
     hostname = urlparse(cdp_url).hostname or ""
-    m = re.match(r"^chrome(?:-(\d+))?$", hostname)
+    m = re.match(r"^agent(?:-(\d+))?$", hostname)
     n = int(m.group(1)) if (m and m.group(1)) else 1
     return base_port + (n - 1)
 
@@ -68,7 +68,7 @@ def _container_status(hostname: str) -> str:
 
 @router.get("/chrome-pool", response_model=ApiResponse[dict])
 async def chrome_pool_status() -> ApiResponse:
-    """Return Chrome browser pool status and available endpoints."""
+    """Return agent pool status and available endpoints."""
     pool = get_pool()
     base_port = get_settings().novnc_base_port
     from backend.browser_pool import LocalBrowserPool
@@ -101,7 +101,7 @@ async def update_endpoint_mode(
     body: EndpointModeUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse:
-    """Update the connection mode (bridge/cdp) for a Chrome pool endpoint."""
+    """Update the connection mode (bridge/cdp) for an agent pool endpoint."""
     import base64
     from backend.models.browser import BrowserInstance
 

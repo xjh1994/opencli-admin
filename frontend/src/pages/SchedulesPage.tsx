@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool, listBrowserBindings, getSystemConfig, getWsAgentStatus } from '../api/endpoints'
 import type { CronSchedule } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -211,9 +211,11 @@ function CronBuilder({ fields, onChange }: { fields: CronFields; onChange: (f: C
 // ── Modal ──────────────────────────────────────────────────────────────────────
 
 function AddScheduleModal({
+  isAgentMode,
   onClose,
   onSave,
 }: {
+  isAgentMode: boolean
   onClose: () => void
   onSave: (data: Partial<CronSchedule>) => void
 }) {
@@ -243,7 +245,18 @@ function AddScheduleModal({
   })
   const chromeEndpoints = chromePool?.endpoints ?? []
   const selectedSource = sources.find((s) => s.id === sourceId)
-  const showChromeSelector = selectedSource?.channel_type === 'opencli' && chromeEndpoints.length >= 1
+
+  const agentEndpoints = isAgentMode ? chromeEndpoints.filter((ep) => ep.agent_url != null && ep.agent_url !== '') : []
+  const showAgentSelector = selectedSource?.channel_type === 'opencli' && isAgentMode && agentEndpoints.length > 0
+  const showChromeSelector = selectedSource?.channel_type === 'opencli' && !isAgentMode && chromeEndpoints.length >= 1
+
+  const { data: wsStatus } = useQuery({
+    queryKey: ['ws-agent-status'],
+    queryFn: getWsAgentStatus,
+    enabled: isAgentMode,
+    refetchInterval: 10_000,
+  })
+  const wsConnectedSet = new Set(wsStatus?.connected ?? [])
 
   const { data: bindingsData } = useQuery({
     queryKey: ['browser-bindings'],
@@ -258,16 +271,13 @@ function AddScheduleModal({
     endpointBoundSites[b.browser_endpoint].push(b.site)
   }
 
-  // Auto-select: prefer endpoint bound to source's site, else single-endpoint fallback
-  // Re-runs when sourceId changes so selection resets for new source
+  // Auto-select Chrome: prefer endpoint bound to source's site, else single-endpoint fallback
   useEffect(() => {
+    if (isAgentMode) return
     const site = selectedSource?.channel_config?.site as string | undefined
     if (site) {
       const binding = bindings.find((b) => b.site === site)
-      if (binding) {
-        setChromeEndpoint(binding.browser_endpoint)
-        return
-      }
+      if (binding) { setChromeEndpoint(binding.browser_endpoint); return }
     }
     if (chromeEndpoints.length === 1) {
       setChromeEndpoint(chromeEndpoints[0].url)
@@ -355,6 +365,67 @@ function AddScheduleModal({
               </select>
             </div>
           </div>
+
+          {showAgentSelector && (
+            <div>
+              <label className={labelCls}>采集节点</label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer py-1">
+                  <input
+                    type="radio"
+                    name="agent-ep-sched"
+                    value=""
+                    checked={chromeEndpoint === ''}
+                    onChange={() => setChromeEndpoint('')}
+                    className="accent-blue-600 shrink-0"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-300">自动分配</span>
+                </label>
+                {agentEndpoints.map((ep) => {
+                  const isWs = ep.agent_protocol === 'ws'
+                  const isConnected = isWs ? wsConnectedSet.has(ep.agent_url ?? '') : ep.available
+                  const label = (ep.agent_url ?? ep.url).replace(/^https?:\/\//, '')
+                  return (
+                    <label
+                      key={ep.url}
+                      className={`flex gap-3 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
+                        chromeEndpoint === ep.url
+                          ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="agent-ep-sched"
+                        value={ep.url}
+                        checked={chromeEndpoint === ep.url}
+                        onChange={() => setChromeEndpoint(ep.url)}
+                        className="accent-blue-600 shrink-0 mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-medium font-mono ${isConnected ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
+                            {label}
+                          </span>
+                          <span className={`text-xs ${isConnected ? 'text-green-500' : 'text-red-400'}`}>
+                            {isConnected ? '● 在线' : '○ 离线'}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            isWs
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          }`}>
+                            {isWs ? 'WS' : 'HTTP'}
+                          </span>
+                        </div>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-xs text-gray-400">{t('channelConfig.chromeEndpointHint')}</p>
+            </div>
+          )}
 
           {showChromeSelector && (
             <div>
@@ -457,6 +528,12 @@ export default function SchedulesPage() {
   const { t } = useTranslation()
   const [showAdd, setShowAdd] = useState(false)
   const qc = useQueryClient()
+
+  const { data: sysConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: getSystemConfig,
+  })
+  const isAgentMode = sysConfig?.collection_mode === 'agent'
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['schedules'],
@@ -579,7 +656,7 @@ export default function SchedulesPage() {
       </Card>
 
       {showAdd && (
-        <AddScheduleModal onClose={() => setShowAdd(false)} onSave={(d) => createMut.mutate(d)} />
+        <AddScheduleModal isAgentMode={isAgentMode} onClose={() => setShowAdd(false)} onSave={(d) => createMut.mutate(d)} />
       )}
     </div>
   )

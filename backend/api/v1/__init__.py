@@ -6,11 +6,13 @@ from backend.api.v1 import (
     agents,
     browsers,
     dashboard,
+    nodes,
     notifications,
     providers,
     records,
     schedules,
     sources,
+    system,
     tasks,
     webhooks,
     workers,
@@ -20,6 +22,7 @@ v1_router = APIRouter(prefix="/api/v1")
 
 v1_router.include_router(agents.router)
 v1_router.include_router(browsers.router)
+v1_router.include_router(nodes.router)
 v1_router.include_router(providers.router)
 v1_router.include_router(sources.router)
 v1_router.include_router(tasks.router)
@@ -29,3 +32,4 @@ v1_router.include_router(webhooks.router)
 v1_router.include_router(notifications.router)
 v1_router.include_router(workers.router)
 v1_router.include_router(dashboard.router)
+v1_router.include_router(system.router)

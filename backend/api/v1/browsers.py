@@ -115,18 +115,18 @@ async def add_chrome_instance(
     for _ in range(count):
         current = pool.endpoints
         N = len(current) + 1
-        name = f"chrome-{N}"
+        name = f"agent-{N}"
         novnc_port = novnc_base + N - 1
-        volume = f"{project}_chrome_profile_{N}"
+        volume = f"{project}_agent_profile_{N}"
         new_endpoint = f"http://{name}:19222"
 
         try:
             existing = client.containers.get(name)
             if existing.status != "running":
                 existing.start()
-                logger.info("chrome-pool: restarted existing container %s", name)
+                logger.info("agent-pool: restarted existing container %s", name)
             else:
-                logger.info("chrome-pool: %s already running", name)
+                logger.info("agent-pool: %s already running", name)
         except Exception:
             try:
                 client.containers.run(
@@ -134,14 +134,14 @@ async def add_chrome_instance(
                     detach=True,
                     name=name,
                     network=network,
-                    labels={"chrome.pool.extra": "true", "chrome.pool.index": str(N)},
+                    labels={"agent.pool.extra": "true", "agent.pool.index": str(N)},
                     ports={"6080/tcp": novnc_port},
                     volumes={volume: {"bind": "/home/chrome/.config/chromium", "mode": "rw"}},
                     restart_policy={"Name": "unless-stopped"},
                 )
-                logger.info("chrome-pool: started new container %s on noVNC :%d", name, novnc_port)
+                logger.info("agent-pool: started new container %s on noVNC :%d", name, novnc_port)
             except Exception as exc:
-                logger.exception("chrome-pool: failed to start %s", name)
+                logger.exception("agent-pool: failed to start %s", name)
                 raise HTTPException(status_code=500, detail=str(exc))
 
         if isinstance(pool, LocalBrowserPool) and new_endpoint not in pool.endpoints:
@@ -171,7 +171,7 @@ async def add_chrome_instance(
     try:
         _update_env_file("AGENT_POOL_ENDPOINTS", all_endpoints)
     except Exception as exc:
-        logger.warning("chrome-pool: could not update .env: %s", exc)
+        logger.warning("agent-pool: could not update .env: %s", exc)
 
     return ApiResponse.ok({
         "created": created,
@@ -269,12 +269,14 @@ async def update_instance_config(
             raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
         pool.set_mode(endpoint, body.mode)
 
+    fields_set = body.model_fields_set
+
     clean_agent_url = body.agent_url.strip() if body.agent_url else None
-    if body.agent_url is not None and isinstance(pool, LocalBrowserPool):
+    if "agent_url" in fields_set and isinstance(pool, LocalBrowserPool):
         pool.set_agent_url(endpoint, clean_agent_url or None)
 
-    if body.agent_protocol is not None:
-        if body.agent_protocol not in ("http", "ws"):
+    if "agent_protocol" in fields_set:
+        if body.agent_protocol is not None and body.agent_protocol not in ("http", "ws"):
             raise HTTPException(status_code=400, detail="agent_protocol must be 'http' or 'ws'")
         if isinstance(pool, LocalBrowserPool):
             pool.set_agent_protocol(endpoint, body.agent_protocol)
@@ -287,9 +289,9 @@ async def update_instance_config(
         db.add(inst)
     if body.mode is not None:
         inst.mode = body.mode
-    if body.agent_url is not None:
+    if "agent_url" in fields_set:
         inst.agent_url = clean_agent_url or None
-    if body.agent_protocol is not None:
+    if "agent_protocol" in fields_set:
         inst.agent_protocol = body.agent_protocol
     await db.commit()
     await db.refresh(inst)
@@ -297,23 +299,55 @@ async def update_instance_config(
     return ApiResponse.ok(BrowserInstanceRead.model_validate(inst))
 
 
+@router.delete("/instances/{endpoint_b64}", response_model=ApiResponse[dict])
+async def remove_instance(
+    endpoint_b64: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """Remove any pool entry by endpoint URL (base64-encoded). Does NOT touch Docker containers."""
+    import base64
+    from backend.browser_pool import get_pool, LocalBrowserPool
+    from backend.models.browser import BrowserInstance
+
+    try:
+        endpoint = base64.urlsafe_b64decode(endpoint_b64.encode()).decode()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid endpoint encoding")
+
+    pool = get_pool()
+    if endpoint not in pool.endpoints:
+        raise HTTPException(status_code=404, detail=f"Endpoint {endpoint!r} not in pool")
+
+    if isinstance(pool, LocalBrowserPool):
+        pool.remove_endpoint(endpoint)
+
+    result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == endpoint))
+    inst = result.scalar_one_or_none()
+    if inst:
+        await db.delete(inst)
+        await db.commit()
+
+    logger.info("Removed pool entry: %s", endpoint)
+    return ApiResponse.ok({"removed": endpoint, "total": len(pool.endpoints)})
+
+
 @router.delete("/chrome-instances/{n}", response_model=ApiResponse[dict])
 async def remove_chrome_instance(n: int) -> ApiResponse:
-    """Stop and remove chrome-N (N >= 2). Instance 1 is managed by docker-compose."""
+    """Stop and remove agent-N (N >= 2). Instance 1 is managed by docker-compose."""
     if n < 2:
         raise HTTPException(status_code=400, detail="Instance 1 is managed by docker-compose")
 
     from backend.browser_pool import get_pool, LocalBrowserPool
 
     pool = get_pool()
-    name = f"chrome-{n}"
+    name = f"agent-{n}"
     endpoint = f"http://{name}:19222"
 
     client = _docker_client()
     try:
         container = client.containers.get(name)
         container.remove(force=True)
-        logger.info("chrome-pool: removed container %s", name)
+        logger.info("agent-pool: removed container %s", name)
     except Exception as exc:
         raise HTTPException(status_code=404, detail=f"Container {name} not found: {exc}")
 
@@ -324,9 +358,18 @@ async def remove_chrome_instance(n: int) -> ApiResponse:
     try:
         _update_env_file("AGENT_POOL_ENDPOINTS", all_endpoints)
     except Exception as exc:
-        logger.warning("chrome-pool: could not update .env: %s", exc)
+        logger.warning("agent-pool: could not update .env: %s", exc)
 
     return ApiResponse.ok({"removed": name, "total": len(pool.endpoints)})
+
+
+@router.get("/agents/ws-status", response_model=ApiResponse[dict])
+async def ws_agents_status() -> ApiResponse:
+    """Return the list of agent URLs that currently have an active WS connection."""
+    from backend import ws_agent_manager
+
+    connected = ws_agent_manager.list_connected()
+    return ApiResponse.ok({"connected": connected})
 
 
 @router.websocket("/agents/ws")

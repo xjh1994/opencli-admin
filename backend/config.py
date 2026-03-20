@@ -54,11 +54,11 @@ class Settings(BaseSettings):
     # Agent pool: comma-separated agent/CDP endpoint URLs.
     # Each entry is a Chrome agent node (local or remote).
     # Single-instance fallback when agent_pool_endpoints is empty.
-    opencli_cdp_endpoint: str = "http://chrome-1:19222"
+    opencli_cdp_endpoint: str = "http://agent-1:19222"
     # Multi-agent pool: overrides opencli_cdp_endpoint when set.
-    # e.g. http://chrome-1:19222,http://chrome-2:19222,http://192.168.1.100:19222
+    # e.g. http://agent-1:19222,http://agent-2:19222,http://192.168.1.100:19222
     agent_pool_endpoints: str = ""
-    # noVNC base port for the first Chrome instance (chrome-1). Additional
+    # noVNC base port for the first agent instance (agent-1). Additional
     # instances use base+1, base+2, …  Matches docker-compose NOVNC_PORT.
     novnc_base_port: int = 3010
 

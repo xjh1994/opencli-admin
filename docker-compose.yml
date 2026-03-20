@@ -44,7 +44,7 @@ services:
   # ── Backend API ───────────────────────────────────────────────────────────
   api:
     <<: *backend-common
-    # Run as root so the API can manage Docker containers (chrome pool) via
+    # Run as root so the API can manage Docker containers (agent pool) via
     # the mounted socket. Acceptable for a self-hosted admin panel.
     user: root
     environment:
@@ -57,17 +57,17 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # opencli CDP: single-instance fallback
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://agent-1:19222}
       # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
       AGENT_POOL_ENDPOINTS: ${AGENT_POOL_ENDPOINTS:-}
-      # Collection mode: "local" (default, direct Docker Chrome) or "agent" (distributed edge nodes)
+      # Collection mode: "local" (default, direct Docker agent) or "agent" (distributed edge nodes)
       COLLECTION_MODE: ${COLLECTION_MODE:-local}
-      # Passed to the chrome pool manager so it can name containers/networks correctly
+      # Passed to the agent pool manager so it can name containers/networks correctly
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-opencli-admin}
     volumes:
       - db_data:/data
       - ./backend:/app/backend
-      # Docker socket: lets the API start/stop Chrome pool containers
+      # Docker socket: lets the API start/stop agent pool containers
       - /var/run/docker.sock:/var/run/docker.sock
       # .env mount: lets the API persist AGENT_POOL_ENDPOINTS after pool changes
       - ./.env:/app/.env:rw
@@ -94,7 +94,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://chrome-1:19222}
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://agent-1:19222}
       AGENT_POOL_ENDPOINTS: ${AGENT_POOL_ENDPOINTS:-}
     depends_on:
       redis:
@@ -120,19 +120,50 @@ services:
       api:
         condition: service_healthy
 
-  # ── Chrome sidecar (noVNC web UI + persistent profile for opencli) ────────
-  # Default single instance — always started.
-  chrome-1:
-    container_name: chrome-1
+  # ── Built-in agent sidecar (noVNC web UI + Chrome for opencli) ────────────
+  # Default single instance — always started (local collection mode uses this).
+  agent-1:
+    container_name: agent-1
     image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-chrome:${IMAGE_TAG:-0.1.0}
     ports:
       - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
     volumes:
-      - chrome_profile_1:/home/chrome/.config/chromium
+      - agent_profile_1:/home/chrome/.config/chromium
     restart: unless-stopped
 
-  # Additional Chrome instances are managed dynamically via the API
-  # (浏览器管理 → 新增实例)
+  # Additional agent instances are managed dynamically via the API
+  # (节点管理 → 新增实例)
+
+  # ── Remote agent (all-in-one: Chrome + agent server) ─────────────────────
+  # For deploying on a REMOTE node that should register with the center.
+  # Usage:
+  #   On the remote machine:
+  #   docker run -d --restart=unless-stopped \
+  #     -e CENTRAL_API_URL=http://<center-ip>:8031 \
+  #     -e AGENT_REGISTER=ws \
+  #     -p 19823:19823 \
+  #     xjh1994/opencli-admin-agent:0.1.0
+  #
+  # Or start the bundled agent profile (local network):
+  #   docker compose --profile agent up agent
+  agent:
+    profiles: ["agent"]
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.1.0}
+    environment:
+      CENTRAL_API_URL: ${CENTRAL_API_URL:-}
+      AGENT_ADVERTISE_URL: ${AGENT_ADVERTISE_URL:-}
+      AGENT_PORT: ${AGENT_PORT:-19823}
+      AGENT_MODE: ${AGENT_MODE:-cdp}
+      AGENT_LABEL: ${AGENT_LABEL:-}
+      AGENT_REGISTER: ${AGENT_REGISTER:-http}
+      OPENCLI_TIMEOUT: ${OPENCLI_TIMEOUT:-120}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+    volumes:
+      - agent_profile:/home/agent/.config/chromium
+    ports:
+      - "${AGENT_PORT:-19823}:19823"
+    restart: unless-stopped
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
@@ -166,4 +197,5 @@ volumes:
   redis_data:
   postgres_data:
   db_data:
-  chrome_profile_1:
+  agent_profile_1:
+  agent_profile:

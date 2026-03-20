@@ -274,7 +274,7 @@ class OpenCLIChannel(AbstractChannel):
             cmd.extend(["-f", output_format])
 
             if mode == "bridge":
-                daemon_host = urlparse(cdp_endpoint).hostname or "chrome-1"
+                daemon_host = urlparse(cdp_endpoint).hostname or "agent-1"
                 env.pop("OPENCLI_CDP_ENDPOINT", None)
                 env["OPENCLI_DAEMON_HOST"] = daemon_host
                 env["OPENCLI_DAEMON_PORT"] = str(_DAEMON_PORT)

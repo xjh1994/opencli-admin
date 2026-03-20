@@ -1,4 +1,4 @@
-"""OpenCLI Agent Server — runs on LAN/NAT edge Chrome nodes.
+"""OpenCLI Agent Server — runs on LAN/NAT edge nodes.
 
 Accepts HTTP POST /collect requests from the center API, executes opencli
 locally (pointing at the node's own Chrome instance), and returns results.
@@ -7,7 +7,7 @@ Registration modes (AGENT_REGISTER):
   http  — LAN mode: agent POSTs its URL to center; center calls back via HTTP.
            Requires the agent to be reachable from the center.
   ws    — NAT/reverse-channel mode: agent initiates a persistent WebSocket to
-           the center's /api/v1/browsers/agents/ws endpoint.  The center pushes
+           the center's /api/v1/nodes/ws endpoint.  The center pushes
            collect tasks down the WS connection; agent returns results in-band.
            Use this when the center cannot reach the agent (NAT, firewall, etc.).
   off   — Disable auto-registration entirely.
@@ -28,6 +28,8 @@ Environment variables:
     CENTRAL_API_URL         Center API base URL for self-registration
                             e.g. http://192.168.1.1:8031
                             Leave empty to skip auto-registration.
+    HTTP_PROXY              HTTP proxy for outbound requests (agent → center)
+    HTTPS_PROXY             HTTPS proxy for outbound requests (agent → center)
     OPENCLI_BRIDGE_BIN      Path to opencli 1.0 binary (default: /opt/opencli-bridge/bin/opencli)
     OPENCLI_CDP_BIN         Path to opencli 0.9 binary (default: /opt/opencli-cdp/bin/opencli)
     OPENCLI_CDP_ENDPOINT    Default Chrome CDP endpoint (default: http://localhost:19222)
@@ -69,6 +71,9 @@ _AGENT_LABEL = os.environ.get("AGENT_LABEL", socket.gethostname())
 _AGENT_REGISTER = os.environ.get("AGENT_REGISTER", "http").lower()
 # opencli subprocess execution timeout in seconds
 _OPENCLI_TIMEOUT = int(os.environ.get("OPENCLI_TIMEOUT", "120"))
+# Outbound proxy for agent → center communication (optional)
+_HTTP_PROXY = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") or ""
+_HTTPS_PROXY = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or ""
 
 
 def _detect_advertise_url() -> str:
@@ -87,16 +92,28 @@ def _detect_advertise_url() -> str:
     return f"http://{ip}:{_AGENT_PORT}"
 
 
+def _build_proxies() -> dict:
+    """Build httpx proxy dict from environment variables."""
+    proxies: dict = {}
+    if _HTTPS_PROXY:
+        proxies["https://"] = _HTTPS_PROXY
+    if _HTTP_PROXY:
+        proxies["http://"] = _HTTP_PROXY
+    return proxies
+
+
 async def _register_with_center(advertise_url: str) -> None:
     """POST agent registration to the center API. Retries up to 5 times."""
     import httpx
 
-    url = f"{_CENTRAL_API_URL}/api/v1/browsers/agents/register"
-    payload = {"agent_url": advertise_url, "mode": _AGENT_MODE, "label": _AGENT_LABEL}
+    url = f"{_CENTRAL_API_URL}/api/v1/nodes/register"
+    payload = {"agent_url": advertise_url, "mode": _AGENT_MODE, "label": _AGENT_LABEL,
+               "agent_protocol": "http"}
+    proxies = _build_proxies()
 
     for attempt in range(1, 6):
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with httpx.AsyncClient(timeout=10, proxies=proxies or None) as client:
                 resp = await client.post(url, json=payload)
                 resp.raise_for_status()
             logger.info("Registered with center %s as %s", _CENTRAL_API_URL, advertise_url)
@@ -144,8 +161,9 @@ async def _register_via_ws(advertise_url: str) -> None:
         .replace("https://", "wss://")
         .replace("http://", "ws://")
         .rstrip("/")
-        + "/api/v1/browsers/agents/ws"
+        + "/api/v1/nodes/ws"
     )
+    _proxy = _HTTPS_PROXY or _HTTP_PROXY or None
     register_payload = json.dumps({
         "type": "register",
         "agent_url": advertise_url,
@@ -158,7 +176,10 @@ async def _register_via_ws(advertise_url: str) -> None:
         attempt += 1
         try:
             logger.info("WS connecting to center %s (attempt %d)", ws_url, attempt)
-            async with websockets.connect(ws_url, ping_interval=30, ping_timeout=10) as ws:
+            connect_kwargs: dict = {"ping_interval": 30, "ping_timeout": 10}
+            if _proxy:
+                connect_kwargs["proxy"] = _proxy
+            async with websockets.connect(ws_url, **connect_kwargs) as ws:
                 attempt = 0  # reset on successful connect
                 await ws.send(register_payload)
 
