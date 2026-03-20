@@ -247,13 +247,29 @@ class OpenCLIChannel(AbstractChannel):
         pool = get_pool()
         settings = get_settings()
 
-        async with pool.acquire(endpoint=chrome_endpoint) as cdp_endpoint:
+        # In agent mode, prefer endpoints that have a registered agent_url/protocol.
+        # The pool may also contain local chrome endpoints without agent metadata.
+        _acquire_endpoint = chrome_endpoint
+        if settings.collection_mode == "agent" and not chrome_endpoint and isinstance(pool, LocalBrowserPool):
+            agent_eps = [ep for ep in pool.endpoints if pool.get_agent_protocol(ep)]
+            if agent_eps:
+                _acquire_endpoint = agent_eps[0]
+                logger.debug("agent mode: selected endpoint %s (has agent_protocol)", _acquire_endpoint)
+            else:
+                return ChannelResult.fail("No registered agent nodes available. Please add an agent node first.")
+
+        async with pool.acquire(endpoint=_acquire_endpoint) as cdp_endpoint:
             mode = pool.get_mode(cdp_endpoint)
 
             # Agent mode: dispatch to remote edge node
             if settings.collection_mode == "agent":
                 protocol = pool.get_agent_protocol(cdp_endpoint) if isinstance(pool, LocalBrowserPool) else "http"
                 agent_url = pool.get_agent_url(cdp_endpoint) or cdp_endpoint
+                if not protocol:
+                    return ChannelResult.fail(
+                        f"Endpoint {cdp_endpoint} has no registered agent. "
+                        "Set COLLECTION_MODE=local or add an agent node."
+                    )
                 if protocol == "http":
                     return await _collect_via_agent(
                         agent_url, site, command, args, output_format, mode

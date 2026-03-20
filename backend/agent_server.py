@@ -113,9 +113,26 @@ async def _register_with_center(advertise_url: str) -> None:
 
     for attempt in range(1, 6):
         try:
-            async with httpx.AsyncClient(timeout=10, proxies=proxies or None) as client:
-                resp = await client.post(url, json=payload)
-                resp.raise_for_status()
+            # httpx >= 0.28 removed 'proxies'; use 'proxy' (single URL) or mounts
+            client_kwargs: dict = {"timeout": 10}
+            if proxies:
+                proxy_url = proxies.get("https://") or proxies.get("http://")
+                try:
+                    client_kwargs["proxy"] = proxy_url
+                    async with httpx.AsyncClient(**client_kwargs) as client:
+                        resp = await client.post(url, json=payload)
+                        resp.raise_for_status()
+                except TypeError:
+                    # Older httpx: fall back to 'proxies'
+                    client_kwargs.pop("proxy", None)
+                    client_kwargs["proxies"] = proxies
+                    async with httpx.AsyncClient(**client_kwargs) as client:
+                        resp = await client.post(url, json=payload)
+                        resp.raise_for_status()
+            else:
+                async with httpx.AsyncClient(**client_kwargs) as client:
+                    resp = await client.post(url, json=payload)
+                    resp.raise_for_status()
             logger.info("Registered with center %s as %s", _CENTRAL_API_URL, advertise_url)
             return
         except Exception as exc:

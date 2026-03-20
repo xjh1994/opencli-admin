@@ -320,19 +320,23 @@ install_docker() {{
   command -v docker >/dev/null 2>&1 || die "Docker not found"
   CONTAINER_NAME="opencli-agent"
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-  OCCUPIED_BY=$(docker ps --format '{{{{.Names}}}} {{{{.Ports}}}}' | grep "0.0.0.0:${{AGENT_PORT}}->" | awk '{{{{print $1}}}}')
-  if [[ -n "$OCCUPIED_BY" ]]; then
-    printf "\\e[33m[WARN]\\e[0m  Port $AGENT_PORT used by: $OCCUPIED_BY\\n"
-    printf "\\e[33m[WARN]\\e[0m  Stop it: docker stop $OCCUPIED_BY\\n"
-    printf "\\e[33m[WARN]\\e[0m  Or use a different port: AGENT_PORT=19824 bash $0\\n"
-    die "Port conflict"
-  fi
+  # Auto-find a free port starting from AGENT_PORT
+  ORIG_PORT="$AGENT_PORT"
+  while docker ps --format '{{{{.Ports}}}}' | grep -q "0.0.0.0:${{AGENT_PORT}}->"; do
+    AGENT_PORT=$(( AGENT_PORT + 1 ))
+  done
+  [[ "$AGENT_PORT" != "$ORIG_PORT" ]] && printf "\\e[33m[WARN]\\e[0m  Port $ORIG_PORT in use, using $AGENT_PORT instead\\n"
+  # Inside Docker, 'localhost'/'127.0.0.1' refers to the container itself, not the host.
+  DOCKER_CENTRAL_URL=$(echo "$CENTRAL_API_URL" | sed 's|localhost|host.docker.internal|g; s|127\\.0\\.0\\.1|host.docker.internal|g')
+  [[ "$DOCKER_CENTRAL_URL" != "$CENTRAL_API_URL" ]] && printf "\\e[33m[WARN]\\e[0m  Docker networking: using $DOCKER_CENTRAL_URL inside container\\n"
   PROXY_ARGS=""
   [[ -n "${{HTTP_PROXY:-}}" ]]  && PROXY_ARGS="$PROXY_ARGS -e HTTP_PROXY=$HTTP_PROXY"
   [[ -n "${{HTTPS_PROXY:-}}" ]] && PROXY_ARGS="$PROXY_ARGS -e HTTPS_PROXY=$HTTPS_PROXY"
   # shellcheck disable=SC2086
+  # --add-host makes host.docker.internal work on Linux (no-op on Docker Desktop)
   docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \\
-    -e CENTRAL_API_URL="$CENTRAL_API_URL" -e AGENT_REGISTER="$AGENT_REGISTER" \\
+    --add-host=host.docker.internal:host-gateway \\
+    -e CENTRAL_API_URL="$DOCKER_CENTRAL_URL" -e AGENT_REGISTER="$AGENT_REGISTER" \\
     -e AGENT_PORT="$AGENT_PORT" -e AGENT_LABEL="$AGENT_LABEL" -e AGENT_MODE="cdp" \\
     $PROXY_ARGS -p "${{AGENT_PORT}}:${{AGENT_PORT}}" \\
     "xjh1994/opencli-admin-agent:${{IMAGE_TAG}}"
@@ -341,10 +345,17 @@ install_docker() {{
 
 install_python() {{
   command -v python3 >/dev/null 2>&1 || die "Python 3 not found"
-  pip3 install --quiet fastapi uvicorn httpx pyyaml websockets
+  VENV_DIR="$HOME/.opencli-agent-venv"
+  if python3 -m pip install --user --quiet fastapi uvicorn httpx pyyaml websockets 2>/dev/null; then
+    PYTHON_BIN="python3"
+  elif python3 -m venv "$VENV_DIR" 2>/dev/null && "$VENV_DIR/bin/pip" install --quiet fastapi uvicorn httpx pyyaml websockets; then
+    PYTHON_BIN="$VENV_DIR/bin/python3"
+  else
+    die "Cannot install Python deps. Try: python3 -m venv ~/.opencli-agent-venv && source ~/.opencli-agent-venv/bin/activate && pip install fastapi uvicorn httpx pyyaml websockets"
+  fi
   CENTRAL_API_URL="$CENTRAL_API_URL" AGENT_REGISTER="$AGENT_REGISTER" \\
   AGENT_PORT="$AGENT_PORT" AGENT_LABEL="$AGENT_LABEL" AGENT_MODE="cdp" \\
-  nohup python3 -m backend.agent_server > /tmp/opencli-agent.log 2>&1 &
+  nohup "$PYTHON_BIN" -m backend.agent_server > /tmp/opencli-agent.log 2>&1 &
   info "Agent started (PID=$!). Logs: /tmp/opencli-agent.log"
 }}
 

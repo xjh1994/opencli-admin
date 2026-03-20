@@ -59,15 +59,17 @@ install_docker() {
     docker rm -f "$CONTAINER_NAME" >/dev/null
   fi
 
-  # Check if port is occupied by another container
-  OCCUPIED_BY=$(docker ps --format '{{.Names}} {{.Ports}}' | grep "0.0.0.0:${AGENT_PORT}->" | awk '{print $1}')
-  if [[ -n "$OCCUPIED_BY" ]]; then
-    warn "Port $AGENT_PORT is already used by container: $OCCUPIED_BY"
-    warn "Options:"
-    warn "  1. Stop the existing container:  docker stop $OCCUPIED_BY"
-    warn "  2. Use a different port:          AGENT_PORT=19824 bash $0"
-    die  "Port conflict — cannot continue"
-  fi
+  # Auto-find a free port starting from AGENT_PORT
+  ORIG_PORT="$AGENT_PORT"
+  while docker ps --format '{{.Ports}}' | grep -q "0.0.0.0:${AGENT_PORT}->"; do
+    AGENT_PORT=$(( AGENT_PORT + 1 ))
+  done
+  [[ "$AGENT_PORT" != "$ORIG_PORT" ]] && warn "Port $ORIG_PORT in use, using $AGENT_PORT instead"
+
+  # Inside Docker, 'localhost'/'127.0.0.1' refers to the container itself, not the host.
+  # Translate to host.docker.internal (works on Docker Desktop + Linux with --add-host).
+  DOCKER_CENTRAL_URL=$(echo "$CENTRAL_API_URL" | sed 's|localhost|host.docker.internal|g; s|127\.0\.0\.1|host.docker.internal|g')
+  [[ "$DOCKER_CENTRAL_URL" != "$CENTRAL_API_URL" ]] && warn "Docker networking: using $DOCKER_CENTRAL_URL inside container"
 
   PROXY_ARGS=""
   [[ -n "${HTTP_PROXY:-}" ]]  && PROXY_ARGS="$PROXY_ARGS -e HTTP_PROXY=$HTTP_PROXY"
@@ -75,10 +77,12 @@ install_docker() {
 
   info "Starting container '$CONTAINER_NAME'..."
   # shellcheck disable=SC2086
+  # --add-host makes host.docker.internal work on Linux (no-op on Docker Desktop)
   docker run -d \
     --name "$CONTAINER_NAME" \
     --restart unless-stopped \
-    -e CENTRAL_API_URL="$CENTRAL_API_URL" \
+    --add-host=host.docker.internal:host-gateway \
+    -e CENTRAL_API_URL="$DOCKER_CENTRAL_URL" \
     -e AGENT_REGISTER="$AGENT_REGISTER" \
     -e AGENT_PORT="$AGENT_PORT" \
     -e AGENT_LABEL="$AGENT_LABEL" \
@@ -99,13 +103,21 @@ install_docker() {
 # ── Python/pip install ─────────────────────────────────────────────────────────
 install_python() {
   command -v python3 >/dev/null 2>&1 || die "Python 3 is not installed"
-  command -v pip3 >/dev/null 2>&1    || die "pip3 is not installed"
 
   info "Installing Python dependencies..."
-  pip3 install --quiet fastapi uvicorn httpx pyyaml websockets
+  # Try pip with --user first; fall back to creating a venv if pip is unavailable or restricted
+  VENV_DIR="$HOME/.opencli-agent-venv"
+  if python3 -m pip install --user --quiet fastapi uvicorn httpx pyyaml websockets 2>/dev/null; then
+    PYTHON_BIN="python3"
+  elif python3 -m venv "$VENV_DIR" 2>/dev/null && "$VENV_DIR/bin/pip" install --quiet fastapi uvicorn httpx pyyaml websockets; then
+    PYTHON_BIN="$VENV_DIR/bin/python3"
+    info "Installed into virtualenv: $VENV_DIR"
+  else
+    die "Could not install Python dependencies. Try: python3 -m venv ~/.opencli-agent-venv && source ~/.opencli-agent-venv/bin/activate && pip install fastapi uvicorn httpx pyyaml websockets"
+  fi
 
   SYSTEMD_UNIT="/etc/systemd/system/opencli-agent.service"
-  AGENT_CMD="python3 -m backend.agent_server"
+  AGENT_CMD="$PYTHON_BIN -m backend.agent_server"
 
   if command -v systemctl >/dev/null 2>&1 && [[ -w /etc/systemd/system ]]; then
     info "Installing systemd service..."

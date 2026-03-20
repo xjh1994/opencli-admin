@@ -39,93 +39,134 @@ const inputCls =
 
 // ── Install Wizard Modal ──────────────────────────────────────────────────────
 
+type InstallMethod = 'docker' | 'shell'
+type RegisterMode = 'ws' | 'http'
+
 function InstallWizardModal({ onClose }: { onClose: () => void }) {
-  const { t } = useTranslation()
-  const [tab, setTab] = useState<'docker' | 'shell'>('docker')
+  const [method, setMethod] = useState<InstallMethod>('docker')
+  const [mode, setMode] = useState<RegisterMode>('ws')
   const [copied, setCopied] = useState(false)
 
   const origin = window.location.origin
 
-  const dockerCmd = [
-    'docker run -d \\',
-    '  --name opencli-agent \\',
-    '  --restart unless-stopped \\',
-    `  -e CENTRAL_API_URL=${origin} \\`,
-    '  -e AGENT_REGISTER=ws \\',
-    '  -p 19823:19823 \\',
-    '  xjh1994/opencli-admin-agent:0.1.0',
-  ].join('\n')
+  const cmd = (() => {
+    if (method === 'docker') {
+      return [
+        'docker run -d \\',
+        '  --name opencli-agent \\',
+        '  --restart unless-stopped \\',
+        '  --add-host=host.docker.internal:host-gateway \\',
+        `  -e CENTRAL_API_URL=${origin} \\`,
+        `  -e AGENT_REGISTER=${mode} \\`,
+        '  -p 19823:19823 \\',
+        '  xjh1994/opencli-admin-agent:0.1.0',
+      ].join('\n')
+    }
+    // shell
+    const envPrefix = `AGENT_REGISTER=${mode}`
+    return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | ${envPrefix} bash`
+  })()
 
-  const shellCmd = `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | bash`
-
-  const currentCmd = tab === 'docker' ? dockerCmd : shellCmd
+  const modeHint: Record<RegisterMode, string> = {
+    ws: 'WS 反向通道：Agent 主动连接中心，适合 NAT / 跨网场景，无需开放入站端口。',
+    http: 'HTTP 直连：中心主动请求 Agent，适合局域网场景，Agent 需对中心可访问。',
+  }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(currentCmd).then(() => {
+    navigator.clipboard.writeText(cmd).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
   }
 
+  const tabCls = (active: boolean) =>
+    [
+      'px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
+      active
+        ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+    ].join(' ')
+
+  const modeBtnCls = (active: boolean) =>
+    [
+      'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+      active
+        ? 'bg-blue-600 text-white'
+        : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600',
+    ].join(' ')
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
         <div className="p-5 border-b border-gray-100 dark:border-gray-700">
-          <h2 className="text-base font-semibold dark:text-white">{t('browsers.installTitle')}</h2>
+          <h2 className="text-base font-semibold dark:text-white">新增节点</h2>
         </div>
 
-        {/* Tabs */}
+        {/* Method tabs */}
         <div className="flex border-b border-gray-100 dark:border-gray-700">
-          {(['docker', 'shell'] as const).map((key) => (
-            <button
-              key={key}
-              onClick={() => { setTab(key); setCopied(false) }}
-              className={[
-                'px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
-                tab === key
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
-              ].join(' ')}
-            >
-              {key === 'docker' ? t('browsers.installDockerTab') : t('browsers.installShellTab')}
-            </button>
-          ))}
+          <button className={tabCls(method === 'docker')} onClick={() => { setMethod('docker'); setCopied(false) }}>
+            Docker
+          </button>
+          <button className={tabCls(method === 'shell')} onClick={() => { setMethod('shell'); setCopied(false) }}>
+            Shell 脚本
+          </button>
         </div>
 
         <div className="p-5 space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {tab === 'docker' ? t('browsers.installDockerDesc') : t('browsers.installShellDesc')}
-          </p>
+          {/* Register mode selector */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">注册模式</span>
+            <div className="flex gap-1.5">
+              <button className={modeBtnCls(mode === 'ws')} onClick={() => { setMode('ws'); setCopied(false) }}>
+                WS 反向通道
+              </button>
+              <button className={modeBtnCls(mode === 'http')} onClick={() => { setMode('http'); setCopied(false) }}>
+                HTTP 直连
+              </button>
+            </div>
+          </div>
 
+          {/* Hint */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
+            {modeHint[mode]}
+          </div>
+
+          {/* Command block */}
           <div className="relative">
             <pre className="bg-gray-900 text-gray-100 rounded-lg px-4 py-3 text-xs font-mono overflow-x-auto whitespace-pre">
-              {currentCmd}
+              {cmd}
             </pre>
             <button
               onClick={handleCopy}
               className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
-              {copied ? t('browsers.copied') : t('browsers.copyCommand')}
+              {copied ? '已复制' : '复制'}
             </button>
           </div>
 
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-            {tab === 'docker'
-              ? 'WS 模式适合 NAT 穿透场景，Agent 主动连接中心，无需开放入站端口。'
-              : 'HTTP 模式适合局域网场景，中心直接请求 Agent，部署更简单。'}
-          </div>
+          {method === 'docker' && (
+            <p className="text-xs text-gray-400">
+              提示：若中心 URL 为 <code className="font-mono">localhost</code>，容器内会自动替换为 <code className="font-mono">host.docker.internal</code>。
+            </p>
+          )}
+          {method === 'shell' && (
+            <p className="text-xs text-gray-400">
+              在目标机器上执行上述命令。需要 Python 3 环境；无 Docker 时自动安装依赖并后台运行。
+            </p>
+          )}
         </div>
 
         <div className="p-5 border-t border-gray-100 dark:border-gray-700 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+            className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
           >
-            {t('common.cancel')}
+            关闭
           </button>
         </div>
       </div>

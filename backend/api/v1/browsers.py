@@ -235,6 +235,33 @@ async def register_agent(
     await db.commit()
     await db.refresh(inst)
 
+    # Also upsert EdgeNode so the Nodes UI can see HTTP-registered agents
+    try:
+        from backend.models.edge_node import EdgeNode, EdgeNodeEvent
+        from datetime import datetime, timezone
+        _now = datetime.now(timezone.utc)
+        result2 = await db.execute(select(EdgeNode).where(EdgeNode.url == agent_url))
+        node = result2.scalar_one_or_none()
+        if node:
+            node.status = "online"
+            node.last_seen_at = _now
+            node.protocol = "http"
+            node.mode = body.mode
+            if body.label:
+                node.label = body.label
+        else:
+            node = EdgeNode(
+                url=agent_url, label=body.label or agent_url,
+                protocol="http", mode=body.mode, status="online",
+                last_seen_at=_now,
+            )
+            db.add(node)
+            await db.flush()
+            db.add(EdgeNodeEvent(node_id=node.id, event="registered"))
+        await db.commit()
+    except Exception as exc:
+        logger.warning("Agent %s: EdgeNode upsert failed (non-fatal): %s", agent_url, exc)
+
     logger.info("Agent registered: %s (mode=%s)", agent_url, body.mode)
     return ApiResponse.ok(BrowserInstanceRead.model_validate(inst))
 
@@ -438,6 +465,36 @@ async def agent_ws_endpoint(ws: WebSocket) -> None:
         except Exception as exc:
             logger.warning("WS agent %s: DB upsert failed (non-fatal): %s", agent_url, exc)
 
+        # Also upsert into EdgeNode so the Nodes UI can see this agent
+        try:
+            from backend.models.edge_node import EdgeNode, EdgeNodeEvent
+            from backend.database import AsyncSessionLocal
+            from datetime import datetime, timezone
+            _now = datetime.now(timezone.utc)
+            async with AsyncSessionLocal() as _db:
+                from sqlalchemy import select as _select
+                _res = await _db.execute(_select(EdgeNode).where(EdgeNode.url == agent_url))
+                _node = _res.scalar_one_or_none()
+                if _node:
+                    _node.status = "online"
+                    _node.last_seen_at = _now
+                    _node.protocol = "ws"
+                    _node.mode = mode
+                    if label:
+                        _node.label = label
+                else:
+                    _node = EdgeNode(
+                        url=agent_url, label=label or agent_url,
+                        protocol="ws", mode=mode, status="online",
+                        last_seen_at=_now,
+                    )
+                    _db.add(_node)
+                    await _db.flush()
+                    _db.add(EdgeNodeEvent(node_id=_node.id, event="registered"))
+                await _db.commit()
+        except Exception as _exc:
+            logger.warning("WS agent %s: EdgeNode upsert failed (non-fatal): %s", agent_url, _exc)
+
         ws_agent_manager.register_connection(agent_url, ws)
         await ws.send_json({"type": "registered", "agent_url": agent_url})
         logger.info("WS agent registered: %s (mode=%s label=%r)", agent_url, mode, label)
@@ -460,6 +517,21 @@ async def agent_ws_endpoint(ws: WebSocket) -> None:
     finally:
         if agent_url:
             ws_agent_manager.unregister_connection(agent_url)
+            try:
+                from backend.models.edge_node import EdgeNode, EdgeNodeEvent
+                from backend.database import AsyncSessionLocal
+                from datetime import datetime, timezone
+                from sqlalchemy import select as _select
+                async with AsyncSessionLocal() as _db:
+                    _res = await _db.execute(_select(EdgeNode).where(EdgeNode.url == agent_url))
+                    _node = _res.scalar_one_or_none()
+                    if _node:
+                        _node.status = "offline"
+                        _node.last_seen_at = datetime.now(timezone.utc)
+                        _db.add(EdgeNodeEvent(node_id=_node.id, event="offline"))
+                        await _db.commit()
+            except Exception as _exc:
+                logger.warning("WS agent %s: EdgeNode offline update failed: %s", agent_url, _exc)
 
 
 @router.post("/restart-api", response_model=ApiResponse[dict])
