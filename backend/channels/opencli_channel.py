@@ -136,6 +136,42 @@ async def _collect_via_agent(
     return ChannelResult.ok(items, site=site, command=command)
 
 
+async def _collect_via_ws_agent(
+    agent_url: str,
+    site: str,
+    command: str,
+    args: dict,
+    output_format: str,
+    mode: str,
+) -> ChannelResult:
+    """Dispatch a collect request to a NAT agent via the persistent reverse WS channel."""
+    from backend import ws_agent_manager
+
+    logger.info("WS agent dispatch | agent=%s site=%s cmd=%s", agent_url, site, command)
+    try:
+        result = await ws_agent_manager.dispatch_collect(
+            agent_url, site, command, args, output_format, mode
+        )
+    except TimeoutError:
+        logger.error("WS agent timeout | agent=%s", agent_url)
+        return ChannelResult.fail(f"WS agent timed out: {agent_url!r}")
+    except RuntimeError as exc:
+        logger.error("WS agent not connected | agent=%s: %s", agent_url, exc)
+        return ChannelResult.fail(f"WS agent not connected: {exc}")
+    except Exception as exc:
+        logger.error("WS agent error | agent=%s: %s", agent_url, exc)
+        return ChannelResult.fail(f"WS agent error: {exc}")
+
+    if not result.get("success"):
+        err = result.get("error", "unknown agent error")
+        logger.error("WS agent returned error | agent=%s: %s", agent_url, err)
+        return ChannelResult.fail(f"WS agent error: {err}")
+
+    items = result.get("items", [])
+    logger.info("WS agent done | site=%s cmd=%s items=%d", site, command, len(items))
+    return ChannelResult.ok(items, site=site, command=command)
+
+
 async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
     """Run opencli subprocess, return (returncode, stdout, stderr)."""
     try:
@@ -189,8 +225,9 @@ class OpenCLIChannel(AbstractChannel):
                         agent_url, site, command, args, output_format, mode
                     )
                 elif protocol == "ws":
-                    logger.error("WS agent protocol not yet implemented")
-                    return ChannelResult.fail("WS agent protocol not yet implemented (Phase 2)")
+                    return await _collect_via_ws_agent(
+                        agent_url, site, command, args, output_format, mode
+                    )
                 else:
                     logger.error("Unknown agent_protocol %r for endpoint %s", protocol, cdp_endpoint)
                     return ChannelResult.fail(f"Unknown agent_protocol: {protocol!r}")

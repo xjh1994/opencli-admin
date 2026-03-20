@@ -4,7 +4,7 @@ import os
 import re
 import socket
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -327,6 +327,96 @@ async def remove_chrome_instance(n: int) -> ApiResponse:
         logger.warning("chrome-pool: could not update .env: %s", exc)
 
     return ApiResponse.ok({"removed": name, "total": len(pool.endpoints)})
+
+
+@router.websocket("/agents/ws")
+async def agent_ws_endpoint(ws: WebSocket) -> None:
+    """Reverse WebSocket channel for NAT/unreachable edge agents.
+
+    The agent initiates this connection, sends a 'register' handshake, then
+    listens for 'collect' tasks from the center and sends back 'result' messages.
+    The center keeps the connection alive and uses it to dispatch collect requests.
+    """
+    from backend import ws_agent_manager
+    from backend.browser_pool import get_pool, LocalBrowserPool
+    from backend.models.browser import BrowserInstance
+
+    await ws.accept()
+    agent_url: str | None = None
+
+    try:
+        # ── 1. Registration handshake ─────────────────────────────────────────
+        data = await ws.receive_json()
+        if data.get("type") != "register":
+            await ws.close(code=1008, reason="Expected 'register' message first")
+            return
+
+        agent_url = data.get("agent_url", "").rstrip("/")
+        mode = data.get("mode", "bridge")
+        label = data.get("label", "")
+
+        if not agent_url.startswith("http"):
+            await ws.close(code=1008, reason="agent_url must be an http/https URL")
+            return
+        if mode not in ("bridge", "cdp"):
+            await ws.close(code=1008, reason="mode must be 'bridge' or 'cdp'")
+            return
+
+        # ── 2. Add/update in pool ─────────────────────────────────────────────
+        pool = get_pool()
+        if isinstance(pool, LocalBrowserPool):
+            if agent_url not in pool.endpoints:
+                pool.add_endpoint(agent_url)
+            pool.set_mode(agent_url, mode)
+            pool.set_agent_url(agent_url, agent_url)
+            pool.set_agent_protocol(agent_url, "ws")
+
+        # Upsert in DB (fire-and-forget; don't block the WS receive loop)
+        try:
+            from backend.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(BrowserInstance).where(BrowserInstance.endpoint == agent_url)
+                )
+                inst = result.scalar_one_or_none()
+                if inst:
+                    inst.mode = mode
+                    inst.agent_url = agent_url
+                    inst.agent_protocol = "ws"
+                    if label:
+                        inst.label = label
+                else:
+                    inst = BrowserInstance(
+                        endpoint=agent_url, mode=mode,
+                        agent_url=agent_url, agent_protocol="ws", label=label,
+                    )
+                    db.add(inst)
+                await db.commit()
+        except Exception as exc:
+            logger.warning("WS agent %s: DB upsert failed (non-fatal): %s", agent_url, exc)
+
+        ws_agent_manager.register_connection(agent_url, ws)
+        await ws.send_json({"type": "registered", "agent_url": agent_url})
+        logger.info("WS agent registered: %s (mode=%s label=%r)", agent_url, mode, label)
+
+        # ── 3. Receive loop: results + pings ──────────────────────────────────
+        while True:
+            msg = await ws.receive_json()
+            msg_type = msg.get("type")
+            if msg_type == "result":
+                ws_agent_manager.resolve_response(msg.get("request_id", ""), msg)
+            elif msg_type == "ping":
+                await ws.send_json({"type": "pong"})
+            else:
+                logger.debug("WS agent %s: unknown message type %r", agent_url, msg_type)
+
+    except WebSocketDisconnect:
+        logger.info("WS agent disconnected: %s", agent_url or "<unregistered>")
+    except Exception as exc:
+        logger.exception("WS agent %s: unexpected error: %s", agent_url or "<unregistered>", exc)
+    finally:
+        if agent_url:
+            ws_agent_manager.unregister_connection(agent_url)
 
 
 @router.post("/restart-api", response_model=ApiResponse[dict])

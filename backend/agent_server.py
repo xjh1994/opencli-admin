@@ -1,24 +1,30 @@
-"""OpenCLI Agent Server — runs on LAN edge Chrome nodes.
+"""OpenCLI Agent Server — runs on LAN/NAT edge Chrome nodes.
 
 Accepts HTTP POST /collect requests from the center API, executes opencli
 locally (pointing at the node's own Chrome instance), and returns results.
-The center does NOT need a persistent connection; each request is independent.
 
-On startup, if CENTRAL_API_URL is configured the agent automatically registers
-itself with the center — no manual URL entry required.
+Registration modes (AGENT_REGISTER):
+  http  — LAN mode: agent POSTs its URL to center; center calls back via HTTP.
+           Requires the agent to be reachable from the center.
+  ws    — NAT/reverse-channel mode: agent initiates a persistent WebSocket to
+           the center's /api/v1/browsers/agents/ws endpoint.  The center pushes
+           collect tasks down the WS connection; agent returns results in-band.
+           Use this when the center cannot reach the agent (NAT, firewall, etc.).
+  off   — Disable auto-registration entirely.
 
 Usage on the edge node:
-    pip install fastapi uvicorn httpx pyyaml
+    pip install fastapi uvicorn httpx pyyaml websockets
     python -m backend.agent_server
     # or standalone:
     uvicorn backend.agent_server:app --host 0.0.0.0 --port 19823
 
 Environment variables:
     AGENT_PORT              HTTP port to listen on (default: 19823)
-    AGENT_ADVERTISE_URL     URL the center should use to reach this agent
+    AGENT_ADVERTISE_URL     Canonical URL the center uses to identify this agent
                             (default: auto-detected from outbound IP)
     AGENT_MODE              Collection mode reported to center: bridge | cdp (default: bridge)
     AGENT_LABEL             Human-readable label for this agent (default: hostname)
+    AGENT_REGISTER          Registration mode: http | ws | off (default: http)
     CENTRAL_API_URL         Center API base URL for self-registration
                             e.g. http://192.168.1.1:8031
                             Leave empty to skip auto-registration.
@@ -99,8 +105,99 @@ async def _register_with_center(advertise_url: str) -> None:
     logger.error("Could not register with center after 5 attempts")
 
 
+async def _handle_ws_collect(ws, msg: dict) -> None:
+    """Execute a collect task received over the WS channel and send back the result."""
+    request_id = msg.get("request_id", "")
+    req = CollectRequest(
+        site=msg.get("site", ""),
+        command=msg.get("command", ""),
+        args=msg.get("args", {}),
+        format=msg.get("format", "json"),
+        mode=msg.get("mode", "bridge"),
+    )
+    try:
+        result = await collect(req)
+    except Exception as exc:
+        logger.exception("WS collect error for request_id=%s: %s", request_id, exc)
+        result = {"success": False, "items": [], "error": str(exc)}
+    result["type"] = "result"
+    result["request_id"] = request_id
+    try:
+        await ws.send(json.dumps(result))
+    except Exception as exc:
+        logger.error("WS: failed to send result for request_id=%s: %s", request_id, exc)
+
+
+async def _register_via_ws(advertise_url: str) -> None:
+    """Initiate persistent reverse WebSocket to center and handle collect tasks.
+
+    Keeps reconnecting with exponential back-off so transient outages are
+    recovered automatically.  The loop exits only when the process shuts down.
+    """
+    import websockets  # requires: pip install websockets
+
+    ws_url = (
+        _CENTRAL_API_URL
+        .replace("https://", "wss://")
+        .replace("http://", "ws://")
+        .rstrip("/")
+        + "/api/v1/browsers/agents/ws"
+    )
+    register_payload = json.dumps({
+        "type": "register",
+        "agent_url": advertise_url,
+        "mode": _AGENT_MODE,
+        "label": _AGENT_LABEL,
+    })
+
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            logger.info("WS connecting to center %s (attempt %d)", ws_url, attempt)
+            async with websockets.connect(ws_url, ping_interval=30, ping_timeout=10) as ws:
+                attempt = 0  # reset on successful connect
+                await ws.send(register_payload)
+
+                ack_raw = await asyncio.wait_for(ws.recv(), timeout=15)
+                ack = json.loads(ack_raw)
+                if ack.get("type") != "registered":
+                    raise RuntimeError(f"Unexpected handshake response: {ack}")
+                logger.info("WS registered with center as %s", advertise_url)
+
+                # Main receive loop
+                async for raw_msg in ws:
+                    try:
+                        msg = json.loads(raw_msg)
+                    except json.JSONDecodeError:
+                        logger.warning("WS: invalid JSON from center: %r", raw_msg[:200])
+                        continue
+                    msg_type = msg.get("type")
+                    if msg_type == "collect":
+                        asyncio.create_task(_handle_ws_collect(ws, msg))
+                    elif msg_type == "ping":
+                        await ws.send(json.dumps({"type": "pong"}))
+                    elif msg_type == "pong":
+                        pass
+                    else:
+                        logger.debug("WS: unknown message type %r", msg_type)
+
+        except asyncio.CancelledError:
+            logger.info("WS registration task cancelled — shutting down")
+            return
+        except Exception as exc:
+            wait = min(attempt * 3, 60)
+            logger.warning("WS connection lost (attempt %d): %s — reconnecting in %ds",
+                           attempt, exc, wait)
+            await asyncio.sleep(wait)
+
+
+_ws_task: asyncio.Task | None = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _ws_task
     if not _CENTRAL_API_URL or _AGENT_REGISTER == "off":
         logger.info("Auto-registration disabled (CENTRAL_API_URL=%r AGENT_REGISTER=%s)",
                     _CENTRAL_API_URL or "", _AGENT_REGISTER)
@@ -109,9 +206,16 @@ async def lifespan(app: FastAPI):
         logger.info("LAN registration: advertise_url=%s → center=%s", advertise_url, _CENTRAL_API_URL)
         asyncio.get_event_loop().create_task(_register_with_center(advertise_url))
     elif _AGENT_REGISTER == "ws":
-        # Phase 2: WS reverse channel — registration handled via WS handshake
-        logger.info("WS registration mode selected — reverse channel not yet implemented")
+        advertise_url = _detect_advertise_url()
+        logger.info("WS registration: advertise_url=%s → center=%s", advertise_url, _CENTRAL_API_URL)
+        _ws_task = asyncio.get_event_loop().create_task(_register_via_ws(advertise_url))
     yield
+    if _ws_task and not _ws_task.done():
+        _ws_task.cancel()
+        try:
+            await _ws_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="OpenCLI Agent Server", version="0.1.0", lifespan=lifespan)
