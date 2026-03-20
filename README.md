@@ -46,7 +46,7 @@
 
 直接复用宿主机已有的 opencli 和 Chrome，适合本地开发。
 
-**前置要求**：Python 3.11+、Node.js 18+
+**前置要求**：Python 3.11+、Node.js 18+、[Playwright MCP Bridge](https://github.com/jackwener/opencli/blob/main/README.zh-CN.md#playwright-mcp-bridge-%E6%89%A9%E5%B1%95%E9%85%8D%E7%BD%AE)（原生模式浏览器驱动依赖）
 
 ```bash
 # 1. 复制配置文件
@@ -110,18 +110,41 @@ IMAGE_TAG=0.2.0 docker compose up -d
 
 **浏览器控制模式**
 
-Chrome 实例支持两种控制模式，在「浏览器管理」页面按实例配置，无需重启容器即可切换：
+Chrome 实例支持以下控制模式，在「浏览器管理」页面按实例配置，无需重启容器即可切换：
 
-| 模式 | 原理 | 适用场景 |
-|------|------|----------|
-| **Bridge** | opencli 1.0 + daemon.js + opencli Browser Bridge 扩展 | 需要账号登录的站点（B站、小红书、微博等），Cookie 持久保存 |
-| **CDP** | opencli 0.9 + Playwright 直连 Chrome DevTools Protocol | 无需登录的公开页面，链路更简单 |
+| 模式 | 原理 | 适用场景 | 状态 |
+|------|------|----------|------|
+| **Bridge** | opencli 1.0 + daemon.js + opencli Browser Bridge 扩展 | 需要账号登录的站点（B站、小红书、微博等），Cookie 持久保存 | ✅ 已支持 |
+| **CDP** | opencli 0.9 + Playwright 直连 Chrome DevTools Protocol | 无需登录的公开页面，链路更简单 | ✅ 已支持 |
+| **Playwright MCP Bridge** | Playwright MCP Bridge 扩展（待接入） | — | 🚧 规划中 |
 
 扩展（opencli Browser Bridge）随容器启动自动加载，无需手动安装。
 
 **多实例 Chrome 并行采集**
 
-默认启动单个 Chrome 实例（chrome-1）。在「浏览器管理」页面可动态新增实例，新增时可选择控制模式，无需重启。
+默认启动单个 Chrome 实例（chrome-1）。推荐通过「浏览器管理」页面动态新增实例，新增时可选择控制模式，无需重启。
+
+如界面操作不可用，也可通过脚本手动管理：
+
+```bash
+# 启动 3 个 Chrome 实例（含默认的 chrome-1，共扩展到 3 个）
+./scripts/chrome-pool.sh start 3
+
+# 查看所有实例状态
+./scripts/chrome-pool.sh status
+
+# 缩减回单实例（多余的自动停止）
+./scripts/chrome-pool.sh start 1
+
+# 停止所有额外实例
+./scripts/chrome-pool.sh stop
+```
+
+将输出的 `CHROME_POOL_ENDPOINTS` 写入 `.env`，重启 API 即生效：
+
+```bash
+docker compose restart api
+```
 
 每个实例拥有独立的浏览器 Profile 和 noVNC 端口（从 `NOVNC_PORT` 递增），首次启动后需分别通过 noVNC 登录各平台账号。
 
