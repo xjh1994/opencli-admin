@@ -8,7 +8,7 @@
 <img width="852" height="297" alt="566109092-d456fd3d-1d2d-4846-b38a-1a86cbbf298a" src="https://github.com/user-attachments/assets/205450a5-e0d8-495e-8d7b-0e05caa4af9a" />
 
 **支持 chrome 实例自动/手动路由**
-<img width="840" height="463" alt="566335801-c147dfd9-24a8-47b2-bced-aafb7ae06b61" src="https://github.com/user-attachments/assets/1344c159-01dc-4582-b8f9-55212ba14439" />
+<img width="949" height="726" alt="clipboard-image-1774003758" src="https://github.com/user-attachments/assets/2838af3b-2ecb-4d3b-8d8e-21c69db174fc" />
 
 **支持自定义 agent 智能体对采集的数据打标签**
 <img width="839" height="221" alt="566120897-994046c5-88ae-436f-8108-3327108cb2cc" src="https://github.com/user-attachments/assets/f0c59128-f74e-4cb7-84ee-87818743a4b6" />
