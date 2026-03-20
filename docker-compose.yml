@@ -1,10 +1,6 @@
 # Shared backend config (DRY)
 x-backend-common: &backend-common
-  build:
-    context: .
-    dockerfile: Dockerfile
-    args:
-      REGISTRY: ${DOCKER_REGISTRY:-}
+  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.1.0}
   env_file:
     - path: .env
       required: false
@@ -17,7 +13,7 @@ services:
   # ── Infrastructure (only needed for TASK_EXECUTOR=celery) ─────────────────
   redis:
     profiles: ["celery"]
-    image: ${DOCKER_REGISTRY:-}redis:7-alpine
+    image: redis:7-alpine
     volumes:
       - redis_data:/data
     healthcheck:
@@ -28,7 +24,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: ${DOCKER_REGISTRY:-}postgres:16-alpine
+    image: postgres:16-alpine
     profiles: ["postgres"]
     ports:
       - "5432:5432"
@@ -126,28 +122,19 @@ services:
   # Default single instance — always started.
   chrome-1:
     container_name: chrome-1
-    build:
-      context: .
-      dockerfile: chrome/Dockerfile
-      args:
-        REGISTRY: ${DOCKER_REGISTRY:-}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-chrome:${IMAGE_TAG:-0.1.0}
     ports:
       - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
     volumes:
       - chrome_profile_1:/home/chrome/.config/chromium
     restart: unless-stopped
 
-  # Additional Chrome instances are managed dynamically via scripts/chrome-pool.sh
-  # Run: ./scripts/chrome-pool.sh start [N]
-  # See: ./scripts/chrome-pool.sh status
+  # Additional Chrome instances are managed dynamically via the API
+  # (浏览器管理 → 新增实例)
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        REGISTRY: ${DOCKER_REGISTRY:-}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.1.0}
     ports:
       - "${FRONTEND_PORT:-8030}:80"
     depends_on:
@@ -155,10 +142,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ── Frontend dev server (Vite HMR) — run with: docker-compose --profile dev up frontend-dev
+  # ── Frontend dev server (Vite HMR) — run with: docker compose --profile dev up frontend-dev
   frontend-dev:
     profiles: ["dev"]
-    image: ${DOCKER_REGISTRY:-}node:22-alpine
+    image: node:22-alpine
     working_dir: /app
     command: sh -c "npm ci --legacy-peer-deps && npm run dev -- --host"
     volumes:
