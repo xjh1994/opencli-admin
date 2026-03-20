@@ -55,6 +55,11 @@ _CENTRAL_API_URL = os.environ.get("CENTRAL_API_URL", "").rstrip("/")
 _AGENT_ADVERTISE_URL = os.environ.get("AGENT_ADVERTISE_URL", "")
 _AGENT_MODE = os.environ.get("AGENT_MODE", "bridge")
 _AGENT_LABEL = os.environ.get("AGENT_LABEL", socket.gethostname())
+# Registration mode:
+#   http — LAN mode: agent POSTs its URL to center, center calls back via HTTP (default)
+#   ws   — NAT/reverse-channel mode: agent opens WS to center, registration via WS handshake (Phase 2)
+#   off  — disable auto-registration entirely
+_AGENT_REGISTER = os.environ.get("AGENT_REGISTER", "http").lower()
 
 
 def _detect_advertise_url() -> str:
@@ -96,12 +101,16 @@ async def _register_with_center(advertise_url: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if _CENTRAL_API_URL:
+    if not _CENTRAL_API_URL or _AGENT_REGISTER == "off":
+        logger.info("Auto-registration disabled (CENTRAL_API_URL=%r AGENT_REGISTER=%s)",
+                    _CENTRAL_API_URL or "", _AGENT_REGISTER)
+    elif _AGENT_REGISTER == "http":
         advertise_url = _detect_advertise_url()
-        logger.info("Auto-registration enabled: advertise_url=%s center=%s", advertise_url, _CENTRAL_API_URL)
+        logger.info("LAN registration: advertise_url=%s → center=%s", advertise_url, _CENTRAL_API_URL)
         asyncio.get_event_loop().create_task(_register_with_center(advertise_url))
-    else:
-        logger.info("CENTRAL_API_URL not set — skipping auto-registration")
+    elif _AGENT_REGISTER == "ws":
+        # Phase 2: WS reverse channel — registration handled via WS handshake
+        logger.info("WS registration mode selected — reverse channel not yet implemented")
     yield
 
 
