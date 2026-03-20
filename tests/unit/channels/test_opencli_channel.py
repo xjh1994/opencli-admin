@@ -146,7 +146,7 @@ async def test_collect_via_agent_success():
 
     with patch("httpx.AsyncClient", return_value=mock_client_ctx):
         result = await _collect_via_agent(
-            "http://agent:8000", "example.com", "list", {}, "json", "cdp"
+            "http://agent:8000", "example.com", "list", {}, [], "json", "cdp"
         )
 
     assert result.success is True
@@ -165,7 +165,7 @@ async def test_collect_via_agent_timeout():
 
     with patch("httpx.AsyncClient", return_value=mock_client_ctx):
         result = await _collect_via_agent(
-            "http://agent:8000", "site", "cmd", {}, "json", "cdp"
+            "http://agent:8000", "site", "cmd", {}, [], "json", "cdp"
         )
 
     assert result.success is False
@@ -184,7 +184,7 @@ async def test_collect_via_agent_http_error():
 
     with patch("httpx.AsyncClient", return_value=mock_client_ctx):
         result = await _collect_via_agent(
-            "http://agent:8000", "site", "cmd", {}, "json", "cdp"
+            "http://agent:8000", "site", "cmd", {}, [], "json", "cdp"
         )
 
     assert result.success is False
@@ -207,7 +207,7 @@ async def test_collect_via_agent_error_response():
 
     with patch("httpx.AsyncClient", return_value=mock_client_ctx):
         result = await _collect_via_agent(
-            "http://agent:8000", "site", "cmd", {}, "json", "cdp"
+            "http://agent:8000", "site", "cmd", {}, [], "json", "cdp"
         )
 
     assert result.success is False
@@ -291,7 +291,8 @@ async def test_health_check_binary_exists(channel):
 
 @pytest.mark.asyncio
 async def test_health_check_binary_missing(channel):
-    with patch("os.path.isfile", return_value=False):
+    with patch("os.path.isfile", return_value=False), \
+         patch("shutil.which", return_value=None):
         result = await channel.health_check()
     assert result is False
 

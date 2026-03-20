@@ -43,6 +43,7 @@ import io
 import json
 import logging
 import os
+import shutil
 import socket
 from contextlib import asynccontextmanager
 from typing import Any
@@ -55,8 +56,11 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("agent_server")
 
-_BRIDGE_BIN = os.environ.get("OPENCLI_BRIDGE_BIN", "/opt/opencli-bridge/bin/opencli")
-_CDP_BIN = os.environ.get("OPENCLI_CDP_BIN", "/opt/opencli-cdp/bin/opencli")
+_OPENCLI_BIN = os.environ.get("OPENCLI_BIN", "opencli")
+
+
+def _resolve_bin(mode: str) -> str:  # noqa: ARG001
+    return _OPENCLI_BIN
 _DEFAULT_CDP = os.environ.get("OPENCLI_CDP_ENDPOINT", "http://localhost:19222")
 _DAEMON_PORT = int(os.environ.get("OPENCLI_DAEMON_PORT", "19825"))
 _AGENT_PORT = int(os.environ.get("AGENT_PORT", "19823"))
@@ -149,6 +153,7 @@ async def _handle_ws_collect(ws, msg: dict) -> None:
         site=msg.get("site", ""),
         command=msg.get("command", ""),
         args=msg.get("args", {}),
+        positional_args=msg.get("positional_args", []),
         format=msg.get("format", "json"),
         mode=msg.get("mode", "bridge"),
     )
@@ -266,6 +271,9 @@ class CollectRequest(BaseModel):
     site: str
     command: str
     args: dict[str, Any] = {}
+    # Values passed as positional CLI arguments (no --key prefix), inserted
+    # right after [site] [command] and before any named --options.
+    positional_args: list[str] = []
     format: str = "json"
     mode: str = "bridge"
     # CDP endpoint override; falls back to OPENCLI_CDP_ENDPOINT env var
@@ -316,14 +324,11 @@ def _parse_output(raw: str, fmt: str) -> list[dict]:
 
 @app.get("/health")
 def health() -> dict:
-    bridge_ok = os.path.isfile(_BRIDGE_BIN)
-    cdp_ok = os.path.isfile(_CDP_BIN)
+    bin_path = _OPENCLI_BIN
     return {
         "status": "ok",
-        "bridge_bin": _BRIDGE_BIN,
-        "bridge_bin_exists": bridge_ok,
-        "cdp_bin": _CDP_BIN,
-        "cdp_bin_exists": cdp_ok,
+        "opencli_bin": bin_path,
+        "opencli_bin_exists": shutil.which(bin_path) is not None or os.path.isfile(bin_path),
         "default_cdp_endpoint": _DEFAULT_CDP,
     }
 
@@ -333,12 +338,10 @@ async def collect(req: CollectRequest) -> dict:
     cdp_ep = req.cdp_endpoint.strip() or _DEFAULT_CDP
     mode = req.mode
 
-    bin_path = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
-    if not os.path.isfile(bin_path):
-        # fallback to whichever binary exists
-        bin_path = _BRIDGE_BIN if os.path.isfile(_BRIDGE_BIN) else _CDP_BIN
+    bin_path = _resolve_bin(mode)
 
     cmd = [bin_path, req.site, req.command]
+    cmd.extend([str(v) for v in req.positional_args])
     for k, v in req.args.items():
         cmd.extend([f"--{k}", str(v)])
     cmd.extend(["-f", req.format])

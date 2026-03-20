@@ -63,3 +63,7 @@ redis-data/
 # Celery
 celerybeat-schedule
 celerybeat.pid
+
+# Ignore extension build intermediates; dist/background.js is committed
+chrome/extension-src/node_modules/
+chrome/extension-src/store-assets/

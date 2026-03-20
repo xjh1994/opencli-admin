@@ -28,8 +28,8 @@
 
 | 分类 | 平台 |
 |------|------|
-| 🇨🇳 国内 | 小红书、Bilibili、知乎、微博、V2EX、雪球、什么值得买、Boss直聘、携程、小宇宙 |
-| 🌐 Public | Hacker News、BBC、Reuters |
+| 🇨🇳 国内 | 小红书、Bilibili、知乎、微博、V2EX、雪球、什么值得买、Boss直聘、携程、小宇宙、新浪财经 7x24 |
+| 🌐 Public | Hacker News、BBC、Reuters、Bloomberg、arXiv、Wikipedia |
 | 🌍 Global | Twitter/X、Reddit、YouTube、LinkedIn、Yahoo Finance、Barchart |
 
 ## 典型使用场景

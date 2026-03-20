@@ -55,7 +55,7 @@ def test_is_connected_false_for_unknown():
 @pytest.mark.asyncio
 async def test_dispatch_collect_raises_when_not_connected():
     with pytest.raises(RuntimeError, match="No active WS connection"):
-        await mgr.dispatch_collect("http://missing:19823", "site", "cmd", {}, "json", "bridge")
+        await mgr.dispatch_collect("http://missing:19823", "site", "cmd", {}, [], "json", "bridge")
 
 
 # ── dispatch_collect: success ─────────────────────────────────────────────────
@@ -78,7 +78,7 @@ async def test_dispatch_collect_success():
     ws.send_json = AsyncMock(side_effect=fake_send_json)
 
     result = await mgr.dispatch_collect(
-        "http://agent:19823", "bilibili", "hot", {}, "json", "bridge", timeout=5.0
+        "http://agent:19823", "bilibili", "hot", {}, [], "json", "bridge", timeout=5.0
     )
 
     assert result["success"] is True
@@ -101,7 +101,7 @@ async def test_dispatch_collect_timeout():
 
     with pytest.raises(TimeoutError, match="did not respond"):
         await mgr.dispatch_collect(
-            "http://agent:19823", "site", "cmd", {}, "json", "bridge", timeout=0.05
+            "http://agent:19823", "site", "cmd", {}, [], "json", "bridge", timeout=0.05
         )
 
 
@@ -116,7 +116,7 @@ async def test_dispatch_collect_pending_cleaned_up_on_timeout():
 
     with pytest.raises(TimeoutError):
         await mgr.dispatch_collect(
-            "http://agent:19823", "s", "c", {}, "json", "bridge", timeout=0.05
+            "http://agent:19823", "s", "c", {}, [], "json", "bridge", timeout=0.05
         )
 
     assert len(mgr._pending) == 0
