@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import {
   getChromePool,
   listBrowserBindings,
@@ -253,9 +254,9 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
             <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">连接协议</p>
             <div className="flex gap-2">
               {([
-                { value: 'http', label: 'HTTP', desc: '局域网 / 代理可达，无长连接' },
+                { value: 'http' as const, label: 'HTTP', desc: '局域网 / 代理可达，无长连接', disabled: false },
                 { value: 'ws', label: 'WS', desc: '反向 WebSocket，用于无法主动连通的节点（Phase 2）', disabled: true },
-              ] as const).map((opt) => (
+              ]).map((opt) => (
                 <label
                   key={opt.value}
                   className={`flex-1 flex gap-2 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
@@ -271,7 +272,7 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
                     name="agent-protocol"
                     value={opt.value}
                     checked={agentProtocol === opt.value}
-                    onChange={() => !opt.disabled && setAgentProtocol(opt.value)}
+                    onChange={() => !opt.disabled && setAgentProtocol(opt.value as 'http' | 'ws')}
                     disabled={opt.disabled}
                     className="accent-blue-600 shrink-0 mt-0.5"
                   />
@@ -466,12 +467,12 @@ function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSucce
 
   return (
     <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
-      {(['bridge', 'cdp'] as const).map((m) => (
+      {(['bridge', 'cdp']).map((m) => (
         <button
           key={m}
           title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
           disabled={mutation.isPending}
-          onClick={() => mode !== m && mutation.mutate(m)}
+          onClick={() => mode !== m && mutation.mutate(m as 'bridge' | 'cdp')}
           className={[
             'px-2.5 py-1 transition-colors',
             mode === m
@@ -573,14 +574,14 @@ function InstanceCard({
             </div>
             {agentUrlDraft && (
               <div className="flex gap-2">
-                {(['http', 'ws'] as const).map((p) => (
+                {(['http', 'ws']).map((p) => (
                   <label key={p} className={`flex items-center gap-1.5 px-2 py-1 rounded border cursor-pointer text-xs transition-colors ${
                     agentProtocolDraft === p
                       ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                       : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300'
                   } ${p === 'ws' ? 'opacity-40 cursor-not-allowed' : ''}`}>
                     <input type="radio" name={`protocol-${url}`} value={p} checked={agentProtocolDraft === p}
-                      onChange={() => p !== 'ws' && setAgentProtocolDraft(p)} disabled={p === 'ws'}
+                      onChange={() => p !== 'ws' && setAgentProtocolDraft(p as 'http' | 'ws')} disabled={p === 'ws'}
                       className="accent-blue-600" />
                     {p === 'http' ? 'HTTP（局域网 / 代理）' : 'WS（Phase 2）'}
                   </label>
@@ -672,16 +673,19 @@ export default function BrowsersPage() {
 
   const addMutation = useMutation({
     mutationFn: createBrowserBinding,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }); toast.success('站点绑定已添加') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '绑定失败'),
   })
 
   const deleteMutation = useMutation({
     mutationFn: deleteBrowserBinding,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }); toast.success('已解绑') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '解绑失败'),
   })
 
   const addInstanceMutation = useMutation({
     mutationFn: ({ count, mode, agentUrl, agentProtocol }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp'; agentUrl: string; agentProtocol: 'http' | 'ws' | '' }) => addChromeInstance(count, mode, agentUrl, agentProtocol),
+    onError: (err) => toast.error(err instanceof Error ? err.message : '添加实例失败'),
     onSuccess: (result, { withRestart }) => {
       setShowAddModal(false)
       invalidatePool()
@@ -708,8 +712,10 @@ export default function BrowsersPage() {
     onSuccess: (_data, { withRestart }) => {
       setRemovingIdx(null)
       invalidatePool()
+      toast.success('实例已移除')
       if (withRestart) restartMutation.mutate()
     },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '移除实例失败'),
   })
 
   const restartMutation = useMutation({

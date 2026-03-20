@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { listRecords, batchDeleteRecords, clearAllRecords } from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -59,12 +60,14 @@ export default function RecordsPage() {
 
   const batchDelete = useMutation({
     mutationFn: (ids: string[]) => batchDeleteRecords(ids),
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); toast.success('已批量删除') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '删除失败'),
   })
 
   const clearAll = useMutation({
     mutationFn: () => clearAllRecords(),
-    onSuccess: () => { invalidate(); setConfirmClear(false) },
+    onSuccess: () => { invalidate(); setConfirmClear(false); toast.success('已清空') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
   if (isLoading) return <PageLoader />

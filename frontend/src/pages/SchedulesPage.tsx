@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { listSchedules, createSchedule, updateSchedule, deleteSchedule, listSources, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
 import type { CronSchedule } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
@@ -470,7 +471,8 @@ export default function SchedulesPage() {
 
   const createMut = useMutation({
     mutationFn: createSchedule,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['schedules'] }); setShowAdd(false) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['schedules'] }); setShowAdd(false); toast.success('计划已保存') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
   const toggleMut = useMutation({
@@ -480,7 +482,8 @@ export default function SchedulesPage() {
 
   const deleteMut = useMutation({
     mutationFn: deleteSchedule,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['schedules'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['schedules'] }); toast.success('已删除') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '删除失败'),
   })
 
   if (isLoading) return <PageLoader />

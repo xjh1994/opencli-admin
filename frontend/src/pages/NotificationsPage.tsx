@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import {
   listNotificationRules,
   createNotificationRule,
@@ -107,12 +108,14 @@ export default function NotificationsPage() {
 
   const createMut = useMutation({
     mutationFn: createNotificationRule,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['notification-rules'] }); setShowAdd(false) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['notification-rules'] }); setShowAdd(false); toast.success('通知规则已保存') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteNotificationRule,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notification-rules'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['notification-rules'] }); toast.success('已删除') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '删除失败'),
   })
 
   const rules: NotificationRule[] = rulesQ.data?.data ?? []

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool, listBrowserBindings } from '../api/endpoints'
 import type { DataSource } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
@@ -384,12 +385,14 @@ export default function SourcesPage() {
 
   const createMut = useMutation({
     mutationFn: createSource,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sources'] }); setShowAdd(false) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sources'] }); setShowAdd(false); toast.success('数据源已创建') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '创建失败'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<DataSource> }) => updateSource(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sources'] }); setEditSource(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sources'] }); setEditSource(null); toast.success('数据源已更新') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '更新失败'),
   })
 
   const toggleMut = useMutation({
@@ -399,7 +402,8 @@ export default function SourcesPage() {
 
   const deleteMut = useMutation({
     mutationFn: deleteSource,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sources'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sources'] }); toast.success('已删除') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '删除失败'),
   })
 
   const [triggerStates, setTriggerStates] = useState<Record<string, 'loading' | 'ok' | 'err'>>({})
@@ -412,11 +416,13 @@ export default function SourcesPage() {
       setTriggerStates((s) => ({ ...s, [id]: 'ok' }))
       setTimeout(() => setTriggerStates((s) => { const n = { ...s }; delete n[id]; return n }), 2000)
       setTriggerSource(null)
+      toast.success('任务已触发')
     },
     onError: (_err, { id }) => {
       setTriggerStates((s) => ({ ...s, [id]: 'err' }))
       setTimeout(() => setTriggerStates((s) => { const n = { ...s }; delete n[id]; return n }), 3000)
       setTriggerSource(null)
+      toast.error(_err instanceof Error ? _err.message : '触发失败')
     },
   })
 

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { listAgents, createAgent, updateAgent, deleteAgent, listProviders } from '../api/endpoints'
 import type { AIAgent, ModelProvider } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
@@ -613,12 +614,14 @@ export default function AgentsPage() {
 
   const createMut = useMutation({
     mutationFn: createAgent,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agents'] }); setShowAdd(false) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agents'] }); setShowAdd(false); toast.success('Agent 已保存') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<AIAgent> }) => updateAgent(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agents'] }); setEditAgent(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agents'] }); setEditAgent(null); toast.success('Agent 已保存') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
   const toggleMut = useMutation({
@@ -628,7 +631,8 @@ export default function AgentsPage() {
 
   const deleteMut = useMutation({
     mutationFn: deleteAgent,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agents'] }); toast.success('已删除') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '删除失败'),
   })
 
   if (isLoading) return <PageLoader />
