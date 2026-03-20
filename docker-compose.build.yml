@@ -1,0 +1,33 @@
+# Local build override — adds build: sections so images are built from source.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+#
+# Or set an alias / shell function:
+#   alias dc-build='docker compose -f docker-compose.yml -f docker-compose.build.yml'
+#   dc-build up --build
+
+x-backend-build: &backend-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+  api:
+    <<: *backend-build
+
+  worker:
+    <<: *backend-build
+
+  beat:
+    <<: *backend-build
+
+  chrome-1:
+    build:
+      context: .
+      dockerfile: chrome/Dockerfile
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
