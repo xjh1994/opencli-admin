@@ -54,6 +54,7 @@ async def dispatch_collect(
     site: str,
     command: str,
     args: dict[str, Any],
+    positional_args: list[str],
     output_format: str,
     mode: str,
     timeout: float | None = None,
@@ -84,6 +85,7 @@ async def dispatch_collect(
             "site": site,
             "command": command,
             "args": args,
+            "positional_args": positional_args,
             "format": output_format,
             "mode": mode,
         })

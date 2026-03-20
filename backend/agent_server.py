@@ -149,6 +149,7 @@ async def _handle_ws_collect(ws, msg: dict) -> None:
         site=msg.get("site", ""),
         command=msg.get("command", ""),
         args=msg.get("args", {}),
+        positional_args=msg.get("positional_args", []),
         format=msg.get("format", "json"),
         mode=msg.get("mode", "bridge"),
     )
@@ -266,6 +267,9 @@ class CollectRequest(BaseModel):
     site: str
     command: str
     args: dict[str, Any] = {}
+    # Values passed as positional CLI arguments (no --key prefix), inserted
+    # right after [site] [command] and before any named --options.
+    positional_args: list[str] = []
     format: str = "json"
     mode: str = "bridge"
     # CDP endpoint override; falls back to OPENCLI_CDP_ENDPOINT env var
@@ -339,6 +343,7 @@ async def collect(req: CollectRequest) -> dict:
         bin_path = _BRIDGE_BIN if os.path.isfile(_BRIDGE_BIN) else _CDP_BIN
 
     cmd = [bin_path, req.site, req.command]
+    cmd.extend([str(v) for v in req.positional_args])
     for k, v in req.args.items():
         cmd.extend([f"--{k}", str(v)])
     cmd.extend(["-f", req.format])

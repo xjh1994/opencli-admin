@@ -94,6 +94,7 @@ async def _collect_via_agent(
     site: str,
     command: str,
     args: dict,
+    positional_args: list,
     output_format: str,
     mode: str,
 ) -> ChannelResult:
@@ -110,6 +111,7 @@ async def _collect_via_agent(
         "site": site,
         "command": command,
         "args": args,
+        "positional_args": positional_args,
         "format": output_format,
         "mode": mode,
     }
@@ -142,6 +144,7 @@ async def _collect_via_ws_agent(
     site: str,
     command: str,
     args: dict,
+    positional_args: list,
     output_format: str,
     mode: str,
 ) -> ChannelResult:
@@ -151,7 +154,7 @@ async def _collect_via_ws_agent(
     logger.info("WS agent dispatch | agent=%s site=%s cmd=%s", agent_url, site, command)
     try:
         result = await ws_agent_manager.dispatch_collect(
-            agent_url, site, command, args, output_format, mode
+            agent_url, site, command, args, positional_args, output_format, mode
         )
     except TimeoutError:
         logger.error("WS agent timeout | agent=%s", agent_url)
@@ -239,6 +242,7 @@ class OpenCLIChannel(AbstractChannel):
         chrome_endpoint: str | None = parameters.get("chrome_endpoint") or None
         cli_params = {k: v for k, v in parameters.items() if k != "chrome_endpoint"}
         args: dict = {**config.get("args", {}), **cli_params}
+        positional_args: list[str] = [str(v) for v in config.get("positional_args", [])]
 
         env = os.environ.copy()
 
@@ -272,11 +276,11 @@ class OpenCLIChannel(AbstractChannel):
                     )
                 if protocol == "http":
                     return await _collect_via_agent(
-                        agent_url, site, command, args, output_format, mode
+                        agent_url, site, command, args, positional_args, output_format, mode
                     )
                 elif protocol == "ws":
                     return await _collect_via_ws_agent(
-                        agent_url, site, command, args, output_format, mode
+                        agent_url, site, command, args, positional_args, output_format, mode
                     )
                 else:
                     logger.error("Unknown agent_protocol %r for endpoint %s", protocol, cdp_endpoint)
@@ -285,6 +289,7 @@ class OpenCLIChannel(AbstractChannel):
             opencli_bin = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
 
             cmd = [opencli_bin, site, command]
+            cmd.extend(positional_args)
             for key, value in args.items():
                 cmd.extend([f"--{key}", str(value)])
             cmd.extend(["-f", output_format])
