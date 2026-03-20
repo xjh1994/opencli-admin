@@ -32,6 +32,68 @@
 | 🌐 Public | Hacker News、BBC、Reuters |
 | 🌍 Global | Twitter/X、Reddit、YouTube、LinkedIn、Yahoo Finance、Barchart |
 
+## 典型使用场景
+
+### 场景一：多台 Mac Mini 组成采集集群
+
+家庭 / 办公室有多台闲置 Mac Mini，每台登录不同平台账号，通过中心统一调度：
+
+```
+Mac Mini A（主控）              Mac Mini B                 Mac Mini C
+┌──────────────────┐    WS     ┌─────────────────┐   WS  ┌─────────────────┐
+│ opencli-admin    │◄──────────│ opencli-agent   │       │ opencli-agent   │
+│ 管理界面 :8030   │◄──────────│ 登录：B站/小红书 │       │ 登录：Twitter/X │
+│ API :8031        │           │ 采集国内平台     │       │ 采集海外平台     │
+└──────────────────┘           └─────────────────┘       └─────────────────┘
+```
+
+B / C 两台 Mac Mini 用 Shell 脚本一键安装 Agent（无需 Docker），WS 反向通道注册，NAT / 跨网段均可穿透。在「节点管理」按站点绑定 Agent，任务自动路由到对应机器。
+
+---
+
+### 场景二：云服务器 + 本地 Mac 混合采集
+
+本地 Mac 负责需要登录 Cookie 的国内平台，云服务器负责公开数据的高并发抓取：
+
+```
+本地 Mac（家庭网络）                云服务器（公网）
+┌──────────────────┐              ┌──────────────────────────┐
+│ opencli-agent    │──── WS ─────►│ opencli-admin（中心）     │
+│ 登录：微博/知乎   │              │                          │
+│       小红书/B站  │              │  内置 Agent               │
+└──────────────────┘              │  HackerNews / RSS / BBC   │
+                                  └──────────────────────────┘
+```
+
+敏感账号 Cookie 留在本地，公开抓取走云端，Cookie 不出内网。
+
+---
+
+### 场景三：单机全能采集（最简部署）
+
+一台机器（Mac / Linux）运行所有服务，内置多个 Agent 实例并行：
+
+```bash
+docker compose up -d   # 启动中心 + agent-1
+```
+
+在「节点管理」动态添加 agent-2、agent-3，各实例独立 Chrome Profile，支持同时登录同一平台的多个账号。适合个人重度用户或小团队。
+
+---
+
+### 场景四：定时抓取 + AI 摘要 + 推送工作流
+
+无需写代码，全程可视化配置：
+
+1. **数据源** — 添加知乎热榜、HN、Twitter 列表等
+2. **定时计划** — 每小时执行，绑定对应 Agent 实例
+3. **AI 智能体** — 采集完成后自动调用 DeepSeek 提取摘要、打标签
+4. **通知推送** — AI 处理完成后推送到飞书群 / 企业微信
+
+每天早晨打开飞书，已处理好的信息流等你阅读。
+
+---
+
 ## 快速开始
 
 两种启动方式，按需选择：
@@ -101,63 +163,6 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
 ```bash
 IMAGE_TAG=0.2.0 docker compose up -d
 ```
-
-**浏览器控制模式**
-
-Chrome 实例支持以下控制模式，在「浏览器管理」页面按实例配置，无需重启容器即可切换：
-
-| 模式 | 原理 | 适用场景 | 状态 |
-|------|------|----------|------|
-| **Bridge** | opencli 1.0 + daemon.js + opencli Browser Bridge 扩展 | 需要账号登录的站点（B站、小红书、微博等），Cookie 持久保存 | ✅ 已支持 |
-| **CDP** | opencli 0.9 + Playwright 直连 Chrome DevTools Protocol | 无需登录的公开页面，链路更简单 | ✅ 已支持 |
-| **Playwright MCP Bridge** | Playwright MCP Bridge 扩展（待接入） | — | 🚧 规划中 |
-
-扩展（opencli Browser Bridge）随容器启动自动加载，无需手动安装。
-
-**多实例 Chrome 并行采集**
-
-默认启动单个 Chrome 实例（chrome-1）。推荐通过「浏览器管理」页面动态新增实例，新增时可选择控制模式，无需重启。
-<img width="223" height="366" alt="566655820-29bd05db-40bc-4cd1-aca9-d5dbbb13c714 (1)" src="https://github.com/user-attachments/assets/5e37776c-22ba-49e6-b300-81ba97cf7471" />
-
-
-如界面操作不可用，也可通过脚本手动管理：
-
-```bash
-# 启动 3 个 Chrome 实例（含默认的 chrome-1，共扩展到 3 个）
-./scripts/chrome-pool.sh start 3
-
-# 查看所有实例状态
-./scripts/chrome-pool.sh status
-
-# 缩减回单实例（多余的自动停止）
-./scripts/chrome-pool.sh start 1
-
-# 停止所有额外实例
-./scripts/chrome-pool.sh stop
-```
-
-将输出的 `CHROME_POOL_ENDPOINTS` 写入 `.env`，重启 API 即生效：
-
-```bash
-docker compose restart api
-```
-
-每个实例拥有独立的浏览器 Profile 和 noVNC 端口（从 `NOVNC_PORT` 递增），首次启动后需分别通过 noVNC 登录各平台账号。
-
-**Chrome 实例路由**
-
-多实例模式下，可以将不同数据源的采集任务路由到指定的 Chrome 实例，实现登录态隔离（例如：小红书账号只登录在 chrome-2，Twitter 账号只登录在 chrome-3）。
-
-路由优先级（高 → 低）：
-
-| 优先级 | 入口 | 作用 |
-|--------|------|------|
-| 1（最高） | 数据源列表 → 触发 → Chrome 实例 | 仅本次手动触发使用，一次性覆盖 |
-| 2 | 定时计划 → 编辑计划 → Chrome 实例 | 该计划每次触发固定使用指定实例 |
-| 3 | **浏览器管理** → 站点绑定 | 按站点自动路由，无需每条计划单独配置 |
-| 4（兜底） | — | 自动分配当前空闲实例（负载均衡） |
-
-**推荐工作流**：在「浏览器管理」页将站点绑定到对应实例一次，之后所有涉及该站点的任务均自动路由，无需逐条配置计划。
 
 **停止**
 
