@@ -8,7 +8,7 @@
 <img width="852" height="297" alt="566109092-d456fd3d-1d2d-4846-b38a-1a86cbbf298a" src="https://github.com/user-attachments/assets/205450a5-e0d8-495e-8d7b-0e05caa4af9a" />
 
 **支持 Agent 实例自动/手动路由**
-<img width="840" height="463" alt="566335801-c147dfd9-24a8-47b2-bced-aafb7ae06b61" src="https://github.com/user-attachments/assets/1344c159-01dc-4582-b8f9-55212ba14439" />
+<img width="949" height="726" alt="clipboard-image-1774003758" src="https://github.com/user-attachments/assets/2838af3b-2ecb-4d3b-8d8e-21c69db174fc" />
 
 **支持自定义 agent 智能体对采集的数据打标签**
 <img width="839" height="221" alt="566120897-994046c5-88ae-436f-8108-3327108cb2cc" src="https://github.com/user-attachments/assets/f0c59128-f74e-4cb7-84ee-87818743a4b6" />
@@ -89,7 +89,7 @@ docker compose up -d
 | API 文档 | http://localhost:8031/docs |
 | Agent noVNC | http://localhost:3010 |
 
-预构建镜像发布在 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.1.0`），无需本地 build 即可启动。如需从源码构建：
+预构建镜像发布在 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.2.0`），无需本地 build 即可启动。如需从源码构建：
 
 ```bash
 # 本地构建模式
@@ -148,7 +148,7 @@ docker run -d \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=ws \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.1.0
+  xjh1994/opencli-admin-agent:0.2.0
 
 # HTTP 模式（局域网）
 docker run -d \
@@ -158,7 +158,7 @@ docker run -d \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=http \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.1.0
+  xjh1994/opencli-admin-agent:0.2.0
 ```
 
 **Shell 脚本安装（无 Docker 环境）**
@@ -288,6 +288,51 @@ TASK_EXECUTOR=celery
 
 # Docker 模式下额外启动 redis + worker + beat
 docker compose --profile celery up -d
+```
+
+## 系统架构
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          用户浏览器                                   │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │ HTTP
+┌──────────────────────────────▼──────────────────────────────────────┐
+│                        Frontend（React）                             │
+│         Dashboard · 数据源 · 任务 · 记录 · 计划 · 节点 · 通知        │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │ REST API
+┌──────────────────────────────▼──────────────────────────────────────┐
+│                       Backend API（FastAPI）                          │
+│                                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────────┐  │
+│  │ Scheduler│  │ Pipeline │  │  AI 处理  │  │  通知分发          │  │
+│  │ (定时/   │  │ collect  │  │ Claude/  │  │  Webhook/飞书/     │  │
+│  │  webhook)│  │ →store   │  │ OpenAI/  │  │  钉钉/企微/Email   │  │
+│  └──────────┘  └────┬─────┘  │ Ollama…  │  └────────────────────┘  │
+│                     │        └──────────┘                           │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                     渠道插件（Channels）                       │   │
+│  │  opencli · RSS · REST API · Web 爬虫 · 通用 CLI              │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└──────┬────────────────────┬───────────────────────────────────┬─────┘
+       │                    │                                   │
+       │ CDP/Bridge         │ WS 反向通道 / HTTP 直连            │ SQLite /
+       ▼                    ▼                                   ▼ PostgreSQL
+┌─────────────┐   ┌──────────────────────┐             ┌───────────────┐
+│  内置 Agent  │   │     远端边缘节点       │             │    数据库      │
+│  (Docker)   │   │  (Docker / Shell)    │             │               │
+│             │   │                      │             └───────────────┘
+│ ┌─────────┐ │   │ ┌──────────────────┐ │
+│ │ Chrome  │ │   │ │ agent_server.py  │ │
+│ │Bridge / │ │   │ │  WS ←─── 中心    │ │
+│ │  CDP    │ │   │ │  HTTP ──→ 中心   │ │
+│ └────┬────┘ │   │ └───────┬──────────┘ │
+└──────┼──────┘   └─────────┼────────────┘
+       │                    │
+       ▼                    ▼
+  opencli CLI          opencli CLI
+  目标网站（国内外平台）  目标网站（国内外平台）
 ```
 
 ## 技术栈
