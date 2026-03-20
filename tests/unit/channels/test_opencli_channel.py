@@ -291,7 +291,8 @@ async def test_health_check_binary_exists(channel):
 
 @pytest.mark.asyncio
 async def test_health_check_binary_missing(channel):
-    with patch("os.path.isfile", return_value=False):
+    with patch("os.path.isfile", return_value=False), \
+         patch("shutil.which", return_value=None):
         result = await channel.health_check()
     assert result is False
 

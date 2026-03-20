@@ -43,6 +43,7 @@ import io
 import json
 import logging
 import os
+import shutil
 import socket
 from contextlib import asynccontextmanager
 from typing import Any
@@ -56,7 +57,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(nam
 logger = logging.getLogger("agent_server")
 
 _BRIDGE_BIN = os.environ.get("OPENCLI_BRIDGE_BIN", "/opt/opencli-bridge/bin/opencli")
-_CDP_BIN = os.environ.get("OPENCLI_CDP_BIN", "/opt/opencli-cdp/bin/opencli")
+_CDP_BIN    = os.environ.get("OPENCLI_CDP_BIN",    "/opt/opencli-cdp/bin/opencli")
+
+
+def _resolve_bin(preferred: str) -> str:
+    """Return *preferred* if it exists, else fall back to 'opencli' on PATH."""
+    if os.path.isfile(preferred):
+        return preferred
+    found = shutil.which("opencli")
+    if found:
+        return found
+    return preferred
 _DEFAULT_CDP = os.environ.get("OPENCLI_CDP_ENDPOINT", "http://localhost:19222")
 _DAEMON_PORT = int(os.environ.get("OPENCLI_DAEMON_PORT", "19825"))
 _AGENT_PORT = int(os.environ.get("AGENT_PORT", "19823"))
@@ -337,9 +348,9 @@ async def collect(req: CollectRequest) -> dict:
     cdp_ep = req.cdp_endpoint.strip() or _DEFAULT_CDP
     mode = req.mode
 
-    bin_path = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
+    bin_path = _resolve_bin(_BRIDGE_BIN if mode == "bridge" else _CDP_BIN)
     if not os.path.isfile(bin_path):
-        # fallback to whichever binary exists
+        # fixed paths missing — _resolve_bin already tried PATH; use whichever fixed path exists
         bin_path = _BRIDGE_BIN if os.path.isfile(_BRIDGE_BIN) else _CDP_BIN
 
     cmd = [bin_path, req.site, req.command]
