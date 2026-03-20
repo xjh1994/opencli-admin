@@ -96,9 +96,13 @@ async def _collect_via_agent(
     args: dict,
     output_format: str,
     mode: str,
-    cdp_endpoint: str,
 ) -> ChannelResult:
-    """Dispatch a collection request to a LAN agent server via HTTP POST."""
+    """Dispatch a collection request to a LAN agent server via HTTP POST.
+
+    The cdp_endpoint is intentionally omitted: the agent server uses its own
+    locally-configured Chrome (OPENCLI_CDP_ENDPOINT env var on the edge node).
+    The pool endpoint is only a logical identifier used by the center for routing.
+    """
     import httpx
 
     url = agent_url.rstrip("/") + "/collect"
@@ -108,7 +112,6 @@ async def _collect_via_agent(
         "args": args,
         "format": output_format,
         "mode": mode,
-        "cdp_endpoint": cdp_endpoint,
     }
     logger.info("agent dispatch | url=%s site=%s cmd=%s", url, site, command)
     try:
@@ -181,7 +184,7 @@ class OpenCLIChannel(AbstractChannel):
                 agent_url = pool.get_agent_url(cdp_endpoint)
                 if node_type == "agent" and agent_url:
                     return await _collect_via_agent(
-                        agent_url, site, command, args, output_format, mode, cdp_endpoint
+                        agent_url, site, command, args, output_format, mode
                     )
 
             opencli_bin = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
