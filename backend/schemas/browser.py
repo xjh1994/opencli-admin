@@ -18,3 +18,16 @@ class BrowserBindingRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BrowserInstanceRead(BaseModel):
+    id: str
+    endpoint: str
+    mode: str
+    agent_url: str | None
+    agent_protocol: str | None
+    label: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

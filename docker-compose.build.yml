@@ -31,3 +31,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+
+  # All-in-one edge agent: Chrome + Bridge + opencli + agent_server in one container.
+  # Run standalone on any machine that can reach the center API.
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile

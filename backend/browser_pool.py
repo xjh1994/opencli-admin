@@ -45,6 +45,10 @@ class LocalBrowserPool:
         self._total = len(endpoints)
         # mode per endpoint: "bridge" (opencli 1.0.0 daemon) or "cdp" (opencli 0.9.6 Playwright)
         self._modes: dict[str, str] = {ep: "bridge" for ep in endpoints}
+        # agent_url per endpoint: HTTP base URL of the agent server (COLLECTION_MODE=agent only)
+        self._agent_urls: dict[str, str | None] = {ep: None for ep in endpoints}
+        # agent_protocol per endpoint: "http" (LAN/proxy) or "ws" (NAT reverse channel, Phase 2)
+        self._agent_protocols: dict[str, str | None] = {ep: None for ep in endpoints}
         logger.info(
             "BrowserPool (local): %d Chrome instance(s): %s",
             self._total,
@@ -121,6 +125,24 @@ class LocalBrowserPool:
         self._modes[endpoint] = mode
         logger.info("BrowserPool: endpoint %s mode set to %s", endpoint, mode)
 
+    def get_agent_url(self, endpoint: str) -> str | None:
+        """Return the agent HTTP base URL for the given endpoint."""
+        return self._agent_urls.get(endpoint)
+
+    def set_agent_url(self, endpoint: str, agent_url: str | None) -> None:
+        """Update the agent URL for an endpoint at runtime."""
+        self._agent_urls[endpoint] = agent_url
+        logger.info("BrowserPool: endpoint %s agent_url set to %s", endpoint, agent_url)
+
+    def get_agent_protocol(self, endpoint: str) -> str | None:
+        """Return the agent protocol for the given endpoint ("http", "ws", or None)."""
+        return self._agent_protocols.get(endpoint)
+
+    def set_agent_protocol(self, endpoint: str, protocol: str | None) -> None:
+        """Update the agent protocol for an endpoint at runtime."""
+        self._agent_protocols[endpoint] = protocol
+        logger.info("BrowserPool: endpoint %s agent_protocol set to %s", endpoint, protocol)
+
     def add_endpoint(self, endpoint: str) -> None:
         """Hot-add a new Chrome instance to the pool without restarting."""
         if endpoint in self._slots:
@@ -129,6 +151,8 @@ class LocalBrowserPool:
         q.put_nowait(endpoint)
         self._slots[endpoint] = q
         self._modes.setdefault(endpoint, "bridge")
+        self._agent_urls.setdefault(endpoint, None)
+        self._agent_protocols.setdefault(endpoint, None)
         self._total += 1
         logger.info("BrowserPool: added endpoint %s (total: %d)", endpoint, self._total)
 
@@ -138,6 +162,8 @@ class LocalBrowserPool:
             return
         self._slots.pop(endpoint)
         self._modes.pop(endpoint, None)
+        self._agent_urls.pop(endpoint, None)
+        self._agent_protocols.pop(endpoint, None)
         self._total -= 1
         logger.info("BrowserPool: removed endpoint %s (total: %d)", endpoint, self._total)
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { listProviders, createProvider, updateProvider, deleteProvider } from '../api/endpoints'
 import type { ModelProvider } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
@@ -223,12 +224,14 @@ export default function ProvidersPage() {
 
   const createMut = useMutation({
     mutationFn: createProvider,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['providers'] }); setShowAdd(false) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['providers'] }); setShowAdd(false); toast.success('模型服务商已保存') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ModelProvider> }) => updateProvider(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['providers'] }); setEditProvider(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['providers'] }); setEditProvider(null); toast.success('模型服务商已保存') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
   const toggleMut = useMutation({
@@ -238,7 +241,8 @@ export default function ProvidersPage() {
 
   const deleteMut = useMutation({
     mutationFn: deleteProvider,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['providers'] }); toast.success('已删除') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '删除失败'),
   })
 
   if (isLoading) return <PageLoader />

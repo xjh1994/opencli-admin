@@ -73,6 +73,7 @@ testpaths = ["tests"]
 addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
+concurrency = ["greenlet", "thread"]
 omit = [
     "backend/worker/tasks.py",
     "backend/worker/beat_schedule.py",

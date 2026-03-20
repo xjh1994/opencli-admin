@@ -139,6 +139,8 @@ export interface ChromeEndpoint {
   novnc_port: number
   container_status?: string
   mode: 'bridge' | 'cdp'
+  agent_url?: string | null
+  agent_protocol?: 'http' | 'ws' | null
 }
 
 export interface BrowserBinding {
@@ -159,6 +161,33 @@ export interface WorkerNode {
   last_heartbeat?: string
   created_at: string
   updated_at: string
+}
+
+export interface EdgeNode {
+  id: string
+  url: string
+  label: string
+  protocol: 'http' | 'ws'
+  mode: 'bridge' | 'cdp'
+  status: 'online' | 'offline'
+  last_seen_at?: string | null
+  ip?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EdgeNodeEvent {
+  id: string
+  node_id: string
+  event: 'registered' | 'online' | 'offline'
+  ip?: string | null
+  event_meta?: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface SystemConfig {
+  collection_mode: 'local' | 'agent'
+  task_executor: 'local' | 'celery'
 }
 
 export interface DashboardStats {

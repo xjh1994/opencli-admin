@@ -1,6 +1,7 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import ErrorBoundary from './ErrorBoundary'
 import {
   LayoutDashboard,
   Database,
@@ -124,7 +125,9 @@ export default function Layout() {
       {/* Main content */}
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
         <div className="p-6">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
     </div>

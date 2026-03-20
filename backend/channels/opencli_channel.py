@@ -89,8 +89,121 @@ _PARSERS = {
 }
 
 
+async def _collect_via_agent(
+    agent_url: str,
+    site: str,
+    command: str,
+    args: dict,
+    output_format: str,
+    mode: str,
+) -> ChannelResult:
+    """Dispatch a collection request to a LAN agent server via HTTP POST.
+
+    The cdp_endpoint is intentionally omitted: the agent server uses its own
+    locally-configured Chrome (OPENCLI_CDP_ENDPOINT env var on the edge node).
+    The pool endpoint is only a logical identifier used by the center for routing.
+    """
+    import httpx
+
+    url = agent_url.rstrip("/") + "/collect"
+    payload = {
+        "site": site,
+        "command": command,
+        "args": args,
+        "format": output_format,
+        "mode": mode,
+    }
+    from backend.config import get_settings
+    logger.info("agent dispatch | url=%s site=%s cmd=%s", url, site, command)
+    try:
+        async with httpx.AsyncClient(timeout=get_settings().agent_http_timeout) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.TimeoutException:
+        logger.error("agent timeout | url=%s", url)
+        return ChannelResult.fail(f"Agent request timed out: {url}")
+    except Exception as exc:
+        logger.error("agent error | url=%s error=%s", url, exc)
+        return ChannelResult.fail(f"Agent request failed: {exc}")
+
+    if not data.get("success"):
+        err = data.get("error", "unknown agent error")
+        logger.error("agent returned error | %s", err)
+        return ChannelResult.fail(f"Agent error: {err}")
+
+    items = data.get("items", [])
+    logger.info("agent done | site=%s cmd=%s items=%d", site, command, len(items))
+    return ChannelResult.ok(items, site=site, command=command)
+
+
+async def _collect_via_ws_agent(
+    agent_url: str,
+    site: str,
+    command: str,
+    args: dict,
+    output_format: str,
+    mode: str,
+) -> ChannelResult:
+    """Dispatch a collect request to a NAT agent via the persistent reverse WS channel."""
+    from backend import ws_agent_manager
+
+    logger.info("WS agent dispatch | agent=%s site=%s cmd=%s", agent_url, site, command)
+    try:
+        result = await ws_agent_manager.dispatch_collect(
+            agent_url, site, command, args, output_format, mode
+        )
+    except TimeoutError:
+        logger.error("WS agent timeout | agent=%s", agent_url)
+        return ChannelResult.fail(f"WS agent timed out: {agent_url!r}")
+    except RuntimeError as exc:
+        logger.error("WS agent not connected | agent=%s: %s", agent_url, exc)
+        return ChannelResult.fail(f"WS agent not connected: {exc}")
+    except Exception as exc:
+        logger.error("WS agent error | agent=%s: %s", agent_url, exc)
+        return ChannelResult.fail(f"WS agent error: {exc}")
+
+    if not result.get("success"):
+        err = result.get("error", "unknown agent error")
+        logger.error("WS agent returned error | agent=%s: %s", agent_url, err)
+        return ChannelResult.fail(f"WS agent error: {err}")
+
+    items = result.get("items", [])
+    logger.info("WS agent done | site=%s cmd=%s items=%d", site, command, len(items))
+    return ChannelResult.ok(items, site=site, command=command)
+
+
+async def _cleanup_cdp_tabs(cdp_endpoint: str) -> None:
+    """Close any navigated tabs left open in Chrome after a CDP collect.
+
+    Called after every CDP collect (success or failure) so stale tabs cannot
+    block the next CDP connection attempt.  Only pages with http/https URLs
+    are closed; chrome:// and extension pages are left untouched.
+    """
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{cdp_endpoint}/json/list")
+            tabs = resp.json()
+            for tab in tabs:
+                url = tab.get("url", "")
+                if tab.get("type") == "page" and url.startswith(("http://", "https://")):
+                    tab_id = tab["id"]
+                    try:
+                        await client.get(f"{cdp_endpoint}/json/close/{tab_id}")
+                        logger.info("cleanup: closed tab %s url=%s", tab_id, url[:80])
+                    except Exception:
+                        pass
+    except Exception as exc:
+        logger.warning("cleanup: could not close CDP tabs at %s: %s", cdp_endpoint, exc)
+
+
 async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
-    """Run opencli subprocess, return (returncode, stdout, stderr)."""
+    """Run opencli subprocess, return (returncode, stdout, stderr).
+
+    Kills the process on timeout before re-raising so it doesn't linger.
+    """
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -98,9 +211,13 @@ async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        from backend.config import get_settings
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=get_settings().opencli_timeout)
         return proc.returncode, stdout.decode(), stderr.decode().strip()
     except asyncio.TimeoutError:
+        if proc:
+            proc.kill()
+            await proc.wait()
         raise
     except FileNotFoundError:
         raise
@@ -125,11 +242,46 @@ class OpenCLIChannel(AbstractChannel):
 
         env = os.environ.copy()
 
-        from backend.browser_pool import get_pool
+        from backend.browser_pool import get_pool, LocalBrowserPool
+        from backend.config import get_settings
         pool = get_pool()
+        settings = get_settings()
 
-        async with pool.acquire(endpoint=chrome_endpoint) as cdp_endpoint:
+        # In agent mode, prefer endpoints that have a registered agent_url/protocol.
+        # The pool may also contain local chrome endpoints without agent metadata.
+        _acquire_endpoint = chrome_endpoint
+        if settings.collection_mode == "agent" and not chrome_endpoint and isinstance(pool, LocalBrowserPool):
+            agent_eps = [ep for ep in pool.endpoints if pool.get_agent_protocol(ep)]
+            if agent_eps:
+                _acquire_endpoint = agent_eps[0]
+                logger.debug("agent mode: selected endpoint %s (has agent_protocol)", _acquire_endpoint)
+            else:
+                return ChannelResult.fail("No registered agent nodes available. Please add an agent node first.")
+
+        async with pool.acquire(endpoint=_acquire_endpoint) as cdp_endpoint:
             mode = pool.get_mode(cdp_endpoint)
+
+            # Agent mode: dispatch to remote edge node
+            if settings.collection_mode == "agent":
+                protocol = pool.get_agent_protocol(cdp_endpoint) if isinstance(pool, LocalBrowserPool) else "http"
+                agent_url = pool.get_agent_url(cdp_endpoint) or cdp_endpoint
+                if not protocol:
+                    return ChannelResult.fail(
+                        f"Endpoint {cdp_endpoint} has no registered agent. "
+                        "Set COLLECTION_MODE=local or add an agent node."
+                    )
+                if protocol == "http":
+                    return await _collect_via_agent(
+                        agent_url, site, command, args, output_format, mode
+                    )
+                elif protocol == "ws":
+                    return await _collect_via_ws_agent(
+                        agent_url, site, command, args, output_format, mode
+                    )
+                else:
+                    logger.error("Unknown agent_protocol %r for endpoint %s", protocol, cdp_endpoint)
+                    return ChannelResult.fail(f"Unknown agent_protocol: {protocol!r}")
+
             opencli_bin = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
 
             cmd = [opencli_bin, site, command]
@@ -138,7 +290,7 @@ class OpenCLIChannel(AbstractChannel):
             cmd.extend(["-f", output_format])
 
             if mode == "bridge":
-                daemon_host = urlparse(cdp_endpoint).hostname or "chrome-1"
+                daemon_host = urlparse(cdp_endpoint).hostname or "agent-1"
                 env.pop("OPENCLI_CDP_ENDPOINT", None)
                 env["OPENCLI_DAEMON_HOST"] = daemon_host
                 env["OPENCLI_DAEMON_PORT"] = str(_DAEMON_PORT)
@@ -151,13 +303,20 @@ class OpenCLIChannel(AbstractChannel):
                 returncode, stdout_text, stderr_text = await _run_opencli(cmd, env)
             except asyncio.TimeoutError:
                 logger.error("opencli timeout | cmd=%s", " ".join(cmd))
+                if mode == "cdp":
+                    await _cleanup_cdp_tabs(cdp_endpoint)
                 return ChannelResult.fail("opencli command timed out after 120s")
             except FileNotFoundError:
                 logger.error("opencli binary not found: %s", opencli_bin)
                 return ChannelResult.fail(f"opencli binary not found: {opencli_bin}")
             except Exception as exc:
                 logger.exception("opencli subprocess error | %s", exc)
+                if mode == "cdp":
+                    await _cleanup_cdp_tabs(cdp_endpoint)
                 return ChannelResult.fail(f"Failed to run opencli: {exc}")
+
+            if mode == "cdp":
+                await _cleanup_cdp_tabs(cdp_endpoint)
 
             if stderr_text:
                 logger.warning("opencli stderr | %s", stderr_text[:500])

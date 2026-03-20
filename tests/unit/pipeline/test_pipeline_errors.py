@@ -81,16 +81,26 @@ async def test_pipeline_with_ai_failure_still_returns_success(db_session):
 
     items = [{"title": "Test Item"}]
     channel_result = ChannelResult.ok(items)
+    mock_records = [MagicMock(ai_enrichment=None)]
+
+    mock_session = AsyncMock()
+    mock_session.get = AsyncMock(return_value=None)
+    mock_session.commit = AsyncMock()
+    mock_session_cm = AsyncMock()
+    mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session_cm.__aexit__ = AsyncMock(return_value=False)
 
     with (
         patch("backend.pipeline.collector.collect", return_value=channel_result),
+        patch("backend.pipeline.storer.store_records", new=AsyncMock(return_value=(mock_records, 0))),
+        patch("backend.database.AsyncSessionLocal", return_value=mock_session_cm),
         patch(
             "backend.pipeline.ai_processor.process_with_ai",
             side_effect=Exception("AI service down"),
         ),
     ):
         result = await run_pipeline(
-            db_session, source, task.id, enable_ai=True, enable_notifications=False
+            task.id, source, enable_ai=True, enable_notifications=False
         )
 
     # AI failure is a warning, pipeline still succeeds

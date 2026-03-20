@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import {
   getChromePool,
   listBrowserBindings,
@@ -10,13 +11,17 @@ import {
   removeChromeInstance,
   restartApi,
   updateChromeEndpointMode,
+  updateChromeInstanceConfig,
+  getSystemConfig,
+  updateSystemConfig,
+  getWsAgentStatus,
 } from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
 import PageHeader from '../components/PageHeader'
 import { SITE_LABELS } from '../components/ChannelConfigForm'
-import { Plus, X, ExternalLink, RefreshCw, Trash2, Minus } from 'lucide-react'
+import { Plus, X, ExternalLink, RefreshCw, Trash2, Minus, Wifi, WifiOff } from 'lucide-react'
 import type { BrowserBinding, ChromeEndpoint } from '../api/types'
 
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
@@ -113,7 +118,7 @@ function StatusBadge({ containerStatus, available, isStarting }: StatusBadgeProp
 
 interface AddInstanceModalProps {
   currentCount: number
-  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp') => void
+  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp', agentUrl: string, agentProtocol: 'http' | 'ws' | '') => void
   onClose: () => void
   isPending: boolean
 }
@@ -151,6 +156,8 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
   const { t } = useTranslation()
   const [count, setCount] = useState(1)
   const [mode, setMode] = useState<'bridge' | 'cdp'>('bridge')
+  const [agentUrl, setAgentUrl] = useState('')
+  const [agentProtocol, setAgentProtocol] = useState<'http' | 'ws' | ''>('')
 
   const preview = Array.from({ length: count }, (_, i) => {
     const N = currentCount + 1 + i
@@ -229,6 +236,56 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
           </div>
         </div>
 
+        {/* Agent URL + protocol (optional — leave empty for local instance) */}
+        <div className="mb-5">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">
+            Agent 地址 <span className="text-gray-400 font-normal">（可选，留空则为本地实例）</span>
+          </label>
+          <input
+            type="url"
+            value={agentUrl}
+            onChange={(e) => setAgentUrl(e.target.value)}
+            placeholder="http://192.168.1.100:19823"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+          />
+          <p className="mt-1 text-xs text-gray-400">填写后须选择连接协议（需配合 COLLECTION_MODE=agent）</p>
+        </div>
+
+        {/* Agent protocol (only shown when agent_url is filled) */}
+        {agentUrl && (
+          <div className="mb-5">
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">连接协议</p>
+            <div className="flex gap-2">
+              {([
+                { value: 'http' as const, label: 'HTTP', desc: '局域网 / 代理可达，中心主动请求 Agent' },
+                { value: 'ws' as const, label: 'WS', desc: '反向 WebSocket，Agent 主动连中心，适合 NAT / 跨网场景' },
+              ]).map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex-1 flex gap-2 cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
+                    agentProtocol === opt.value
+                      ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="agent-protocol"
+                    value={opt.value}
+                    checked={agentProtocol === opt.value}
+                    onChange={() => setAgentProtocol(opt.value)}
+                    className="accent-blue-600 shrink-0 mt-0.5"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium dark:text-white">{opt.label}</span>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Preview */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 mb-5">
           <p className="text-xs text-gray-400 mb-1.5">{t('browsers.instancePreview')}</p>
@@ -244,15 +301,15 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
         {/* Actions */}
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => onConfirm(count, true, mode)}
-            disabled={isPending}
+            onClick={() => onConfirm(count, true, mode, agentUrl, agentProtocol)}
+            disabled={isPending || (!!agentUrl && !agentProtocol)}
             className="w-full px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             {isPending ? t('browsers.adding') : t('browsers.createAndRestart')}
           </button>
           <button
-            onClick={() => onConfirm(count, false, mode)}
-            disabled={isPending}
+            onClick={() => onConfirm(count, false, mode, agentUrl, agentProtocol)}
+            disabled={isPending || (!!agentUrl && !agentProtocol)}
             className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
             {t('browsers.createLaterRestart')}
@@ -410,12 +467,12 @@ function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSucce
 
   return (
     <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
-      {(['bridge', 'cdp'] as const).map((m) => (
+      {(['bridge', 'cdp']).map((m) => (
         <button
           key={m}
           title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
           disabled={mutation.isPending}
-          onClick={() => mode !== m && mutation.mutate(m)}
+          onClick={() => mode !== m && mutation.mutate(m as 'bridge' | 'cdp')}
           className={[
             'px-2.5 py-1 transition-colors',
             mode === m
@@ -435,6 +492,7 @@ function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSucce
 interface InstanceCardProps {
   endpoint: ChromeEndpoint
   isStarting?: boolean
+  wsConnected?: boolean
   bindings: BrowserBinding[]
   boundSites: Set<string>
   onBind: (site: string) => void
@@ -443,14 +501,25 @@ interface InstanceCardProps {
   isBindPending: boolean
   isRemovePending: boolean
   onModeChanged: () => void
+  onConfigChanged: () => void
 }
 
 function InstanceCard({
-  endpoint, isStarting, bindings, boundSites,
-  onBind, onUnbind, onRemove, isBindPending, isRemovePending, onModeChanged,
+  endpoint, isStarting, wsConnected, bindings, boundSites,
+  onBind, onUnbind, onRemove, isBindPending, isRemovePending, onModeChanged, onConfigChanged,
 }: InstanceCardProps) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const { url, available, container_status: containerStatus, novnc_port: novncPort } = endpoint
+  const [editingAgentUrl, setEditingAgentUrl] = useState(false)
+  const [agentUrlDraft, setAgentUrlDraft] = useState(endpoint.agent_url ?? '')
+  const [agentProtocolDraft, setAgentProtocolDraft] = useState<'http' | 'ws'>(endpoint.agent_protocol === 'ws' ? 'ws' : 'http')
+
+  const saveAgentUrlMutation = useMutation({
+    mutationFn: ({ agent_url, agent_protocol }: { agent_url: string; agent_protocol: string }) =>
+      updateChromeInstanceConfig(url, { agent_url: agent_url || null, agent_protocol: agent_protocol || null }),
+    onSuccess: () => { setEditingAgentUrl(false); onConfigChanged() },
+  })
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
   const idx = instanceIndex(url)
@@ -471,6 +540,22 @@ function InstanceCard({
           <ExternalLink size={11} />
         </a>
         <div className="ml-auto flex items-center gap-2">
+          {wsConnected ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+              <Wifi size={10} />
+              {t('browsers.statusWsConnected')}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+              <WifiOff size={10} />
+              {t('browsers.statusWsOffline')}
+            </span>
+          )}
+          {!!endpoint.agent_url && endpoint.agent_protocol === 'http' && (
+            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+              HTTP Agent
+            </span>
+          )}
           <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} />
           {canRemove && (
             <button
@@ -483,6 +568,75 @@ function InstanceCard({
             </button>
           )}
         </div>
+      </div>
+
+      {/* Agent URL row */}
+      <div className="mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
+        {editingAgentUrl ? (
+          <div className="space-y-2">
+            <div className="flex gap-2 items-center">
+              <input
+                autoFocus
+                type="url"
+                value={agentUrlDraft}
+                onChange={(e) => setAgentUrlDraft(e.target.value)}
+                placeholder="http://192.168.1.100:19823"
+                className="flex-1 px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+              />
+            </div>
+            {agentUrlDraft && (
+              <div className="flex gap-2">
+                {(['http', 'ws'] as const).map((p) => (
+                  <label key={p} className={`flex items-center gap-1.5 px-2 py-1 rounded border cursor-pointer text-xs transition-colors ${
+                    agentProtocolDraft === p
+                      ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300'
+                  }`}>
+                    <input type="radio" name={`protocol-${url}`} value={p} checked={agentProtocolDraft === p}
+                      onChange={() => setAgentProtocolDraft(p)}
+                      className="accent-blue-600" />
+                    {p === 'http' ? 'HTTP（局域网 / 代理）' : 'WS（反向连接）'}
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => saveAgentUrlMutation.mutate({ agent_url: agentUrlDraft, agent_protocol: agentProtocolDraft })}
+                disabled={saveAgentUrlMutation.isPending}
+                className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                保存
+              </button>
+              <button
+                onClick={() => { setEditingAgentUrl(false); setAgentUrlDraft(endpoint.agent_url ?? ''); setAgentProtocolDraft(endpoint.agent_protocol === 'ws' ? 'ws' : 'http') }}
+                className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setAgentUrlDraft(endpoint.agent_url ?? ''); setAgentProtocolDraft(endpoint.agent_protocol === 'ws' ? 'ws' : 'http'); setEditingAgentUrl(true) }}
+            className="flex items-center gap-1.5 text-xs group"
+            title="点击编辑 Agent 地址"
+          >
+            <span className="text-gray-400 shrink-0">Agent:</span>
+            {endpoint.agent_url ? (
+              <>
+                <span className="font-mono text-blue-600 dark:text-blue-400 group-hover:underline truncate max-w-[160px]">
+                  {endpoint.agent_url}
+                </span>
+                <span className="px-1 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 font-mono">
+                  {endpoint.agent_protocol ?? 'http'}
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-400 italic group-hover:text-blue-500">未配置 — 点击设置</span>
+            )}
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2 min-h-[2rem]">
@@ -518,6 +672,27 @@ export default function BrowsersPage() {
     queryClient.invalidateQueries({ queryKey: ['browser-bindings'] })
   }
 
+  const { data: sysConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: getSystemConfig,
+  })
+
+  const { data: wsStatus } = useQuery({
+    queryKey: ['ws-agent-status'],
+    queryFn: getWsAgentStatus,
+    refetchInterval: 10_000,
+  })
+  const wsConnectedSet = new Set(wsStatus?.connected ?? [])
+
+  const switchModeMutation = useMutation({
+    mutationFn: (mode: 'local' | 'agent') => updateSystemConfig({ collection_mode: mode }),
+    onSuccess: (newConfig) => {
+      queryClient.setQueryData(['system-config'], newConfig)
+      toast.success('采集模式已切换')
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '切换失败'),
+  })
+
   const { data: poolData, isLoading: poolLoading, error: poolError, refetch } = useQuery({
     queryKey: ['chrome-pool'],
     queryFn: getChromePool,
@@ -531,16 +706,19 @@ export default function BrowsersPage() {
 
   const addMutation = useMutation({
     mutationFn: createBrowserBinding,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }); toast.success('站点绑定已添加') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '绑定失败'),
   })
 
   const deleteMutation = useMutation({
     mutationFn: deleteBrowserBinding,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['browser-bindings'] }); toast.success('已解绑') },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '解绑失败'),
   })
 
   const addInstanceMutation = useMutation({
-    mutationFn: ({ count, mode }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp' }) => addChromeInstance(count, mode),
+    mutationFn: ({ count, mode, agentUrl, agentProtocol }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp'; agentUrl: string; agentProtocol: 'http' | 'ws' | '' }) => addChromeInstance(count, mode, agentUrl, agentProtocol),
+    onError: (err) => toast.error(err instanceof Error ? err.message : '添加实例失败'),
     onSuccess: (result, { withRestart }) => {
       setShowAddModal(false)
       invalidatePool()
@@ -567,8 +745,10 @@ export default function BrowsersPage() {
     onSuccess: (_data, { withRestart }) => {
       setRemovingIdx(null)
       invalidatePool()
+      toast.success('实例已移除')
       if (withRestart) restartMutation.mutate()
     },
+    onError: (err) => toast.error(err instanceof Error ? err.message : '移除实例失败'),
   })
 
   const restartMutation = useMutation({
@@ -605,7 +785,33 @@ export default function BrowsersPage() {
       <PageHeader title={t('browsers.title')} description={t('browsers.description')} />
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        {/* Collection mode toggle */}
+        {sysConfig && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800">
+            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{t('browsers.collectionMode')}:</span>
+            <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
+              {(['local', 'agent'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  disabled={switchModeMutation.isPending}
+                  onClick={() => sysConfig.collection_mode !== mode && switchModeMutation.mutate(mode)}
+                  className={[
+                    'px-2.5 py-1 transition-colors',
+                    sysConfig.collection_mode === mode
+                      ? mode === 'local'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-purple-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
+                  ].join(' ')}
+                >
+                  {mode === 'local' ? t('browsers.modeLocal') : t('browsers.modeAgent')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
@@ -639,6 +845,7 @@ export default function BrowsersPage() {
               key={ep.url}
               endpoint={ep}
               isStarting={startingEndpoints.has(ep.url)}
+              wsConnected={ep.agent_url ? wsConnectedSet.has(ep.agent_url) : false}
               bindings={bindingsByEndpoint[ep.url] ?? []}
               boundSites={boundSites}
               onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
@@ -647,6 +854,7 @@ export default function BrowsersPage() {
               isBindPending={addMutation.isPending}
               isRemovePending={removeInstanceMutation.isPending}
               onModeChanged={invalidatePool}
+              onConfigChanged={invalidatePool}
             />
           )
         })}
@@ -692,7 +900,7 @@ export default function BrowsersPage() {
       {showAddModal && (
         <AddInstanceModal
           currentCount={endpoints.length}
-          onConfirm={(count, withRestart, mode) => addInstanceMutation.mutate({ count, withRestart, mode })}
+          onConfirm={(count, withRestart, mode, agentUrl, agentProtocol) => addInstanceMutation.mutate({ count, withRestart, mode, agentUrl, agentProtocol })}
           onClose={() => { if (!addInstanceMutation.isPending) setShowAddModal(false) }}
           isPending={addInstanceMutation.isPending}
         />

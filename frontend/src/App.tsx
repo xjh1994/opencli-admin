@@ -9,7 +9,7 @@ import NotificationsPage from './pages/NotificationsPage'
 import WorkersPage from './pages/WorkersPage'
 import AgentsPage from './pages/AgentsPage'
 import ProvidersPage from './pages/ProvidersPage'
-import BrowsersPage from './pages/BrowsersPage'
+import NodesPage from './pages/NodesPage'
 
 export default function App() {
   return (
@@ -26,7 +26,7 @@ export default function App() {
           <Route path="workers" element={<WorkersPage />} />
           <Route path="agents" element={<AgentsPage />} />
           <Route path="providers" element={<ProvidersPage />} />
-          <Route path="browsers" element={<BrowsersPage />} />
+          <Route path="browsers" element={<NodesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

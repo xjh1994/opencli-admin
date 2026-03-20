@@ -34,7 +34,7 @@ settings = get_settings()
 
 
 def _read_chrome_endpoints() -> list[str]:
-    """Read CHROME_POOL_ENDPOINTS from the .env file directly.
+    """Read AGENT_POOL_ENDPOINTS from the .env file directly.
 
     `docker restart` reuses the env vars baked in at container creation time,
     so the env var value is stale after the chrome-pool API updates .env.
@@ -43,7 +43,7 @@ def _read_chrome_endpoints() -> list[str]:
     try:
         from dotenv import dotenv_values
         env = dotenv_values("/app/.env")
-        raw = env.get("CHROME_POOL_ENDPOINTS", "").strip()
+        raw = env.get("AGENT_POOL_ENDPOINTS", "").strip()
         if raw:
             return [ep.strip() for ep in raw.split(",") if ep.strip()]
     except Exception:
@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
     _configure_logging()
 
     # Initialise Chrome browser pool.
-    # Read CHROME_POOL_ENDPOINTS directly from the .env file so that updates
+    # Read AGENT_POOL_ENDPOINTS directly from the .env file so that updates
     # written by the chrome-pool API survive a plain `docker restart` — docker
     # restart reuses the env vars injected at container creation time, so the
     # pydantic-settings value (which comes from those env vars) would be stale.
@@ -72,15 +72,20 @@ async def lifespan(app: FastAPI):
     )
     await browser_pool.ensure_ready()
 
-    # Sync browser instance modes from DB into pool memory
+    # Sync browser instance modes and agent_urls from DB into pool memory
     from backend.database import AsyncSessionLocal
     from backend.models.browser import BrowserInstance
+    from backend.browser_pool import LocalBrowserPool
     from sqlalchemy import select
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(BrowserInstance))
+        pool = browser_pool.get_pool()
         for inst in result.scalars().all():
-            if inst.endpoint in [ep for ep in browser_pool.get_pool().endpoints]:
-                browser_pool.get_pool().set_mode(inst.endpoint, inst.mode)
+            if inst.endpoint in pool.endpoints:
+                pool.set_mode(inst.endpoint, inst.mode)
+                if isinstance(pool, LocalBrowserPool):
+                    pool.set_agent_url(inst.endpoint, inst.agent_url)
+                    pool.set_agent_protocol(inst.endpoint, inst.agent_protocol)
 
     # Mark stale pending/running tasks as failed (lost on previous restart)
     from backend.models.task import CollectionTask

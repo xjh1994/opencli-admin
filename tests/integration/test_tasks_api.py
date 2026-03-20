@@ -44,11 +44,7 @@ async def test_trigger_task_success(client, sample_source_data):
     create_resp = await client.post("/api/v1/sources", json=sample_source_data)
     source_id = create_resp.json()["data"]["id"]
 
-    mock_result = MagicMock()
-    mock_result.id = "celery-task-123"
-
-    with patch("backend.worker.tasks.run_collection") as mock_task:
-        mock_task.apply_async.return_value = mock_result
+    with patch("backend.pipeline.runner.run_collection_pipeline", new=AsyncMock()):
         response = await client.post(
             "/api/v1/tasks/trigger",
             json={"source_id": source_id, "parameters": {"limit": 10}},
@@ -57,7 +53,6 @@ async def test_trigger_task_success(client, sample_source_data):
     assert response.status_code == 202
     data = response.json()["data"]
     assert "task_id" in data
-    assert data["celery_task_id"] == "celery-task-123"
 
 
 @pytest.mark.asyncio
