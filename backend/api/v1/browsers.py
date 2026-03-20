@@ -5,10 +5,13 @@ import re
 import socket
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.schemas.browser import BrowserBindingCreate, BrowserBindingRead
+from pydantic import BaseModel
+
+from backend.schemas.browser import BrowserBindingCreate, BrowserBindingRead, BrowserInstanceRead
 from backend.schemas.common import ApiResponse
 from backend.services import browser_service
 
@@ -84,6 +87,7 @@ async def add_chrome_instance(
     count: int = 1,
     mode: str = "bridge",
     node_type: str = "local",
+    agent_url: str = "",
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse:
     """Start one or more new Chrome instances (chrome-N) and hot-add them to the pool."""
@@ -97,6 +101,7 @@ async def add_chrome_instance(
         raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
     if node_type not in ("local", "agent"):
         raise HTTPException(status_code=400, detail="node_type must be 'local' or 'agent'")
+    clean_agent_url = agent_url.strip() or None
 
     pool = get_pool()
     project = _project_name()
@@ -143,15 +148,18 @@ async def add_chrome_instance(
         pool.set_mode(new_endpoint, mode)
         if isinstance(pool, LocalBrowserPool):
             pool.set_node_type(new_endpoint, node_type)
+            pool.set_agent_url(new_endpoint, clean_agent_url)
 
-        # Persist mode and node_type to DB
+        # Persist mode, node_type, agent_url to DB
         result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == new_endpoint))
         inst = result.scalar_one_or_none()
         if inst:
             inst.mode = mode
             inst.node_type = node_type
+            inst.agent_url = clean_agent_url
         else:
-            inst = BrowserInstance(endpoint=new_endpoint, mode=mode, node_type=node_type, label="")
+            inst = BrowserInstance(endpoint=new_endpoint, mode=mode, node_type=node_type,
+                                   agent_url=clean_agent_url, label="")
             db.add(inst)
 
         created.append({"endpoint": new_endpoint, "novnc_port": novnc_port})
@@ -168,6 +176,64 @@ async def add_chrome_instance(
         "created": created,
         "total": len(pool.endpoints),
     })
+
+
+class InstanceConfigUpdate(BaseModel):
+    mode: str | None = None
+    node_type: str | None = None
+    agent_url: str | None = None
+
+
+@router.patch("/instances/{endpoint_b64}", response_model=ApiResponse[BrowserInstanceRead])
+async def update_instance_config(
+    endpoint_b64: str,
+    body: InstanceConfigUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """Update mode, node_type, or agent_url for a Chrome pool instance."""
+    import base64
+    from backend.browser_pool import get_pool, LocalBrowserPool
+
+    try:
+        endpoint = base64.urlsafe_b64decode(endpoint_b64.encode()).decode()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid endpoint encoding")
+
+    pool = get_pool()
+    if endpoint not in pool.endpoints:
+        raise HTTPException(status_code=404, detail=f"Endpoint {endpoint!r} not in pool")
+
+    if body.mode is not None:
+        if body.mode not in ("bridge", "cdp"):
+            raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
+        pool.set_mode(endpoint, body.mode)
+
+    if body.node_type is not None:
+        if body.node_type not in ("local", "agent"):
+            raise HTTPException(status_code=400, detail="node_type must be 'local' or 'agent'")
+        if isinstance(pool, LocalBrowserPool):
+            pool.set_node_type(endpoint, body.node_type)
+
+    clean_agent_url = body.agent_url.strip() if body.agent_url else None
+    if body.agent_url is not None and isinstance(pool, LocalBrowserPool):
+        pool.set_agent_url(endpoint, clean_agent_url or None)
+
+    from backend.models.browser import BrowserInstance
+    result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == endpoint))
+    inst = result.scalar_one_or_none()
+    if inst is None:
+        inst = BrowserInstance(endpoint=endpoint, mode=pool.get_mode(endpoint), label="")
+        db.add(inst)
+    if body.mode is not None:
+        inst.mode = body.mode
+    if body.node_type is not None:
+        inst.node_type = body.node_type
+    if body.agent_url is not None:
+        inst.agent_url = clean_agent_url or None
+    await db.commit()
+    await db.refresh(inst)
+
+    return ApiResponse.ok(BrowserInstanceRead.model_validate(inst))
 
 
 @router.delete("/chrome-instances/{n}", response_model=ApiResponse[dict])

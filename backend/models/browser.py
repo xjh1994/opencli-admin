@@ -26,5 +26,8 @@ class BrowserInstance(TimestampMixin):
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="bridge")
     label: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     # "local"  → Chrome runs on same host / docker network as API (current default)
-    # "agent"  → Chrome runs on a remote edge node; agent connects back to center
+    # "agent"  → Chrome runs on a remote edge node
     node_type: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
+    # HTTP base URL of the agent server running on the edge node (agent node_type only)
+    # e.g. http://192.168.1.100:19823  — center POSTs /collect here, no persistent connection needed
+    agent_url: Mapped[str | None] = mapped_column(String(255), nullable=True)

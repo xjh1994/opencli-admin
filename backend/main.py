@@ -85,6 +85,7 @@ async def lifespan(app: FastAPI):
                 pool.set_mode(inst.endpoint, inst.mode)
                 if isinstance(pool, LocalBrowserPool):
                     pool.set_node_type(inst.endpoint, inst.node_type)
+                    pool.set_agent_url(inst.endpoint, inst.agent_url)
 
     # Mark stale pending/running tasks as failed (lost on previous restart)
     from backend.models.task import CollectionTask

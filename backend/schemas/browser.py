@@ -25,6 +25,7 @@ class BrowserInstanceRead(BaseModel):
     endpoint: str
     mode: str
     node_type: str
+    agent_url: str | None
     label: str
     created_at: datetime
     updated_at: datetime

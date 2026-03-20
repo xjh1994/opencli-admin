@@ -10,6 +10,7 @@ import {
   removeChromeInstance,
   restartApi,
   updateChromeEndpointMode,
+  updateChromeInstanceConfig,
 } from '../api/endpoints'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
@@ -113,7 +114,7 @@ function StatusBadge({ containerStatus, available, isStarting }: StatusBadgeProp
 
 interface AddInstanceModalProps {
   currentCount: number
-  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp', nodeType: 'local' | 'agent') => void
+  onConfirm: (count: number, withRestart: boolean, mode: 'bridge' | 'cdp', nodeType: 'local' | 'agent', agentUrl: string) => void
   onClose: () => void
   isPending: boolean
 }
@@ -175,6 +176,7 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
   const [count, setCount] = useState(1)
   const [mode, setMode] = useState<'bridge' | 'cdp'>('bridge')
   const [nodeType, setNodeType] = useState<'local' | 'agent'>('local')
+  const [agentUrl, setAgentUrl] = useState('')
 
   const preview = Array.from({ length: count }, (_, i) => {
     const N = currentCount + 1 + i
@@ -286,6 +288,23 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
           </div>
         </div>
 
+        {/* Agent URL (only for agent node type) */}
+        {nodeType === 'agent' && (
+          <div className="mb-5">
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">
+              Agent 地址 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="url"
+              value={agentUrl}
+              onChange={(e) => setAgentUrl(e.target.value)}
+              placeholder="http://192.168.1.100:19823"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+            />
+            <p className="mt-1 text-xs text-gray-400">边缘节点上运行 <code className="font-mono bg-gray-100 dark:bg-gray-700 px-1 rounded">python -m backend.agent_server</code> 后的地址</p>
+          </div>
+        )}
+
         {/* Preview */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 mb-5">
           <p className="text-xs text-gray-400 mb-1.5">{t('browsers.instancePreview')}</p>
@@ -301,15 +320,15 @@ function AddInstanceModal({ currentCount, onConfirm, onClose, isPending }: AddIn
         {/* Actions */}
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => onConfirm(count, true, mode, nodeType)}
-            disabled={isPending}
+            onClick={() => onConfirm(count, true, mode, nodeType, agentUrl)}
+            disabled={isPending || (nodeType === 'agent' && !agentUrl.trim())}
             className="w-full px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             {isPending ? t('browsers.adding') : t('browsers.createAndRestart')}
           </button>
           <button
-            onClick={() => onConfirm(count, false, mode, nodeType)}
-            disabled={isPending}
+            onClick={() => onConfirm(count, false, mode, nodeType, agentUrl)}
+            disabled={isPending || (nodeType === 'agent' && !agentUrl.trim())}
             className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
             {t('browsers.createLaterRestart')}
@@ -500,14 +519,23 @@ interface InstanceCardProps {
   isBindPending: boolean
   isRemovePending: boolean
   onModeChanged: () => void
+  onConfigChanged: () => void
 }
 
 function InstanceCard({
   endpoint, isStarting, bindings, boundSites,
-  onBind, onUnbind, onRemove, isBindPending, isRemovePending, onModeChanged,
+  onBind, onUnbind, onRemove, isBindPending, isRemovePending, onModeChanged, onConfigChanged,
 }: InstanceCardProps) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const { url, available, container_status: containerStatus, novnc_port: novncPort } = endpoint
+  const [editingAgentUrl, setEditingAgentUrl] = useState(false)
+  const [agentUrlDraft, setAgentUrlDraft] = useState(endpoint.agent_url ?? '')
+
+  const saveAgentUrlMutation = useMutation({
+    mutationFn: (agent_url: string) => updateChromeInstanceConfig(url, { agent_url: agent_url || null }),
+    onSuccess: () => { setEditingAgentUrl(false); onConfigChanged() },
+  })
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
   const idx = instanceIndex(url)
@@ -546,6 +574,52 @@ function InstanceCard({
           )}
         </div>
       </div>
+
+      {/* Agent URL row (agent nodes only) */}
+      {endpoint.node_type === 'agent' && (
+        <div className="mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
+          {editingAgentUrl ? (
+            <div className="flex gap-2 items-center">
+              <input
+                autoFocus
+                type="url"
+                value={agentUrlDraft}
+                onChange={(e) => setAgentUrlDraft(e.target.value)}
+                placeholder="http://192.168.1.100:19823"
+                className="flex-1 px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+              />
+              <button
+                onClick={() => saveAgentUrlMutation.mutate(agentUrlDraft)}
+                disabled={saveAgentUrlMutation.isPending}
+                className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                保存
+              </button>
+              <button
+                onClick={() => { setEditingAgentUrl(false); setAgentUrlDraft(endpoint.agent_url ?? '') }}
+                className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setAgentUrlDraft(endpoint.agent_url ?? ''); setEditingAgentUrl(true) }}
+              className="flex items-center gap-1.5 text-xs group"
+              title="点击编辑 Agent 地址"
+            >
+              <span className="text-gray-400 shrink-0">Agent:</span>
+              {endpoint.agent_url ? (
+                <span className="font-mono text-blue-600 dark:text-blue-400 group-hover:underline truncate max-w-[200px]">
+                  {endpoint.agent_url}
+                </span>
+              ) : (
+                <span className="text-gray-400 italic group-hover:text-blue-500">未配置 — 点击设置</span>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 min-h-[2rem]">
         {bindings.map((b) => (
@@ -602,7 +676,7 @@ export default function BrowsersPage() {
   })
 
   const addInstanceMutation = useMutation({
-    mutationFn: ({ count, mode, nodeType }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp'; nodeType: 'local' | 'agent' }) => addChromeInstance(count, mode, nodeType),
+    mutationFn: ({ count, mode, nodeType, agentUrl }: { count: number; withRestart: boolean; mode: 'bridge' | 'cdp'; nodeType: 'local' | 'agent'; agentUrl: string }) => addChromeInstance(count, mode, nodeType, agentUrl),
     onSuccess: (result, { withRestart }) => {
       setShowAddModal(false)
       invalidatePool()
@@ -709,6 +783,7 @@ export default function BrowsersPage() {
               isBindPending={addMutation.isPending}
               isRemovePending={removeInstanceMutation.isPending}
               onModeChanged={invalidatePool}
+              onConfigChanged={invalidatePool}
             />
           )
         })}
@@ -754,7 +829,7 @@ export default function BrowsersPage() {
       {showAddModal && (
         <AddInstanceModal
           currentCount={endpoints.length}
-          onConfirm={(count, withRestart, mode, nodeType) => addInstanceMutation.mutate({ count, withRestart, mode, nodeType })}
+          onConfirm={(count, withRestart, mode, nodeType, agentUrl) => addInstanceMutation.mutate({ count, withRestart, mode, nodeType, agentUrl })}
           onClose={() => { if (!addInstanceMutation.isPending) setShowAddModal(false) }}
           isPending={addInstanceMutation.isPending}
         />

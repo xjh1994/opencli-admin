@@ -140,6 +140,7 @@ export interface ChromeEndpoint {
   container_status?: string
   mode: 'bridge' | 'cdp'
   node_type: 'local' | 'agent'
+  agent_url?: string | null
 }
 
 export interface BrowserBinding {

@@ -47,6 +47,8 @@ class LocalBrowserPool:
         self._modes: dict[str, str] = {ep: "bridge" for ep in endpoints}
         # node_type per endpoint: "local" (same host) or "agent" (remote edge node)
         self._node_types: dict[str, str] = {ep: "local" for ep in endpoints}
+        # agent_url per endpoint: HTTP base URL of the agent server (agent nodes only)
+        self._agent_urls: dict[str, str | None] = {ep: None for ep in endpoints}
         logger.info(
             "BrowserPool (local): %d Chrome instance(s): %s",
             self._total,
@@ -132,6 +134,15 @@ class LocalBrowserPool:
         self._node_types[endpoint] = node_type
         logger.info("BrowserPool: endpoint %s node_type set to %s", endpoint, node_type)
 
+    def get_agent_url(self, endpoint: str) -> str | None:
+        """Return the agent HTTP base URL for the given endpoint (agent nodes only)."""
+        return self._agent_urls.get(endpoint)
+
+    def set_agent_url(self, endpoint: str, agent_url: str | None) -> None:
+        """Update the agent URL for an endpoint at runtime."""
+        self._agent_urls[endpoint] = agent_url
+        logger.info("BrowserPool: endpoint %s agent_url set to %s", endpoint, agent_url)
+
     def add_endpoint(self, endpoint: str) -> None:
         """Hot-add a new Chrome instance to the pool without restarting."""
         if endpoint in self._slots:
@@ -141,6 +152,7 @@ class LocalBrowserPool:
         self._slots[endpoint] = q
         self._modes.setdefault(endpoint, "bridge")
         self._node_types.setdefault(endpoint, "local")
+        self._agent_urls.setdefault(endpoint, None)
         self._total += 1
         logger.info("BrowserPool: added endpoint %s (total: %d)", endpoint, self._total)
 
@@ -151,6 +163,7 @@ class LocalBrowserPool:
         self._slots.pop(endpoint)
         self._modes.pop(endpoint, None)
         self._node_types.pop(endpoint, None)
+        self._agent_urls.pop(endpoint, None)
         self._total -= 1
         logger.info("BrowserPool: removed endpoint %s (total: %d)", endpoint, self._total)
 

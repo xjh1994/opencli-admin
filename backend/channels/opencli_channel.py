@@ -89,6 +89,50 @@ _PARSERS = {
 }
 
 
+async def _collect_via_agent(
+    agent_url: str,
+    site: str,
+    command: str,
+    args: dict,
+    output_format: str,
+    mode: str,
+    cdp_endpoint: str,
+) -> ChannelResult:
+    """Dispatch a collection request to a LAN agent server via HTTP POST."""
+    import httpx
+
+    url = agent_url.rstrip("/") + "/collect"
+    payload = {
+        "site": site,
+        "command": command,
+        "args": args,
+        "format": output_format,
+        "mode": mode,
+        "cdp_endpoint": cdp_endpoint,
+    }
+    logger.info("agent dispatch | url=%s site=%s cmd=%s", url, site, command)
+    try:
+        async with httpx.AsyncClient(timeout=130) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.TimeoutException:
+        logger.error("agent timeout | url=%s", url)
+        return ChannelResult.fail(f"Agent request timed out: {url}")
+    except Exception as exc:
+        logger.error("agent error | url=%s error=%s", url, exc)
+        return ChannelResult.fail(f"Agent request failed: {exc}")
+
+    if not data.get("success"):
+        err = data.get("error", "unknown agent error")
+        logger.error("agent returned error | %s", err)
+        return ChannelResult.fail(f"Agent error: {err}")
+
+    items = data.get("items", [])
+    logger.info("agent done | site=%s cmd=%s items=%d", site, command, len(items))
+    return ChannelResult.ok(items, site=site, command=command)
+
+
 async def _run_opencli(cmd: list[str], env: dict) -> tuple[int, str, str]:
     """Run opencli subprocess, return (returncode, stdout, stderr)."""
     try:
@@ -125,11 +169,21 @@ class OpenCLIChannel(AbstractChannel):
 
         env = os.environ.copy()
 
-        from backend.browser_pool import get_pool
+        from backend.browser_pool import get_pool, LocalBrowserPool
         pool = get_pool()
 
         async with pool.acquire(endpoint=chrome_endpoint) as cdp_endpoint:
             mode = pool.get_mode(cdp_endpoint)
+
+            # LAN Agent mode: POST to remote agent server, skip local opencli
+            if isinstance(pool, LocalBrowserPool):
+                node_type = pool.get_node_type(cdp_endpoint)
+                agent_url = pool.get_agent_url(cdp_endpoint)
+                if node_type == "agent" and agent_url:
+                    return await _collect_via_agent(
+                        agent_url, site, command, args, output_format, mode, cdp_endpoint
+                    )
+
             opencli_bin = _BRIDGE_BIN if mode == "bridge" else _CDP_BIN
 
             cmd = [opencli_bin, site, command]
