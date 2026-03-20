@@ -178,6 +178,63 @@ async def add_chrome_instance(
     })
 
 
+class AgentRegisterRequest(BaseModel):
+    agent_url: str          # e.g. http://192.168.1.100:19823
+    mode: str = "bridge"    # bridge | cdp
+    label: str = ""
+
+
+@router.post("/agents/register", response_model=ApiResponse[BrowserInstanceRead])
+async def register_agent(
+    body: AgentRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """Agent self-registration: agent POSTs its own URL, center adds it to the pool.
+
+    The agent_url is used as the pool endpoint (logical key for routing).
+    Idempotent: calling again with the same agent_url updates mode/label.
+    """
+    from backend.browser_pool import get_pool, LocalBrowserPool
+    from backend.models.browser import BrowserInstance
+
+    agent_url = body.agent_url.rstrip("/")
+    if not agent_url.startswith("http"):
+        raise HTTPException(status_code=400, detail="agent_url must be an http/https URL")
+    if body.mode not in ("bridge", "cdp"):
+        raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
+
+    pool = get_pool()
+
+    # Add to pool if not already present (agent_url is the pool endpoint key)
+    if isinstance(pool, LocalBrowserPool):
+        if agent_url not in pool.endpoints:
+            pool.add_endpoint(agent_url)
+        pool.set_mode(agent_url, body.mode)
+        pool.set_node_type(agent_url, "agent")
+        pool.set_agent_url(agent_url, agent_url)
+
+    # Upsert in DB
+    result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == agent_url))
+    inst = result.scalar_one_or_none()
+    if inst:
+        inst.mode = body.mode
+        inst.node_type = "agent"
+        inst.agent_url = agent_url
+        if body.label:
+            inst.label = body.label
+    else:
+        inst = BrowserInstance(
+            endpoint=agent_url, mode=body.mode,
+            node_type="agent", agent_url=agent_url, label=body.label,
+        )
+        db.add(inst)
+    await db.commit()
+    await db.refresh(inst)
+
+    logger.info("Agent registered: %s (mode=%s)", agent_url, body.mode)
+    return ApiResponse.ok(BrowserInstanceRead.model_validate(inst))
+
+
 class InstanceConfigUpdate(BaseModel):
     mode: str | None = None
     node_type: str | None = None
