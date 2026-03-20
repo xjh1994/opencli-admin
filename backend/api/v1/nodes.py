@@ -253,12 +253,35 @@ async def delete_node(node_id: str, db: AsyncSession = Depends(get_db)) -> ApiRe
 async def get_install_script(request: Request) -> PlainTextResponse:
     """Return the agent install script with CENTRAL_API_URL pre-filled.
 
-    Tries to read scripts/install-agent.sh from the project root first.
-    Falls back to an inline template if the file is not present (e.g. in Docker
-    where only ./backend is mounted).
+    URL resolution priority:
+    1. PUBLIC_URL env var (most reliable, admin-configured)
+    2. X-Forwarded-Host / X-Forwarded-Proto headers (reverse proxy)
+    3. Host header + scheme (direct access)
+    4. request.base_url fallback (may be internal when behind changeOrigin proxy)
     """
-    base_url = str(request.base_url).rstrip("/")
-    # Try file path first (local dev)
+    from backend.config import get_settings
+    settings = get_settings()
+
+    if settings.public_url:
+        base_url = settings.public_url.rstrip("/")
+    else:
+        # Try to reconstruct from proxy headers (nginx, Vite proxy, etc.)
+        forwarded_host = request.headers.get("x-forwarded-host", "")
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        host = request.headers.get("host", "")
+
+        if forwarded_host:
+            proto = forwarded_proto or ("https" if "443" in forwarded_host else "http")
+            base_url = f"{proto}://{forwarded_host}"
+        elif host and not host.startswith(("api:", "localhost:800", "127.0.0.1:800")):
+            # Host is the original client-visible host (not an internal service name)
+            proto = "https" if request.url.scheme == "https" else "http"
+            base_url = f"{proto}://{host}"
+        else:
+            # Last resort: request.base_url (may be internal in Docker)
+            base_url = str(request.base_url).rstrip("/")
+
+    # Try file path first (local dev where scripts/ is accessible)
     for candidate in [
         Path(__file__).parent.parent.parent.parent / "scripts" / "install-agent.sh",
         Path("/app/scripts/install-agent.sh"),
@@ -268,7 +291,7 @@ async def get_install_script(request: Request) -> PlainTextResponse:
             content = content.replace("__CENTRAL_API_URL__", base_url)
             return PlainTextResponse(content, media_type="text/plain")
 
-    # Inline fallback
+    # Inline fallback (Docker: only ./backend is mounted)
     content = _install_script_template(base_url)
     return PlainTextResponse(content, media_type="text/plain")
 
@@ -297,6 +320,13 @@ install_docker() {{
   command -v docker >/dev/null 2>&1 || die "Docker not found"
   CONTAINER_NAME="opencli-agent"
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  OCCUPIED_BY=$(docker ps --format '{{{{.Names}}}} {{{{.Ports}}}}' | grep "0.0.0.0:${{AGENT_PORT}}->" | awk '{{{{print $1}}}}')
+  if [[ -n "$OCCUPIED_BY" ]]; then
+    printf "\\e[33m[WARN]\\e[0m  Port $AGENT_PORT used by: $OCCUPIED_BY\\n"
+    printf "\\e[33m[WARN]\\e[0m  Stop it: docker stop $OCCUPIED_BY\\n"
+    printf "\\e[33m[WARN]\\e[0m  Or use a different port: AGENT_PORT=19824 bash $0\\n"
+    die "Port conflict"
+  fi
   PROXY_ARGS=""
   [[ -n "${{HTTP_PROXY:-}}" ]]  && PROXY_ARGS="$PROXY_ARGS -e HTTP_PROXY=$HTTP_PROXY"
   [[ -n "${{HTTPS_PROXY:-}}" ]] && PROXY_ARGS="$PROXY_ARGS -e HTTPS_PROXY=$HTTPS_PROXY"

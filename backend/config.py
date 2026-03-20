@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     #         each agent runs opencli locally and returns results via HTTP or WS
     collection_mode: Literal["local", "agent"] = "local"
 
+    # Public-facing URL of this deployment (used in install scripts and invite links).
+    # Set this to the URL your remote agents will use to reach the center API.
+    # e.g. http://192.168.1.1:8031  or  https://admin.example.com
+    # If empty, the system tries to derive it from request headers (may give internal URL
+    # when behind a reverse proxy with changeOrigin=true).
+    public_url: str = ""
+
     # Agent pool: comma-separated agent/CDP endpoint URLs.
     # Each entry is a Chrome agent node (local or remote).
     # Single-instance fallback when agent_pool_endpoints is empty.

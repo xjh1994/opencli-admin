@@ -53,10 +53,20 @@ install_docker() {
 
   CONTAINER_NAME="opencli-agent"
 
-  # Stop and remove existing container if any
+  # Stop and remove existing container with same name
   if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
     warn "Existing container '$CONTAINER_NAME' found — removing..."
     docker rm -f "$CONTAINER_NAME" >/dev/null
+  fi
+
+  # Check if port is occupied by another container
+  OCCUPIED_BY=$(docker ps --format '{{.Names}} {{.Ports}}' | grep "0.0.0.0:${AGENT_PORT}->" | awk '{print $1}')
+  if [[ -n "$OCCUPIED_BY" ]]; then
+    warn "Port $AGENT_PORT is already used by container: $OCCUPIED_BY"
+    warn "Options:"
+    warn "  1. Stop the existing container:  docker stop $OCCUPIED_BY"
+    warn "  2. Use a different port:          AGENT_PORT=19824 bash $0"
+    die  "Port conflict — cannot continue"
   fi
 
   PROXY_ARGS=""
