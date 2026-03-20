@@ -12,16 +12,16 @@ def test_novnc_port_first_chrome():
     assert _novnc_port("http://chrome:9222", 6080) == 6080
 
 
-def test_novnc_port_second_chrome():
-    """chrome-2 maps to base_port + 1."""
+def test_novnc_port_second_agent():
+    """agent-2 maps to base_port + 1."""
     from backend.api.v1.workers import _novnc_port
-    assert _novnc_port("http://chrome-2:9222", 6080) == 6081
+    assert _novnc_port("http://agent-2:9222", 6080) == 6081
 
 
-def test_novnc_port_third_chrome():
-    """chrome-3 maps to base_port + 2."""
+def test_novnc_port_third_agent():
+    """agent-3 maps to base_port + 2."""
     from backend.api.v1.workers import _novnc_port
-    assert _novnc_port("http://chrome-3:9222", 6080) == 6082
+    assert _novnc_port("http://agent-3:9222", 6080) == 6082
 
 
 def test_novnc_port_unknown_hostname():
