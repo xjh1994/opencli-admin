@@ -878,11 +878,19 @@ curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1
 
 #### 准备：切换 agent-1 为 -chrome 镜像
 
+> ⚠️ **注意**：手动 `docker stop/rm` 旧容器后，旧节点的 endpoint 仍残留在 API 的 in-memory pool 中，会导致 dispatch 报错（"Name or service not known"）。必须先通过 API 删除旧节点，再启动新容器。
+
 ```bash
-# 停止当前 agent-1 容器
+# 1. 先删除旧 agent-1 节点（清理 pool 和 DB）
+NODE_ID=$(curl -s http://localhost:8031/api/v1/nodes | \
+  python3 -c "import sys,json; nodes=json.load(sys.stdin)['data']; \
+              [print(n['id']) for n in nodes if n['label']=='agent-1']")
+curl -s -X DELETE http://localhost:8031/api/v1/nodes/$NODE_ID
+
+# 2. 停止并删除旧容器
 docker stop agent-1 && docker rm agent-1
 
-# 用 -chrome 镜像启动（AGENT_MODE=bridge，内置 Chromium 和 daemon）
+# 3. 用 -chrome 镜像启动（AGENT_MODE=bridge，内置 Chromium 和 daemon）
 docker run -d \
   --name agent-1-chrome \
   --restart unless-stopped \
