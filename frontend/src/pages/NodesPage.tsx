@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   listNodes,
   getNodeEvents,
+  getNodeStats,
   deleteNode,
   listBrowserBindings,
   createBrowserBinding,
@@ -14,7 +15,7 @@ import {
   getWsAgentStatus,
   restartApi,
 } from '../api/endpoints'
-import type { EdgeNode, EdgeNodeEvent, BrowserBinding } from '../api/types'
+import type { EdgeNode, EdgeNodeEvent, BrowserBinding, NodeStats } from '../api/types'
 import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
@@ -224,6 +225,73 @@ function NodeEventTimeline({ nodeId }: { nodeId: string }) {
   )
 }
 
+// ── Node Stats Panel ──────────────────────────────────────────────────────────
+
+type StatRange = 'today' | 'yesterday' | '7d' | '30d' | 'all'
+const STAT_RANGE_LABELS: Record<StatRange, string> = {
+  today: '今天',
+  yesterday: '昨天',
+  '7d': '7 天',
+  '30d': '30 天',
+  all: '全部',
+}
+
+function NodeStatsPanel({ nodeId }: { nodeId: string }) {
+  const [range, setRange] = useState<StatRange>('7d')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['node-stats', nodeId, range],
+    queryFn: () => getNodeStats(nodeId, { range }),
+  })
+
+  const ranges: StatRange[] = ['today', 'yesterday', '7d', '30d', 'all']
+
+  return (
+    <div className="mt-3 space-y-2">
+      {/* Range selector */}
+      <div className="flex gap-1 flex-wrap">
+        {ranges.map((r) => (
+          <button
+            key={r}
+            onClick={() => setRange(r)}
+            className={[
+              'px-2 py-0.5 rounded text-xs font-medium transition-colors',
+              range === r
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600',
+            ].join(' ')}
+          >
+            {STAT_RANGE_LABELS[r]}
+          </button>
+        ))}
+      </div>
+
+      {/* Stats */}
+      {isLoading ? (
+        <p className="text-xs text-gray-400">加载中…</p>
+      ) : data ? (
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: '总执行', value: data.total },
+            { label: '成功', value: data.success, cls: 'text-green-600 dark:text-green-400' },
+            { label: '失败', value: data.failed, cls: 'text-red-500 dark:text-red-400' },
+            { label: '成功率', value: `${data.success_rate}%`, cls: 'text-blue-600 dark:text-blue-400' },
+          ].map(({ label, value, cls }) => (
+            <div key={label} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 text-center">
+              <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+              <p className={`text-sm font-semibold ${cls ?? 'text-gray-800 dark:text-gray-100'}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {data && data.total > 0 && (
+        <p className="text-xs text-gray-400">累计采集 {data.records_collected} 条记录</p>
+      )}
+    </div>
+  )
+}
+
 // ── Node Card ─────────────────────────────────────────────────────────────────
 
 interface NodeCardProps {
@@ -235,7 +303,7 @@ interface NodeCardProps {
 
 function NodeCard({ node, wsConnectedSet, onDelete, isDeletePending }: NodeCardProps) {
   const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(false)
+  const [panel, setPanel] = useState<'none' | 'stats' | 'history'>('none')
 
   const isWs = node.protocol === 'ws'
   const isOnline = node.status === 'online' || (isWs && wsConnectedSet.has(node.url))
@@ -283,18 +351,36 @@ function NodeCard({ node, wsConnectedSet, onDelete, isDeletePending }: NodeCardP
             </span>
           </div>
 
-          {expanded && <NodeEventTimeline nodeId={node.id} />}
+          {panel === 'history' && <NodeEventTimeline nodeId={node.id} />}
+          {panel === 'stats' && <NodeStatsPanel nodeId={node.id} />}
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            title={expanded ? t('browsers.hideHistory') : t('browsers.eventHistory')}
+            onClick={() => setPanel((v) => (v === 'stats' ? 'none' : 'stats'))}
+            className={[
+              'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
+              panel === 'stats'
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700',
+            ].join(' ')}
           >
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            {expanded ? t('browsers.hideHistory') : t('browsers.eventHistory')}
+            {panel === 'stats' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            统计
+          </button>
+          <button
+            onClick={() => setPanel((v) => (v === 'history' ? 'none' : 'history'))}
+            className={[
+              'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
+              panel === 'history'
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700',
+            ].join(' ')}
+            title={panel === 'history' ? t('browsers.hideHistory') : t('browsers.eventHistory')}
+          >
+            {panel === 'history' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {t('browsers.eventHistory')}
           </button>
           <button
             onClick={onDelete}

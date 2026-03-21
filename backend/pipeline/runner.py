@@ -116,6 +116,8 @@ async def run_collection_pipeline(
             run.finished_at = datetime.now(timezone.utc)
             run.duration_ms = pipeline_result.duration_ms
             run.records_collected = pipeline_result.stored
+            if pipeline_result.metadata.get("node_url"):
+                run.node_url = pipeline_result.metadata["node_url"]
 
         if pipeline_result.success:
             if task:
