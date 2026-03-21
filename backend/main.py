@@ -101,11 +101,12 @@ async def lifespan(app: FastAPI):
                     pool.set_agent_url(inst.endpoint, inst.agent_url)
                     pool.set_agent_protocol(inst.endpoint, inst.agent_protocol)
 
-        # Apply default mode for the fallback single endpoint when no DB record exists
+        # The single fallback endpoint (no AGENT_POOL_ENDPOINTS) defaults to cdp mode.
+        # Agent registration writes a DB record which takes priority above.
         if not from_env and isinstance(pool, LocalBrowserPool):
             fallback = settings.opencli_cdp_endpoint
             if fallback in pool.endpoints and fallback not in db_endpoints:
-                pool.set_mode(fallback, settings.opencli_pool_mode)
+                pool.set_mode(fallback, "cdp")
 
     # Mark stale pending/running tasks as failed (lost on previous restart)
     from backend.models.task import CollectionTask
