@@ -396,9 +396,10 @@ AI 处理（可选）— Claude · OpenAI · DeepSeek · Kimi · GLM · Ollama
 ```bash
 TAG=0.3.5
 
-# API
+# API（将 IMAGE_TAG 烘焙进镜像，供安装脚本动态注入版本号）
 docker buildx build --builder multiarch \
   --platform linux/amd64,linux/arm64 \
+  --build-arg IMAGE_TAG=${TAG} \
   -t xjh1994/opencli-admin-api:${TAG} --push .
 
 # 前端
@@ -406,19 +407,35 @@ docker buildx build --builder multiarch \
   --platform linux/amd64,linux/arm64 \
   -t xjh1994/opencli-admin-frontend:${TAG} --push frontend/
 
-# Agent（含 Chrome）
+# Agent 基础版（~100 MB，通过宿主机 Chrome 连接）
 docker buildx build --builder multiarch \
   --platform linux/amd64,linux/arm64 \
-  -t xjh1994/opencli-admin-agent:${TAG}-chrome --push agent/
+  -f agent/Dockerfile \
+  -t xjh1994/opencli-admin-agent:${TAG} --push .
+
+# Agent 内置 Chrome 版（~450 MB，完全自包含）
+docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -f agent/Dockerfile \
+  --build-arg INSTALL_CHROME=true \
+  -t xjh1994/opencli-admin-agent:${TAG}-chrome --push .
 ```
 
-如需同时构建多个镜像，可并行执行（各自重定向日志）：
+如需并行构建所有镜像：
 
 ```bash
+TAG=0.3.5
 docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  --build-arg IMAGE_TAG=${TAG} \
   -t xjh1994/opencli-admin-api:${TAG} --push . > /tmp/build-api.log 2>&1 &
 docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
   -t xjh1994/opencli-admin-frontend:${TAG} --push frontend/ > /tmp/build-frontend.log 2>&1 &
+docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  -f agent/Dockerfile \
+  -t xjh1994/opencli-admin-agent:${TAG} --push . > /tmp/build-agent.log 2>&1 &
+docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  -f agent/Dockerfile --build-arg INSTALL_CHROME=true \
+  -t xjh1994/opencli-admin-agent:${TAG}-chrome --push . > /tmp/build-agent-chrome.log 2>&1 &
 wait && echo "done"
 ```
 
