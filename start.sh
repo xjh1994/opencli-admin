@@ -139,6 +139,10 @@ if [[ "$SKIP_CHROME" == false ]]; then
     CHROME_LOG="/tmp/opencli-chrome.log"
     # Remove stale profile locks left by previous crashes
     find "$CHROME_PROFILE" -name 'SingletonLock' -o -name 'SingletonCookie' -o -name 'SingletonSocket' 2>/dev/null | xargs rm -f 2>/dev/null || true
+    CHROME_EXTRA_FLAGS=()
+    if [[ "$(id -u)" == "0" ]]; then
+      CHROME_EXTRA_FLAGS+=("--no-sandbox")
+    fi
     nohup "$CHROME_BIN" \
       --remote-debugging-port="$CDP_PORT" \
       --remote-debugging-address=127.0.0.1 \
@@ -147,6 +151,7 @@ if [[ "$SKIP_CHROME" == false ]]; then
       --no-first-run \
       --no-default-browser-check \
       --window-size=1280,900 \
+      "${CHROME_EXTRA_FLAGS[@]}" \
       about:blank >"$CHROME_LOG" 2>&1 &
     CHROME_PID=$!
     PIDS+=("$CHROME_PID")
