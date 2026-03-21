@@ -389,6 +389,41 @@ AI 处理（可选）— Claude · OpenAI · DeepSeek · Kimi · GLM · Ollama
 
 详见 [TESTING.md](TESTING.md)。
 
+## 发布镜像
+
+构建并推送 amd64 + arm64 多平台镜像（需要 `multiarch` buildx builder）：
+
+```bash
+TAG=0.3.2
+
+# API
+docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -t xjh1994/opencli-admin-api:${TAG} --push .
+
+# 前端
+docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -t xjh1994/opencli-admin-frontend:${TAG} --push frontend/
+
+# Agent（含 Chrome）
+docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -t xjh1994/opencli-admin-agent:${TAG}-chrome --push agent/
+```
+
+如需同时构建多个镜像，可并行执行（各自重定向日志）：
+
+```bash
+docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  -t xjh1994/opencli-admin-api:${TAG} --push . > /tmp/build-api.log 2>&1 &
+docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  -t xjh1994/opencli-admin-frontend:${TAG} --push frontend/ > /tmp/build-frontend.log 2>&1 &
+wait && echo "done"
+```
+
+> 首次使用需创建 builder：`docker buildx create --name multiarch --use`
+
 ## License
 
 [Apache License 2.0](LICENSE)
