@@ -592,6 +592,7 @@ function SourceCard({
             ) : (
               <Play size={12} />
             )}
+            {triggerState === 'ok' ? '已触发' : triggerState === 'err' ? '失败' : triggerState === 'loading' ? '' : '触发'}
           </button>
 
           {/* Edit button */}
@@ -601,6 +602,7 @@ function SourceCard({
             className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600"
           >
             <Pencil size={12} />
+            <span>编辑</span>
           </button>
 
           {/* Delete button */}
@@ -610,6 +612,7 @@ function SourceCard({
             className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
           >
             <Trash2 size={12} />
+            <span>删除</span>
           </button>
         </div>
       </div>
