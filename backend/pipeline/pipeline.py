@@ -60,10 +60,23 @@ async def run_pipeline(
     step1_start = datetime.now(timezone.utc)
 
     if run_id:
+        collect_detail: dict = {"channel_type": source.channel_type, "params": params}
+        if source.channel_type == "opencli":
+            cfg = source.channel_config
+            _site = cfg.get("site", "")
+            _cmd = cfg.get("command", "")
+            _args = {**cfg.get("args", {}), **{k: v for k, v in params.items() if k != "chrome_endpoint"}}
+            _pos = [str(v) for v in cfg.get("positional_args", [])]
+            _fmt = cfg.get("format", "json")
+            _parts = ["opencli", _site, _cmd] + _pos
+            for k, v in _args.items():
+                _parts += [f"--{k}", str(v)]
+            _parts += ["-f", _fmt]
+            collect_detail["command"] = " ".join(_parts)
         await events.emit(
             run_id, "collect",
             f"开始采集 | 渠道={source.channel_type} 数据源={source.name}",
-            detail={"channel_type": source.channel_type, "params": params},
+            detail=collect_detail,
         )
 
     try:
