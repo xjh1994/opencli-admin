@@ -143,6 +143,9 @@ if [[ "$SKIP_CHROME" == false ]]; then
     if [[ "$(id -u)" == "0" ]]; then
       CHROME_EXTRA_FLAGS+=("--no-sandbox")
     fi
+    if [[ -z "${DISPLAY:-}" ]]; then
+      CHROME_EXTRA_FLAGS+=("--headless=new" "--disable-gpu")
+    fi
     nohup "$CHROME_BIN" \
       --remote-debugging-port="$CDP_PORT" \
       --remote-debugging-address=127.0.0.1 \
