@@ -22,10 +22,10 @@ services:
   beat:
     <<: *backend-build
 
-  chrome-1:
+  agent-1:
     build:
       context: .
-      dockerfile: chrome/Dockerfile
+      dockerfile: agent/Dockerfile
 
   frontend:
     build:

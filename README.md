@@ -47,7 +47,7 @@ Mac Mini A（主控）              Mac Mini B                 Mac Mini C
 └──────────────────┘           └─────────────────┘       └─────────────────┘
 ```
 
-B / C 两台 Mac Mini 用 Shell / Docker 脚本一键安装 Agent，WebSocket 通道注册，NAT / 跨网段均可穿透。在「节点管理」按站点绑定 Agent，任务自动路由到对应机器。
+B / C 两台 Mac Mini 用 Shell 脚本一键安装 Agent（无需 Docker），WS 反向通道注册，NAT / 跨网段均可穿透。在「节点管理」按站点绑定 Agent，任务自动路由到对应机器。
 
 ---
 
@@ -151,7 +151,7 @@ docker compose up -d
 | API 文档 | http://localhost:8031/docs |
 | Agent noVNC | http://localhost:3010 |
 
-预构建镜像发布在 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.3.0`），无需本地 build 即可启动。如需从源码构建：
+预构建镜像发布在 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.3.1`），无需本地 build 即可启动。如需从源码构建：
 
 ```bash
 # 本地构建模式
@@ -161,7 +161,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
 切换版本：
 
 ```bash
-IMAGE_TAG=0.3.0 docker compose up -d
+IMAGE_TAG=0.3.1 docker compose up -d
 ```
 
 **停止**
@@ -209,8 +209,10 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=ws \
+  -e AGENT_MODE=bridge \
+  -e AGENT_DEPLOY_TYPE=docker \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.3.0
+  xjh1994/opencli-admin-agent:0.3.1
 
 # HTTP 模式（局域网）
 docker run -d \
@@ -219,21 +221,49 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=http \
+  -e AGENT_MODE=bridge \
+  -e AGENT_DEPLOY_TYPE=docker \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.3.0
+  xjh1994/opencli-admin-agent:0.3.1
+
+# Host 网络模式（Linux，API 运行在宿主机而非 Docker 时使用）
+docker run -d \
+  --name opencli-agent \
+  --restart unless-stopped \
+  --network host \
+  -e CENTRAL_API_URL=http://127.0.0.1:8031 \
+  -e AGENT_REGISTER=http \
+  -e AGENT_MODE=bridge \
+  -e AGENT_DEPLOY_TYPE=docker \
+  xjh1994/opencli-admin-agent:0.3.1
 ```
 
 **Shell 脚本安装（无 Docker 环境）**
 
 ```bash
 # WS 模式
-curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | AGENT_REGISTER=ws bash
+curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
+  AGENT_REGISTER=ws AGENT_MODE=bridge AGENT_DEPLOY_TYPE=shell bash
 
 # HTTP 模式
-curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | AGENT_REGISTER=http bash
+curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
+  AGENT_REGISTER=http AGENT_MODE=bridge AGENT_DEPLOY_TYPE=shell bash
 ```
 
 脚本自动安装 Python 依赖（支持 `--user` / venv 双路径），无 systemd 时后台运行。
+
+### 两个正交的模式概念
+
+边缘节点涉及两个完全独立的维度，**不可混淆**：
+
+| 维度 | 字段 | 值 | 含义 |
+|------|------|-----|------|
+| **Chrome 连接模式** | `AGENT_MODE` | `bridge`（推荐）| opencli 通过 Bridge Daemon 连接 Chrome，速度快、稳定 |
+| （采集时如何连 Chrome） | | `cdp` | opencli 通过 CDP 协议直连 Chrome |
+| **节点部署方式** | `AGENT_DEPLOY_TYPE` | `docker`（默认）| Agent 以 Docker 容器形式运行 |
+| （节点如何启动） | | `shell` | Agent 以原生 Shell 进程形式运行 |
+
+> **关键点**：无论 docker 还是 shell 部署，节点都需要 Chrome 浏览器；Chrome 连接模式（bridge/cdp）与部署方式（docker/shell）正交，可以任意组合。
 
 ### 常用环境变量
 
@@ -241,6 +271,8 @@ curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | AGENT_REGISTER=h
 |------|------|--------|
 | `CENTRAL_API_URL` | 中心 API 地址（必填） | — |
 | `AGENT_REGISTER` | 注册模式：`ws` \| `http` | `ws` |
+| `AGENT_MODE` | Chrome 连接模式：`bridge` \| `cdp` | `bridge` |
+| `AGENT_DEPLOY_TYPE` | 节点部署方式：`docker` \| `shell` | `docker` |
 | `AGENT_PORT` | Agent 监听端口（自动跳过冲突端口） | `19823` |
 | `AGENT_LABEL` | 可读标签 | 主机名 |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 出站代理 | — |
@@ -473,6 +505,363 @@ AI 智能体处理（可选）
 <img width="3360" height="1856" alt="566009767-1236b60d-b682-4327-bbfd-4e6da1f857cf" src="https://github.com/user-attachments/assets/05712eda-5f7d-4cb8-b772-2b481b2f9f51" />
 <img width="3360" height="2128" alt="566026018-c2860e1c-23f0-4ce5-94de-599f4b9de062" src="https://github.com/user-attachments/assets/3b965d29-8783-49fc-a58f-30ef88213899" />
 <img width="3358" height="884" alt="566120897-994046c5-88ae-436f-8108-3327108cb2cc" src="https://github.com/user-attachments/assets/e8975aa7-206f-4880-9072-e93d913803d5" />
+
+## 集成测试
+
+本节记录覆盖所有部署组合的 8 场景集成测试流程，用于验证系统核心采集链路。
+
+### 两个维度 × 两种模式 = 8 种组合
+
+| # | 部署方式 | 采集目标 | Chrome 连接模式 | 关键验证点 |
+|---|----------|----------|-----------------|-----------|
+| 1 | Shell | 本地 | Bridge | API 直接驱动 opencli，bridge daemon 连接 Chrome |
+| 2 | Shell | 本地 | CDP | 同上，模式切换通过 API 完成，无需重启 |
+| 3 | Shell | 边缘节点 | Bridge | HTTP dispatch 到 shell 部署的 agent，bridge 模式 |
+| 4 | Shell | 边缘节点 | CDP | 同一 agent，通过 API 切换为 cdp 模式 |
+| 5 | Docker | 本地 | Bridge | Docker 内置 agent-1，COLLECTION_MODE=local |
+| 6 | Docker | 本地 | CDP | 同上，API 切换模式，无需重启 agent-1 容器 |
+| 7 | Docker | 边缘节点 | Bridge | COLLECTION_MODE=agent，dispatch 到 agent-1 |
+| 8 | Docker | 边缘节点 | CDP | 同一 agent-1 容器，API 切换为 cdp，无重启 |
+
+> **关键原则**：bridge ↔ cdp 模式切换始终通过 `PATCH /api/v1/workers/chrome-pool/{ep}/mode` 完成，agent 容器/进程无需重启。COLLECTION_MODE（local/agent）是系统级配置，修改后需重启 API。
+
+---
+
+### 环境准备
+
+```bash
+# 启动 Redis（Celery 模式需要；local 模式可跳过）
+docker compose up -d redis
+
+# 运行数据库迁移
+cd /path/to/opencli-admin
+alembic upgrade head         # Shell 模式（本地 DB）
+# Docker 模式由 API 容器启动时自动执行
+```
+
+定义公共变量（后续步骤复用）：
+
+```bash
+# Shell 模式用 8000，Docker 模式用 8031
+BASE_SHELL="http://localhost:8000"
+BASE_DOCKER="http://localhost:8031"
+```
+
+---
+
+### Shell 部署测试（Tests 1–4）
+
+Shell 部署 = API 和 Agent 均以原生进程运行，不涉及 Docker。
+
+#### 准备：启动 Chrome
+
+```bash
+# 启动 Chrome，开启 CDP 调试端口
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+    --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
+    --no-first-run --no-default-browser-check &
+
+# 启动 Bridge Daemon（bridge 模式必须）
+node $(npm root -g)/@jackwener/opencli/dist/daemon.js &
+```
+
+#### 准备：启动 Shell API（COLLECTION_MODE=local）
+
+```bash
+OPENCLI_CDP_ENDPOINT=http://127.0.0.1:9222 \
+COLLECTION_MODE=local \
+    .venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+API 启动后，pool 里会有 `http://127.0.0.1:9222`，默认 bridge 模式。
+
+---
+
+#### Test 1 — Shell + 本地 + Bridge
+
+```bash
+# 1. 确认 pool 当前是 bridge 模式
+curl -s $BASE_SHELL/api/v1/workers/chrome-pool
+
+# 2. 创建数据源（不填 chrome_endpoint = 使用 pool 默认节点）
+SOURCE_ID=$(curl -s -X POST $BASE_SHELL/api/v1/sources \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test1-Shell-Local-Bridge","channel_type":"opencli",
+       "channel_config":{"site":"v2ex","command":"hot","args":{},"format":"json"},
+       "enabled":true}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+# 3. 手动触发
+TASK_ID=$(curl -s -X POST $BASE_SHELL/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+# 4. 等待并查看结果（应 status=completed，records>0）
+sleep 15
+curl -s $BASE_SHELL/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，`records_collected > 0`，API 日志显示 `opencli bridge | daemon=127.0.0.1:19825`。
+
+---
+
+#### Test 2 — Shell + 本地 + CDP
+
+模式切换通过 API 完成，**无需重启任何进程**：
+
+```bash
+# 1. 切换 pool 节点到 CDP 模式
+EP_B64=$(python3 -c "import base64; print(base64.urlsafe_b64encode(b'http://127.0.0.1:9222').decode())")
+curl -s -X PATCH $BASE_SHELL/api/v1/workers/chrome-pool/$EP_B64/mode \
+  -H "Content-Type: application/json" -d '{"mode":"cdp"}'
+# → {"data":{"endpoint":"http://127.0.0.1:9222","mode":"cdp"}}
+
+# 2. 复用 Test1 的数据源，再次触发
+TASK_ID=$(curl -s -X POST $BASE_SHELL/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 15
+curl -s $BASE_SHELL/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，API 日志显示 `opencli cdp | cdp=http://127.0.0.1:9222`。
+
+---
+
+#### Test 3 — Shell + 边缘节点 + Bridge
+
+```bash
+# 1. 启动 shell 部署的 edge agent（bridge 模式），注册到中心 API
+CENTRAL_API_URL=http://127.0.0.1:8000 \
+AGENT_MODE=bridge \
+AGENT_DEPLOY_TYPE=shell \
+AGENT_PORT=8001 \
+AGENT_LABEL="shell-edge-bridge" \
+    .venv/bin/python -m backend.agent_server &
+
+# 2. 确认节点已注册（node_type=shell, mode=bridge）
+curl -s $BASE_SHELL/api/v1/nodes
+
+# 3. 切换 API 为 agent 采集模式（重启 API 进程）
+# 停止当前 API，以 COLLECTION_MODE=agent 重启
+OPENCLI_CDP_ENDPOINT=http://127.0.0.1:9222 \
+COLLECTION_MODE=agent \
+    .venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
+
+# agent 重启后需重新注册（重启 agent 进程）
+# 4. 创建指向边缘节点的数据源，触发采集
+SOURCE_ID=$(curl -s -X POST $BASE_SHELL/api/v1/sources \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test3-Shell-Edge-Bridge","channel_type":"opencli",
+       "channel_config":{"site":"v2ex","command":"hot","args":{},"format":"json"},
+       "enabled":true}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+TASK_ID=$(curl -s -X POST $BASE_SHELL/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 15
+curl -s $BASE_SHELL/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，API 日志显示 `agent dispatch | url=http://127.0.0.1:8001/collect`，task_run 的 `node_url=http://127.0.0.1:8001`。
+
+---
+
+#### Test 4 — Shell + 边缘节点 + CDP
+
+```bash
+# 1. 切换 edge agent 节点到 CDP 模式（通过 API，无需重启 agent）
+EP_B64=$(python3 -c "import base64; print(base64.urlsafe_b64encode(b'http://127.0.0.1:8001').decode())")
+curl -s -X PATCH $BASE_SHELL/api/v1/workers/chrome-pool/$EP_B64/mode \
+  -H "Content-Type: application/json" -d '{"mode":"cdp"}'
+
+# 2. 复用 Test3 数据源，触发
+TASK_ID=$(curl -s -X POST $BASE_SHELL/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 15
+curl -s $BASE_SHELL/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，agent 进程日志显示 `cdp | cmd=opencli v2ex hot -f json cdp=http://localhost:9222`。
+
+---
+
+### Docker 部署测试（Tests 5–8）
+
+Docker 部署 = API 和 Agent 均以 Docker 容器运行。
+
+#### 准备：构建并启动 Docker API（COLLECTION_MODE=local）
+
+```bash
+# 构建本地镜像
+docker compose -f docker-compose.yml -f docker-compose.build.yml build api agent-1
+
+# 启动 API（COLLECTION_MODE=local，pool 预加载 agent-1）
+COLLECTION_MODE=local \
+    docker compose -f docker-compose.yml -f docker-compose.build.yml up -d api
+
+# 启动 agent-1 sidecar（默认 bridge 模式），等待注册
+AGENT_MODE=bridge \
+    docker compose -f docker-compose.yml -f docker-compose.build.yml up -d agent-1
+
+sleep 15
+# 确认注册（node_type=docker, mode=bridge）
+curl -s http://localhost:8031/api/v1/nodes
+```
+
+---
+
+#### Test 5 — Docker + 本地 + Bridge
+
+```bash
+BASE=$BASE_DOCKER
+
+# 1. 确认 pool 是 bridge 模式
+curl -s $BASE/api/v1/workers/chrome-pool
+
+# 2. 创建数据源并触发
+SOURCE_ID=$(curl -s -X POST $BASE/api/v1/sources \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test5-Docker-Local-Bridge","channel_type":"opencli",
+       "channel_config":{"site":"v2ex","command":"hot","args":{},"format":"json"},
+       "enabled":true}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+TASK_ID=$(curl -s -X POST $BASE/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 20
+curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，`records_collected > 0`。
+
+---
+
+#### Test 6 — Docker + 本地 + CDP
+
+```bash
+BASE=$BASE_DOCKER
+
+# 1. 切换 pool 到 CDP 模式（不重启容器）
+EP_B64=$(python3 -c "import base64; print(base64.urlsafe_b64encode(b'http://agent-1:19823').decode())")
+curl -s -X PATCH $BASE/api/v1/workers/chrome-pool/$EP_B64/mode \
+  -H "Content-Type: application/json" -d '{"mode":"cdp"}'
+
+# 2. 复用 Test5 数据源，触发
+TASK_ID=$(curl -s -X POST $BASE/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 20
+curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，agent-1 容器日志显示 `cdp | cmd=opencli v2ex hot -f json cdp=http://localhost:9222`。
+
+---
+
+#### Test 7 — Docker + 边缘节点 + Bridge
+
+```bash
+# 1. 重启 API 为 agent 采集模式
+export COLLECTION_MODE=agent
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --force-recreate api
+sleep 8
+
+# 2. 切换 pool 到 bridge（或重启 agent-1 使其以 bridge 模式重新注册）
+EP_B64=$(python3 -c "import base64; print(base64.urlsafe_b64encode(b'http://agent-1:19823').decode())")
+curl -s -X PATCH $BASE_DOCKER/api/v1/workers/chrome-pool/$EP_B64/mode \
+  -H "Content-Type: application/json" -d '{"mode":"bridge"}'
+
+# 等待 agent-1 重新注册（API 重启后 agent-1 需要重新向 API 注册）
+docker compose restart agent-1
+sleep 15
+
+# 确认注册（mode=bridge）
+curl -s $BASE_DOCKER/api/v1/nodes
+
+# 3. 创建数据源并触发
+SOURCE_ID=$(curl -s -X POST $BASE_DOCKER/api/v1/sources \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test7-Docker-Edge-Bridge","channel_type":"opencli",
+       "channel_config":{"site":"v2ex","command":"hot","args":{},"format":"json"},
+       "enabled":true}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+TASK_ID=$(curl -s -X POST $BASE_DOCKER/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 20
+curl -s $BASE_DOCKER/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，API 日志显示 `agent dispatch | url=http://agent-1:19823/collect`，`node_url=http://agent-1:19823`。
+
+---
+
+#### Test 8 — Docker + 边缘节点 + CDP
+
+```bash
+BASE=$BASE_DOCKER
+
+# 1. 切换 agent-1 到 CDP 模式（通过 API，不重启容器）
+EP_B64=$(python3 -c "import base64; print(base64.urlsafe_b64encode(b'http://agent-1:19823').decode())")
+curl -s -X PATCH $BASE/api/v1/workers/chrome-pool/$EP_B64/mode \
+  -H "Content-Type: application/json" -d '{"mode":"cdp"}'
+
+# 2. 复用 Test7 数据源，触发
+TASK_ID=$(curl -s -X POST $BASE/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 20
+curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1
+```
+
+**预期**：`status=completed`，agent-1 容器日志显示 `cdp | cmd=opencli v2ex hot -f json cdp=http://localhost:9222`，`node_url=http://agent-1:19823`。
+
+---
+
+### 结果验证
+
+每个 test 完成后，检查以下指标：
+
+```bash
+# 查看任务运行记录
+curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1 | python3 -m json.tool
+# 关注: status=completed, records_collected>0, error_message=null
+
+# 查看 API 日志（Shell 模式）
+# 关键日志行：
+#   "opencli bridge | cmd=... daemon=..."  → 本地 bridge 采集
+#   "opencli cdp | cmd=... cdp=..."        → 本地 CDP 采集
+#   "agent dispatch | url=...  site=..."   → agent 模式分发
+#   "agent done | ... items=N"             → agent 返回结果
+
+# 查看 agent-1 容器日志（Docker 模式）
+docker logs agent-1 --tail=20
+# 关键日志行：
+#   "bridge | cmd=opencli ... daemon=localhost:19825"  → bridge 模式执行
+#   "cdp | cmd=opencli ... cdp=http://localhost:9222"  → CDP 模式执行
+```
+
+### 已知行为
+
+- **重复数据返回 0 条**：同一来源的数据通过 `content_hash` 去重，重复触发同一数据源时 `records_collected=0` 但 `status=completed` 是正常现象。
+- **`browser: false` 的站点（v2ex hot、HN 等）不区分 bridge/cdp**：这类站点直接调用公开 HTTP API，不使用浏览器，两种模式效果相同。需要验证 bridge 与 CDP 真实差异请使用需要浏览器的站点（如 linux-do、zhihu 等）。
+- **COLLECTION_MODE 切换需重启 API**：这是系统级配置，对应用户修改 `.env` 后执行 `docker compose up -d api` 的正常运维操作。bridge/cdp 模式切换则无需重启，通过 `PATCH /mode` 接口实时生效。
 
 ## License
 

@@ -38,6 +38,7 @@ async def _upsert_node(
     protocol: str = "http",
     mode: str = "bridge",
     ip: str | None = None,
+    node_type: str = "chrome",
 ) -> "EdgeNode":  # type: ignore[name-defined]
     from backend.models.edge_node import EdgeNode
 
@@ -49,6 +50,7 @@ async def _upsert_node(
         node.last_seen_at = now
         node.protocol = protocol
         node.mode = mode
+        node.node_type = node_type
         if label:
             node.label = label
         if ip:
@@ -59,6 +61,7 @@ async def _upsert_node(
             label=label or url,
             protocol=protocol,
             mode=mode,
+            node_type=node_type,
             status="online",
             last_seen_at=now,
             ip=ip,
@@ -81,7 +84,7 @@ async def _write_event(
     await db.flush()
 
 
-def _pool_add(url: str, mode: str, protocol: str) -> None:
+def _pool_add(url: str, mode: str, protocol: str, node_type: str = "chrome") -> None:
     """Hot-add a node URL to the in-memory browser pool."""
     try:
         from backend.browser_pool import get_pool, LocalBrowserPool
@@ -92,6 +95,7 @@ def _pool_add(url: str, mode: str, protocol: str) -> None:
             pool.set_mode(url, mode)
             pool.set_agent_url(url, url)
             pool.set_agent_protocol(url, protocol)
+            pool.set_node_type(url, node_type)
     except Exception as exc:
         logger.warning("pool_add failed for %s: %s", url, exc)
 
@@ -122,7 +126,10 @@ from pydantic import BaseModel
 
 class NodeRegisterRequest(BaseModel):
     agent_url: str
+    # Chrome connection mode: "bridge" | "cdp" — how opencli connects to Chrome during collection
     mode: str = "bridge"
+    # Node startup/deployment type: "docker" | "shell" — orthogonal to Chrome connection mode
+    node_type: str = "docker"
     label: str = ""
     agent_protocol: str = "http"
 
@@ -145,14 +152,15 @@ async def register_node(
         raise HTTPException(status_code=400, detail="agent_url must be an http/https URL")
     if body.mode not in ("bridge", "cdp"):
         raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
+    if body.node_type not in ("docker", "shell"):
+        raise HTTPException(status_code=400, detail="node_type must be 'docker' or 'shell'")
     if body.agent_protocol not in ("http", "ws"):
         raise HTTPException(status_code=400, detail="agent_protocol must be 'http' or 'ws'")
 
     ip = _extract_ip(request)
-    node = await _upsert_node(db, url, body.label, body.agent_protocol, body.mode, ip)
-    is_new = node.id not in {r.id for r in []}  # always write event
+    node = await _upsert_node(db, url, body.label, body.agent_protocol, body.mode, ip, body.node_type)
     await _write_event(db, node.id, "registered", ip=ip,
-                       event_meta={"mode": body.mode, "protocol": body.agent_protocol})
+                       event_meta={"mode": body.mode, "node_type": body.node_type, "protocol": body.agent_protocol})
 
     # Maintain backwards-compatible BrowserInstance record for pool config
     result = await db.execute(
@@ -175,8 +183,9 @@ async def register_node(
     await db.commit()
     await db.refresh(node)
 
-    _pool_add(url, body.mode, body.agent_protocol)
-    logger.info("Node registered (HTTP): %s (mode=%s label=%r)", url, body.mode, body.label)
+    _pool_add(url, body.mode, body.agent_protocol, body.node_type)
+    logger.info("Node registered (HTTP): %s (node_type=%s mode=%s label=%r)",
+                url, body.node_type, body.mode, body.label)
     return ApiResponse.ok(EdgeNodeRead.model_validate(node))
 
 
@@ -444,6 +453,7 @@ async def node_ws_endpoint(ws: WebSocket) -> None:
 
         agent_url = data.get("agent_url", "").rstrip("/")
         mode = data.get("mode", "bridge")
+        node_type = data.get("node_type", "chrome")
         label = data.get("label", "")
 
         if not agent_url.startswith("http"):
@@ -452,13 +462,16 @@ async def node_ws_endpoint(ws: WebSocket) -> None:
         if mode not in ("bridge", "cdp"):
             await ws.close(code=1008, reason="mode must be 'bridge' or 'cdp'")
             return
+        if node_type not in ("docker", "shell"):
+            await ws.close(code=1008, reason="node_type must be 'docker' or 'shell'")
+            return
 
         # ── 2. Upsert node + write event ──────────────────────────────────
         try:
             async with AsyncSessionLocal() as db:
-                node = await _upsert_node(db, agent_url, label, "ws", mode)
+                node = await _upsert_node(db, agent_url, label, "ws", mode, node_type=node_type)
                 await _write_event(db, node.id, "online",
-                                   event_meta={"mode": mode, "protocol": "ws"})
+                                   event_meta={"mode": mode, "node_type": node_type, "protocol": "ws"})
                 # BrowserInstance compat
                 result = await db.execute(
                     select(BrowserInstance).where(BrowserInstance.endpoint == agent_url)
@@ -480,10 +493,10 @@ async def node_ws_endpoint(ws: WebSocket) -> None:
         except Exception as exc:
             logger.warning("WS node %s: DB upsert failed (non-fatal): %s", agent_url, exc)
 
-        _pool_add(agent_url, mode, "ws")
+        _pool_add(agent_url, mode, "ws", node_type)
         ws_agent_manager.register_connection(agent_url, ws)
         await ws.send_json({"type": "registered", "agent_url": agent_url})
-        logger.info("WS node registered: %s (mode=%s label=%r)", agent_url, mode, label)
+        logger.info("WS node registered: %s (node_type=%s mode=%s label=%r)", agent_url, node_type, mode, label)
 
         # ── 3. Receive loop ───────────────────────────────────────────────
         while True:

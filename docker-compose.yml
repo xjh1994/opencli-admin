@@ -1,6 +1,6 @@
 # Shared backend config (DRY)
 x-backend-common: &backend-common
-  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.3.0}
+  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.3.1}
   env_file:
     - path: .env
       required: false
@@ -56,11 +56,12 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # opencli CDP: single-instance fallback
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://agent-1:19222}
+      # Built-in sidecar agent URL (Chrome + agent_server in one container).
+      # For COLLECTION_MODE=local this is pre-loaded into the browser pool.
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://agent-1:19823}
       # Multi-instance pool: overrides OPENCLI_CDP_ENDPOINT when set
       AGENT_POOL_ENDPOINTS: ${AGENT_POOL_ENDPOINTS:-}
-      # Collection mode: "local" (default, direct Docker agent) or "agent" (distributed edge nodes)
+      # Collection mode: "local" (default, built-in agent-1) or "agent" (distributed edge nodes)
       COLLECTION_MODE: ${COLLECTION_MODE:-local}
       # Public-facing URL for install scripts and agent registration links.
       # Set to the URL remote agents will use to reach this center (e.g. http://192.168.1.1:8031).
@@ -97,7 +98,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://agent-1:19222}
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://agent-1:19823}
       AGENT_POOL_ENDPOINTS: ${AGENT_POOL_ENDPOINTS:-}
     depends_on:
       redis:
@@ -123,15 +124,32 @@ services:
       api:
         condition: service_healthy
 
-  # ── Built-in agent sidecar (noVNC web UI + Chrome for opencli) ────────────
+  # ── Built-in agent sidecar (Chrome + agent_server in one container) ─────────
   # Default single instance — always started (local collection mode uses this).
+  # Chrome is embedded in the agent image; agent_server registers with the API on startup.
   agent-1:
     container_name: agent-1
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-chrome:${IMAGE_TAG:-0.3.0}
-    ports:
-      - "${NOVNC_PORT:-3010}:6080"   # noVNC web UI
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.1}
+    environment:
+      CENTRAL_API_URL: http://api:8000
+      # Use container name so the API can reach this agent by DNS within the Docker network
+      AGENT_ADVERTISE_URL: http://agent-1:19823
+      AGENT_PORT: 19823
+      # Chrome connection mode for this sidecar (bridge | cdp).
+      # Override via AGENT_MODE env var in .env if needed.
+      AGENT_MODE: ${AGENT_MODE:-bridge}
+      AGENT_DEPLOY_TYPE: docker
+      AGENT_LABEL: agent-1
+      OPENCLI_TIMEOUT: ${OPENCLI_TIMEOUT:-120}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
     volumes:
-      - agent_profile_1:/home/chrome/.config/chromium
+      - agent_profile_1:/home/agent/.config/chromium
+    ports:
+      - "${AGENT1_PORT:-19823}:19823"   # agent_server HTTP API
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   # Additional agent instances are managed dynamically via the API
@@ -151,7 +169,7 @@ services:
   #   docker compose --profile agent up agent
   agent:
     profiles: ["agent"]
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.0}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.1}
     environment:
       CENTRAL_API_URL: ${CENTRAL_API_URL:-}
       AGENT_ADVERTISE_URL: ${AGENT_ADVERTISE_URL:-}
@@ -170,7 +188,7 @@ services:
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.3.0}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.3.1}
     ports:
       - "${FRONTEND_PORT:-8030}:80"
     depends_on:
