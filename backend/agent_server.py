@@ -43,6 +43,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 from contextlib import asynccontextmanager
@@ -368,11 +369,18 @@ async def collect(req: CollectRequest) -> dict:
     env = os.environ.copy()
     if mode == "bridge":
         hostname = urlparse(cdp_ep).hostname or "localhost"
+        # In Docker, localhost/127.0.0.1 refers to the container itself.
+        # The Chrome bridge daemon runs on the host — use host.docker.internal.
+        if _AGENT_DEPLOY_TYPE == "docker" and hostname in ("localhost", "127.0.0.1", "::1"):
+            hostname = "host.docker.internal"
         env.pop("OPENCLI_CDP_ENDPOINT", None)
         env["OPENCLI_DAEMON_HOST"] = hostname
         env["OPENCLI_DAEMON_PORT"] = str(_DAEMON_PORT)
         logger.info("bridge | cmd=%s daemon=%s:%s", " ".join(cmd), hostname, _DAEMON_PORT)
     else:
+        # In Docker, remap localhost CDP endpoint to host.docker.internal
+        if _AGENT_DEPLOY_TYPE == "docker":
+            cdp_ep = re.sub(r"(localhost|127\.0\.0\.1)", "host.docker.internal", cdp_ep)
         env["OPENCLI_CDP_ENDPOINT"] = cdp_ep
         logger.info("cdp | cmd=%s cdp=%s", " ".join(cmd), cdp_ep)
 
