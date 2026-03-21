@@ -40,19 +40,25 @@ const inputCls =
 
 // ── Install Wizard Modal ──────────────────────────────────────────────────────
 
+const AGENT_IMAGE_TAG = '0.3.2'
+
 type InstallMethod = 'docker' | 'shell'
 type RegisterMode = 'ws' | 'http'
 type AgentMode = 'bridge' | 'cdp'
 type DockerNetwork = 'bridge' | 'host'
+type ShellDeployType = 'docker' | 'python'
 
 function InstallWizardModal({ onClose }: { onClose: () => void }) {
   const [method, setMethod] = useState<InstallMethod>('docker')
   const [regMode, setRegMode] = useState<RegisterMode>('ws')
   const [agentMode, setAgentMode] = useState<AgentMode>('bridge')
   const [dockerNetwork, setDockerNetwork] = useState<DockerNetwork>('bridge')
+  const [installChrome, setInstallChrome] = useState(false)
+  const [shellDeployType, setShellDeployType] = useState<ShellDeployType>('docker')
   const [copied, setCopied] = useState(false)
 
   const origin = window.location.origin
+  const imageTag = installChrome ? `${AGENT_IMAGE_TAG}-chrome` : AGENT_IMAGE_TAG
 
   const cmd = (() => {
     if (method === 'docker') {
@@ -74,12 +80,18 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
       if (!useHost) {
         lines.push('  -p 19823:19823 \\')
       }
-      lines.push('  xjh1994/opencli-admin-agent:0.3.0')
+      lines.push(`  xjh1994/opencli-admin-agent:${imageTag}`)
       return lines.join('\n')
     }
-    // shell
-    const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode} AGENT_DEPLOY_TYPE=shell`
-    return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | ${envPrefix} bash`
+    // shell — install script
+    if (shellDeployType === 'docker') {
+      const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode}`
+      const chromeFlag = installChrome ? ' docker --install-chrome' : ' docker'
+      return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | \\\n  ${envPrefix} bash -s --${chromeFlag}`
+    }
+    // python
+    const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode}`
+    return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | \\\n  ${envPrefix} bash -s -- python`
   })()
 
   const regModeHint: Record<RegisterMode, string> = {
@@ -91,6 +103,8 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
     bridge: 'Bridge（推荐）：opencli 通过 Daemon 连接 Chrome，速度快、稳定。',
     cdp: 'CDP：opencli 通过 CDP 协议直连 Chrome，适合兼容性场景。',
   }
+
+  const reset = () => setCopied(false)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(cmd).then(() => {
@@ -128,23 +142,38 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
 
         {/* Method tabs */}
         <div className="flex border-b border-gray-100 dark:border-gray-700">
-          <button className={tabCls(method === 'docker')} onClick={() => { setMethod('docker'); setCopied(false) }}>
-            Docker
+          <button className={tabCls(method === 'docker')} onClick={() => { setMethod('docker'); reset() }}>
+            Docker 直接运行
           </button>
-          <button className={tabCls(method === 'shell')} onClick={() => { setMethod('shell'); setCopied(false) }}>
-            Shell 脚本
+          <button className={tabCls(method === 'shell')} onClick={() => { setMethod('shell'); reset() }}>
+            一键脚本
           </button>
         </div>
 
         <div className="p-5 space-y-4">
+          {/* Shell deploy type (only for shell method) */}
+          {method === 'shell' && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">部署方式</span>
+              <div className="flex gap-1.5">
+                <button className={btnCls(shellDeployType === 'docker')} onClick={() => { setShellDeployType('docker'); reset() }}>
+                  Docker
+                </button>
+                <button className={btnCls(shellDeployType === 'python')} onClick={() => { setShellDeployType('python'); reset() }}>
+                  Python
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Register mode */}
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">注册模式</span>
             <div className="flex gap-1.5">
-              <button className={btnCls(regMode === 'ws')} onClick={() => { setRegMode('ws'); setCopied(false) }}>
+              <button className={btnCls(regMode === 'ws')} onClick={() => { setRegMode('ws'); reset() }}>
                 WS 反向通道
               </button>
-              <button className={btnCls(regMode === 'http')} onClick={() => { setRegMode('http'); setCopied(false) }}>
+              <button className={btnCls(regMode === 'http')} onClick={() => { setRegMode('http'); reset() }}>
                 HTTP 直连
               </button>
             </div>
@@ -154,25 +183,40 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">采集模式</span>
             <div className="flex gap-1.5">
-              <button className={btnCls(agentMode === 'bridge')} onClick={() => { setAgentMode('bridge'); setCopied(false) }}>
+              <button className={btnCls(agentMode === 'bridge')} onClick={() => { setAgentMode('bridge'); reset() }}>
                 Bridge
               </button>
-              <button className={btnCls(agentMode === 'cdp')} onClick={() => { setAgentMode('cdp'); setCopied(false) }}>
+              <button className={btnCls(agentMode === 'cdp')} onClick={() => { setAgentMode('cdp'); reset() }}>
                 CDP
               </button>
             </div>
           </div>
 
-          {/* Docker network mode */}
+          {/* Docker network mode (only for docker-run method) */}
           {method === 'docker' && (
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">网络模式</span>
               <div className="flex gap-1.5">
-                <button className={btnCls(dockerNetwork === 'bridge')} onClick={() => { setDockerNetwork('bridge'); setCopied(false) }}>
+                <button className={btnCls(dockerNetwork === 'bridge')} onClick={() => { setDockerNetwork('bridge'); reset() }}>
                   Bridge（默认）
                 </button>
-                <button className={btnCls(dockerNetwork === 'host')} onClick={() => { setDockerNetwork('host'); setCopied(false) }}>
+                <button className={btnCls(dockerNetwork === 'host')} onClick={() => { setDockerNetwork('host'); reset() }}>
                   Host（Linux）
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Chrome variant (for docker-run and shell+docker) */}
+          {(method === 'docker' || shellDeployType === 'docker') && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">Chrome</span>
+              <div className="flex gap-1.5">
+                <button className={btnCls(!installChrome)} onClick={() => { setInstallChrome(false); reset() }}>
+                  宿主机 Chrome（~400 MB）
+                </button>
+                <button className={btnCls(installChrome)} onClick={() => { setInstallChrome(true); reset() }}>
+                  内置 Chrome（~1.2 GB）
                 </button>
               </div>
             </div>
@@ -184,6 +228,15 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
             <p>{agentModeHint[agentMode]}</p>
             {method === 'docker' && dockerNetwork === 'host' && (
               <p>Host 网络：容器直接使用宿主机网络，无需端口映射，适合 API 运行在宿主机（非 Docker）时使用。仅 Linux 支持。</p>
+            )}
+            {installChrome
+              ? <p>内置 Chrome：镜像自包含 Chromium + Xvfb，无需宿主机提供 Chrome。</p>
+              : (method === 'docker' || shellDeployType === 'docker')
+                ? <p>宿主机 Chrome：使用轻量镜像（~400 MB），连接宿主机 Chrome（需提前启动并开启 CDP 端口 9222）。</p>
+                : null
+            }
+            {method === 'shell' && shellDeployType === 'python' && (
+              <p>Python 部署：无 Docker 环境时使用，脚本自动安装 Python 依赖，有 systemd 时注册为服务。</p>
             )}
           </div>
 
@@ -200,12 +253,6 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
               {copied ? '已复制' : '复制'}
             </button>
           </div>
-
-          {method === 'shell' && (
-            <p className="text-xs text-gray-400">
-              在目标机器上执行上述命令。需要 Python 3 环境；无 Docker 时自动安装依赖并后台运行。
-            </p>
-          )}
         </div>
 
         <div className="p-5 border-t border-gray-100 dark:border-gray-700 flex justify-end">
