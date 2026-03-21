@@ -15,7 +15,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column('edge_nodes', sa.Column('node_type', sa.String(20), nullable=False, server_default='chrome'))
+    op.add_column('edge_nodes', sa.Column('node_type', sa.String(20), nullable=False, server_default='docker'))
 
 
 def downgrade() -> None:

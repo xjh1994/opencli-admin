@@ -49,8 +49,8 @@ class LocalBrowserPool:
         self._agent_urls: dict[str, str | None] = {ep: None for ep in endpoints}
         # agent_protocol per endpoint: "http" (LAN/proxy) or "ws" (NAT reverse channel, Phase 2)
         self._agent_protocols: dict[str, str | None] = {ep: None for ep in endpoints}
-        # node_type per endpoint: "chrome" (needs browser) | "shell" (runs opencli natively)
-        self._node_types: dict[str, str] = {ep: "chrome" for ep in endpoints}
+        # node_type per endpoint: "docker" (started in container) | "shell" (native process)
+        self._node_types: dict[str, str] = {ep: "docker" for ep in endpoints}
         logger.info(
             "BrowserPool (local): %d Chrome instance(s): %s",
             self._total,
@@ -146,8 +146,8 @@ class LocalBrowserPool:
         logger.info("BrowserPool: endpoint %s agent_protocol set to %s", endpoint, protocol)
 
     def get_node_type(self, endpoint: str) -> str:
-        """Return deployment type: 'chrome' (uses browser) or 'shell' (native opencli)."""
-        return self._node_types.get(endpoint, "chrome")
+        """Return deployment type: 'docker' (started in container) or 'shell' (native process)."""
+        return self._node_types.get(endpoint, "docker")
 
     def set_node_type(self, endpoint: str, node_type: str) -> None:
         """Update the node deployment type for an endpoint."""
@@ -164,7 +164,7 @@ class LocalBrowserPool:
         self._modes.setdefault(endpoint, "bridge")
         self._agent_urls.setdefault(endpoint, None)
         self._agent_protocols.setdefault(endpoint, None)
-        self._node_types.setdefault(endpoint, "chrome")
+        self._node_types.setdefault(endpoint, "docker")
         self._total += 1
         logger.info("BrowserPool: added endpoint %s (total: %d)", endpoint, self._total)
 

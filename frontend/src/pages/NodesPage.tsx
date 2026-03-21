@@ -42,7 +42,7 @@ const inputCls =
 
 type InstallMethod = 'docker' | 'shell'
 type RegisterMode = 'ws' | 'http'
-type AgentMode = 'bridge' | 'cdp' | 'shell'
+type AgentMode = 'bridge' | 'cdp'
 type DockerNetwork = 'bridge' | 'host'
 
 function InstallWizardModal({ onClose }: { onClose: () => void }) {
@@ -70,6 +70,7 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
       lines.push(`  -e CENTRAL_API_URL=${origin} \\`)
       lines.push(`  -e AGENT_REGISTER=${regMode} \\`)
       lines.push(`  -e AGENT_MODE=${agentMode} \\`)
+      lines.push('  -e AGENT_DEPLOY_TYPE=docker \\')
       if (!useHost) {
         lines.push('  -p 19823:19823 \\')
       }
@@ -77,7 +78,7 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
       return lines.join('\n')
     }
     // shell
-    const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode}`
+    const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode} AGENT_DEPLOY_TYPE=shell`
     return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | ${envPrefix} bash`
   })()
 
@@ -89,7 +90,6 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
   const agentModeHint: Record<AgentMode, string> = {
     bridge: 'Bridge（推荐）：opencli 通过 Daemon 连接 Chrome，速度快、稳定。',
     cdp: 'CDP：opencli 通过 CDP 协议直连 Chrome，适合兼容性场景。',
-    shell: 'Shell：opencli 直接运行，无需 Chrome。适合仅需抓取纯文本/API 的场景。',
   }
 
   const handleCopy = () => {
@@ -159,9 +159,6 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
               </button>
               <button className={btnCls(agentMode === 'cdp')} onClick={() => { setAgentMode('cdp'); setCopied(false) }}>
                 CDP
-              </button>
-              <button className={btnCls(agentMode === 'shell')} onClick={() => { setAgentMode('shell'); setCopied(false) }}>
-                Shell
               </button>
             </div>
           </div>
@@ -388,21 +385,19 @@ function NodeCard({ node, wsConnectedSet, onDelete, isDeletePending }: NodeCardP
           </div>
 
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            {/* Node type badge (deployment) */}
+            {/* Deployment type badge: shell (native process) | docker (container) */}
             <span className={[
               'px-1.5 py-0.5 rounded text-xs font-medium',
               node.node_type === 'shell'
                 ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
             ].join(' ')}>
-              {node.node_type === 'shell' ? 'Shell' : 'Chrome'}
+              {node.node_type === 'shell' ? 'Shell' : 'Docker'}
             </span>
-            {/* Chrome connection mode badge — only shown for chrome-type nodes */}
-            {node.node_type === 'chrome' && (
-              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
-                {node.mode}
-              </span>
-            )}
+            {/* Chrome connection mode badge: bridge | cdp */}
+            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              {node.mode}
+            </span>
             {node.ip && (
               <span className="text-xs text-gray-400 font-mono">{node.ip}</span>
             )}

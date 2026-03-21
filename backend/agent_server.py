@@ -67,6 +67,8 @@ _AGENT_PORT = int(os.environ.get("AGENT_PORT", "19823"))
 _CENTRAL_API_URL = os.environ.get("CENTRAL_API_URL", "").rstrip("/")
 _AGENT_ADVERTISE_URL = os.environ.get("AGENT_ADVERTISE_URL", "")
 _AGENT_MODE = os.environ.get("AGENT_MODE", "bridge")
+# Deployment/startup type reported to center: "docker" (running in container) | "shell" (native process)
+_AGENT_DEPLOY_TYPE = os.environ.get("AGENT_DEPLOY_TYPE", "docker")
 _AGENT_LABEL = os.environ.get("AGENT_LABEL", socket.gethostname())
 # Registration mode:
 #   http — LAN mode: agent POSTs its URL to center, center calls back via HTTP (default)
@@ -111,10 +113,7 @@ async def _register_with_center(advertise_url: str) -> None:
     import httpx
 
     url = f"{_CENTRAL_API_URL}/api/v1/nodes/register"
-    # node_type separates deployment type (shell/chrome) from Chrome connection mode (bridge/cdp)
-    _node_type = "shell" if _AGENT_MODE == "shell" else "chrome"
-    _chrome_mode = _AGENT_MODE if _AGENT_MODE in ("bridge", "cdp") else "bridge"
-    payload = {"agent_url": advertise_url, "mode": _chrome_mode, "node_type": _node_type,
+    payload = {"agent_url": advertise_url, "mode": _AGENT_MODE, "node_type": _AGENT_DEPLOY_TYPE,
                "label": _AGENT_LABEL, "agent_protocol": "http"}
     proxies = _build_proxies()
 
@@ -189,13 +188,11 @@ async def _register_via_ws(advertise_url: str) -> None:
         + "/api/v1/nodes/ws"
     )
     _proxy = _HTTPS_PROXY or _HTTP_PROXY or None
-    _node_type = "shell" if _AGENT_MODE == "shell" else "chrome"
-    _chrome_mode = _AGENT_MODE if _AGENT_MODE in ("bridge", "cdp") else "bridge"
     register_payload = json.dumps({
         "type": "register",
         "agent_url": advertise_url,
-        "mode": _chrome_mode,
-        "node_type": _node_type,
+        "mode": _AGENT_MODE,
+        "node_type": _AGENT_DEPLOY_TYPE,
         "label": _AGENT_LABEL,
     })
 
@@ -353,13 +350,7 @@ async def collect(req: CollectRequest) -> dict:
     cmd.extend(["-f", req.format])
 
     env = os.environ.copy()
-    if mode == "shell":
-        # Shell mode: run opencli natively without any Chrome/browser
-        env.pop("OPENCLI_CDP_ENDPOINT", None)
-        env.pop("OPENCLI_DAEMON_HOST", None)
-        env.pop("OPENCLI_DAEMON_PORT", None)
-        logger.info("shell | cmd=%s", " ".join(cmd))
-    elif mode == "bridge":
+    if mode == "bridge":
         hostname = urlparse(cdp_ep).hostname or "localhost"
         env.pop("OPENCLI_CDP_ENDPOINT", None)
         env["OPENCLI_DAEMON_HOST"] = hostname

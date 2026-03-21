@@ -22,11 +22,11 @@ class EdgeNode(TimestampMixin):
     # "http" — center HTTP-POSTs to agent_url (LAN)
     # "ws"   — agent opened a reverse WS channel (NAT/firewall)
     protocol: Mapped[str] = mapped_column(String(10), nullable=False, default="http")
-    # Chrome connection mode: "bridge" | "cdp"
-    # Only meaningful when node_type="chrome".
+    # Chrome connection mode: "bridge" | "cdp" — how opencli connects to Chrome during collection
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="bridge")
-    # Deployment type: "chrome" (uses Chrome browser) | "shell" (runs opencli natively, no browser)
-    node_type: Mapped[str] = mapped_column(String(20), nullable=False, default="chrome")
+    # Node startup/deployment type: "docker" | "shell"
+    # Orthogonal to mode — both docker and shell nodes need Chrome (via bridge or cdp).
+    node_type: Mapped[str] = mapped_column(String(20), nullable=False, default="docker")
     # "online" | "offline"
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="offline")
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(

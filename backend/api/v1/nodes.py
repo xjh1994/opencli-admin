@@ -126,10 +126,10 @@ from pydantic import BaseModel
 
 class NodeRegisterRequest(BaseModel):
     agent_url: str
-    # Chrome connection mode (only relevant when node_type="chrome")
+    # Chrome connection mode: "bridge" | "cdp" — how opencli connects to Chrome during collection
     mode: str = "bridge"
-    # Deployment type: "chrome" (agent uses browser) | "shell" (agent runs opencli natively)
-    node_type: str = "chrome"
+    # Node startup/deployment type: "docker" | "shell" — orthogonal to Chrome connection mode
+    node_type: str = "docker"
     label: str = ""
     agent_protocol: str = "http"
 
@@ -150,23 +150,17 @@ async def register_node(
     url = body.agent_url.rstrip("/")
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="agent_url must be an http/https URL")
-    # Backwards-compat: old agents send mode=shell; translate to node_type=shell + mode=bridge
-    resolved_mode = body.mode
-    resolved_node_type = body.node_type
-    if body.mode == "shell":
-        resolved_mode = "bridge"
-        resolved_node_type = "shell"
-    if resolved_mode not in ("bridge", "cdp"):
+    if body.mode not in ("bridge", "cdp"):
         raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
-    if resolved_node_type not in ("chrome", "shell"):
-        raise HTTPException(status_code=400, detail="node_type must be 'chrome' or 'shell'")
+    if body.node_type not in ("docker", "shell"):
+        raise HTTPException(status_code=400, detail="node_type must be 'docker' or 'shell'")
     if body.agent_protocol not in ("http", "ws"):
         raise HTTPException(status_code=400, detail="agent_protocol must be 'http' or 'ws'")
 
     ip = _extract_ip(request)
-    node = await _upsert_node(db, url, body.label, body.agent_protocol, resolved_mode, ip, resolved_node_type)
+    node = await _upsert_node(db, url, body.label, body.agent_protocol, body.mode, ip, body.node_type)
     await _write_event(db, node.id, "registered", ip=ip,
-                       event_meta={"mode": resolved_mode, "node_type": resolved_node_type, "protocol": body.agent_protocol})
+                       event_meta={"mode": body.mode, "node_type": body.node_type, "protocol": body.agent_protocol})
 
     # Maintain backwards-compatible BrowserInstance record for pool config
     result = await db.execute(
@@ -189,9 +183,9 @@ async def register_node(
     await db.commit()
     await db.refresh(node)
 
-    _pool_add(url, resolved_mode, body.agent_protocol, resolved_node_type)
+    _pool_add(url, body.mode, body.agent_protocol, body.node_type)
     logger.info("Node registered (HTTP): %s (node_type=%s mode=%s label=%r)",
-                url, resolved_node_type, resolved_mode, body.label)
+                url, body.node_type, body.mode, body.label)
     return ApiResponse.ok(EdgeNodeRead.model_validate(node))
 
 
@@ -465,15 +459,11 @@ async def node_ws_endpoint(ws: WebSocket) -> None:
         if not agent_url.startswith("http"):
             await ws.close(code=1008, reason="agent_url must be an http/https URL")
             return
-        # Backwards-compat: old agents send mode=shell; translate to node_type=shell + mode=bridge
-        if mode == "shell":
-            node_type = "shell"
-            mode = "bridge"
         if mode not in ("bridge", "cdp"):
             await ws.close(code=1008, reason="mode must be 'bridge' or 'cdp'")
             return
-        if node_type not in ("chrome", "shell"):
-            await ws.close(code=1008, reason="node_type must be 'chrome' or 'shell'")
+        if node_type not in ("docker", "shell"):
+            await ws.close(code=1008, reason="node_type must be 'docker' or 'shell'")
             return
 
         # ── 2. Upsert node + write event ──────────────────────────────────

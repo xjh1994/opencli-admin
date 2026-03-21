@@ -169,7 +169,7 @@ export interface EdgeNode {
   label: string
   protocol: 'http' | 'ws'
   mode: 'bridge' | 'cdp'
-  node_type: 'chrome' | 'shell'
+  node_type: 'docker' | 'shell'
   status: 'online' | 'offline'
   last_seen_at?: string | null
   ip?: string | null

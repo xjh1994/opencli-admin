@@ -269,8 +269,6 @@ class OpenCLIChannel(AbstractChannel):
 
         async with pool.acquire(endpoint=_acquire_endpoint) as cdp_endpoint:
             mode = pool.get_mode(cdp_endpoint)
-            node_type = pool.get_node_type(cdp_endpoint) if isinstance(pool, LocalBrowserPool) else "chrome"
-
             # Agent mode: dispatch to remote edge node
             if settings.collection_mode == "agent":
                 protocol = pool.get_agent_protocol(cdp_endpoint) if isinstance(pool, LocalBrowserPool) else "http"
@@ -280,15 +278,13 @@ class OpenCLIChannel(AbstractChannel):
                         f"Endpoint {cdp_endpoint} has no registered agent. "
                         "Set COLLECTION_MODE=local or add an agent node."
                     )
-                # Shell-type nodes run opencli natively (no Chrome); send mode=shell to agent
-                effective_mode = "shell" if node_type == "shell" else mode
                 if protocol == "http":
                     return await _collect_via_agent(
-                        agent_url, site, command, args, positional_args, output_format, effective_mode
+                        agent_url, site, command, args, positional_args, output_format, mode
                     )
                 elif protocol == "ws":
                     return await _collect_via_ws_agent(
-                        agent_url, site, command, args, positional_args, output_format, effective_mode
+                        agent_url, site, command, args, positional_args, output_format, mode
                     )
                 else:
                     logger.error("Unknown agent_protocol %r for endpoint %s", protocol, cdp_endpoint)
