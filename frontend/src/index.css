@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: fadeSlideIn 0.2s ease-out;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

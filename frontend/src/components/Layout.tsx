@@ -1,6 +1,7 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import ErrorBoundary from './ErrorBoundary'
 import {
   LayoutDashboard,
@@ -18,15 +19,58 @@ import {
   Moon,
   Sun,
   Languages,
+  Home,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { getDashboardStats } from '../api/endpoints'
+
+const ROUTE_LABELS: Record<string, string> = {
+  '/dashboard': '数据看板',
+  '/sources': '数据源',
+  '/tasks': '任务',
+  '/records': '采集记录',
+  '/schedules': '定时任务',
+  '/notifications': '通知',
+  '/nodes': '节点管理',
+  '/browsers': '浏览器池',
+  '/workers': 'Workers',
+  '/providers': 'AI 提供商',
+  '/agents': 'Agents',
+}
+
+function Breadcrumb() {
+  const { pathname } = useLocation()
+  const label = ROUTE_LABELS[pathname]
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-4">
+      <Home size={12} className="shrink-0" />
+      <span>首页</span>
+      {label && (
+        <>
+          <span>/</span>
+          <span className="text-gray-500 dark:text-gray-400">{label}</span>
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function Layout() {
   const { t, i18n } = useTranslation()
+  const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [dark, setDark] = useState(() => {
     return localStorage.getItem('theme') === 'dark'
   })
+
+  const { data: statsData } = useQuery({
+    queryKey: ['dashboard-stats-badge'],
+    queryFn: () => getDashboardStats(),
+    refetchInterval: 30_000,
+  })
+
+  const failedCount = statsData?.tasks?.failed ?? 0
 
   useEffect(() => {
     if (dark) {
@@ -85,23 +129,37 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 py-4 space-y-1 px-2">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                clsx(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                  isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                )
-              }
-            >
-              <Icon size={18} className="shrink-0" />
-              {!collapsed && <span>{label}</span>}
-            </NavLink>
-          ))}
+          {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+            const isTasksItem = to === '/tasks'
+            const showBadge = isTasksItem && failedCount > 0
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  clsx(
+                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                    isActive
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  )
+                }
+              >
+                <Icon size={18} className="shrink-0" />
+                {!collapsed && (
+                  <span className="flex-1 flex items-center justify-between">
+                    <span>{label}</span>
+                    {showBadge && (
+                      <span className="rounded-full bg-red-500 text-white text-[10px] px-1.5 min-w-[18px] text-center leading-[18px] h-[18px] flex items-center justify-center">
+                        {failedCount}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </NavLink>
+            )
+          })}
         </nav>
 
         {/* Bottom controls */}
@@ -144,7 +202,10 @@ export default function Layout() {
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
         <div className="p-6">
           <ErrorBoundary>
-            <Outlet />
+            <div key={location.pathname} className="page-enter">
+              <Breadcrumb />
+              <Outlet />
+            </div>
           </ErrorBoundary>
         </div>
       </main>
