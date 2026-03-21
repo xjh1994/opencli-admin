@@ -168,14 +168,14 @@ async def register_node(
     )
     inst = result.scalar_one_or_none()
     if inst:
-        inst.mode = resolved_mode
+        inst.mode = body.mode
         inst.agent_url = url
         inst.agent_protocol = body.agent_protocol
         if body.label:
             inst.label = body.label
     else:
         inst = BrowserInstance(
-            endpoint=url, mode=resolved_mode,
+            endpoint=url, mode=body.mode,
             agent_url=url, agent_protocol=body.agent_protocol, label=body.label,
         )
         db.add(inst)

@@ -13,7 +13,7 @@ find /home/agent/.config/chromium \
     2>/dev/null | xargs rm -f 2>/dev/null || true
 
 # ── 3. Browser Bridge daemon (for bridge mode) ────────────────────────────────
-DAEMON_JS="$(npm root --prefix /opt/opencli-bridge)/@jackwener/opencli/dist/daemon.js"
+DAEMON_JS="$(npm root -g)/@jackwener/opencli/dist/daemon.js"
 if [ -f "$DAEMON_JS" ]; then
     (while true; do
         # Bind to localhost only — no need to expose to other containers
