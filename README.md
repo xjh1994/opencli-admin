@@ -20,7 +20,7 @@
 - **定时计划** — 结构化 cron（每 N 分钟/小时/天/周/月），支持时区与一次性执行，可绑定专用 Agent 实例
 - **采集任务** — 实时任务状态、逐步执行链路追踪、错误详情；手动触发可临时指定节点
 - **采集记录** — 全文搜索（normalized_data / raw_data），行展开查看格式化 JSON + AI 分析，多选批量删除
-- **节点管理** — 本地与远端 Agent 统一管理，在线状态、注册时间线、按站点绑定路由；Docker / Shell 一键安装
+- **节点管理** — 采集模式卡片（本地模式 / Agent 模式）一键切换；本地模式展示本地 Chrome 端点及 Bridge/CDP 切换，Agent 模式展示远端节点列表及新增节点向导；在线状态、注册时间线、按站点绑定路由
 - **AI 智能体** — 采集后自动分析、摘要、打标签；支持 Claude、OpenAI、DeepSeek、Kimi、GLM、MiniMax、Ollama
 - **通知推送** — 新记录入库 / AI 完成 / 任务失败触发；Webhook、飞书、钉钉、企业微信、Email
 
@@ -231,7 +231,7 @@ curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
 | **Bridge** | opencli + daemon.js + Browser Bridge 扩展 | 需要登录账号的平台（B站、小红书、微博等） |
 | **CDP** | opencli + Chrome DevTools Protocol 直连 | 无需登录的公开页面，链路更简单 |
 
-在「节点管理」页面按实例切换，无需重启容器。
+本地模式下，每个 Chrome 端点卡片上可切换 Bridge/CDP；Agent 模式下，通过「新增节点」向导（InstallWizardModal）选择连接模式。
 
 ### 常用环境变量
 
@@ -247,8 +247,8 @@ curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
 
 | 模式 | 说明 |
 |------|------|
-| **本地模式** | API 直接驱动内置 Agent |
-| **Agent 模式** | 任务分发到已注册的远端节点 |
+| **本地模式** | 中心直连本地 Chrome（shell 部署），不经过 Agent |
+| **Agent 模式** | 通过 Agent 节点采集，支持本地 Docker 容器或远端多机分布式部署 |
 
 ```bash
 COLLECTION_MODE=local   # 默认
