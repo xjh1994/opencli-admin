@@ -367,7 +367,7 @@ CENTRAL_API_URL="${{CENTRAL_API_URL:-{central_url}}}"
 AGENT_REGISTER="${{AGENT_REGISTER:-ws}}"
 AGENT_PORT="${{AGENT_PORT:-19823}}"
 AGENT_LABEL="${{AGENT_LABEL:-$(hostname)}}"
-IMAGE_TAG="${{IMAGE_TAG:-0.1.0}}"
+IMAGE_TAG="${{IMAGE_TAG:-{settings.image_tag}}}"
 INSTALL_MODE="${{1:-docker}}"
 
 info() {{ printf "\\e[32m[INFO]\\e[0m  %s\\n" "$*"; }}

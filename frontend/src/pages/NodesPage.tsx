@@ -72,15 +72,13 @@ const inputCls =
 
 // ── Install Wizard Modal ──────────────────────────────────────────────────────
 
-const AGENT_IMAGE_TAG = '0.3.4'
-
 type InstallMethod = 'docker' | 'shell'
 type RegisterMode = 'ws' | 'http'
 type AgentMode = 'bridge' | 'cdp'
 type DockerNetwork = 'bridge' | 'host'
 type ShellDeployType = 'docker' | 'python'
 
-function InstallWizardModal({ onClose }: { onClose: () => void }) {
+function InstallWizardModal({ onClose, agentImageTag }: { onClose: () => void; agentImageTag: string }) {
   const [method, setMethod] = useState<InstallMethod>('docker')
   const [regMode, setRegMode] = useState<RegisterMode>('ws')
   const [agentMode, setAgentMode] = useState<AgentMode>('bridge')
@@ -90,7 +88,7 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
   const [copied, setCopied] = useState(false)
 
   const origin = window.location.origin
-  const imageTag = installChrome ? `${AGENT_IMAGE_TAG}-chrome` : AGENT_IMAGE_TAG
+  const imageTag = installChrome ? `${agentImageTag}-chrome` : agentImageTag
 
   const cmd = (() => {
     if (method === 'docker') {
@@ -1072,7 +1070,7 @@ export default function NodesPage() {
         </div>
       )}
 
-      {showWizard && <InstallWizardModal onClose={() => setShowWizard(false)} />}
+      {showWizard && <InstallWizardModal onClose={() => setShowWizard(false)} agentImageTag={sysConfig?.image_tag ?? 'latest'} />}
       {pendingMode && (
         <SwitchModeModal
           target={pendingMode}
