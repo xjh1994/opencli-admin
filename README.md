@@ -536,8 +536,9 @@ AI 智能体处理（可选）
 
 ## 集成测试
 
-本节记录覆盖所有部署组合的 8 场景集成测试流程，用于验证系统核心采集链路。
+详见 [TESTING.md](TESTING.md)。
 
+<!--
 ### 两个维度 × 两种模式 = 8 种组合（+ 2 个 Chrome 内置变体测试）
 
 | # | 部署方式 | 采集目标 | Chrome 连接模式 | Chrome 来源 | 关键验证点 |
@@ -1002,6 +1003,7 @@ docker logs agent-1 --tail=20
 - **COLLECTION_MODE 切换需重启 API**：这是系统级配置，对应用户修改 `.env` 后执行 `docker compose up -d api` 的正常运维操作。bridge/cdp 模式切换则无需重启，通过 `PATCH /mode` 接口实时生效。
 - **Docker 测试前需在宿主机启动 Chrome**：agent 镜像默认使用无 Chrome 变体（约 400 MB），Tests 5-8 依赖宿主机 Chrome 通过 `host.docker.internal` 提供浏览器能力。如需完全自包含，在 `.env` 中设置 `INSTALL_CHROME=true` 和 `CHROME_SUFFIX=-chrome`，重启后会拉取 `-chrome` 变体（约 1.2 GB）。
 - **切换 agent 容器后需清理旧节点**：手动 `docker stop/rm` 旧 agent 后，旧 endpoint 仍残留在 in-memory pool 中（节点 DB 也未清理）。切换前需通过 `DELETE /api/v1/nodes/{id}` 主动删除旧节点，或重启 API 让新 agent 重新注册后再清理。Tests 9-10 中切换到 `-chrome` 镜像时需先删除旧 `agent-1` 节点。
+-->
 
 ## License
 
