@@ -538,7 +538,7 @@ AI 智能体处理（可选）
 
 本节记录覆盖所有部署组合的 8 场景集成测试流程，用于验证系统核心采集链路。
 
-### 两个维度 × 两种模式 = 8 种组合
+### 两个维度 × 两种模式 = 8 种组合（+ 2 个 Chrome 内置变体测试）
 
 | # | 部署方式 | 采集目标 | Chrome 连接模式 | Chrome 来源 | 关键验证点 |
 |---|----------|----------|-----------------|-------------|-----------|
@@ -546,10 +546,12 @@ AI 智能体处理（可选）
 | 2 | Shell | 本地 | CDP | 宿主机原生 | 通过 API 切换模式，无需重启 |
 | 3 | Shell | 边缘节点 | Bridge | 宿主机原生 | HTTP dispatch 到 shell 部署的 agent |
 | 4 | Shell | 边缘节点 | CDP | 宿主机原生 | API 切换为 cdp，无需重启 agent |
-| 5 | Docker | 本地 | Bridge | **宿主机 Chrome**（host.docker.internal） | agent 镜像 ~200MB，COLLECTION_MODE=local |
+| 5 | Docker | 本地 | Bridge | **宿主机 Chrome**（host.docker.internal） | agent 镜像 ~400MB，COLLECTION_MODE=local |
 | 6 | Docker | 本地 | CDP | **宿主机 Chrome** | API 切换模式，无需重启 agent-1 容器 |
 | 7 | Docker | 边缘节点 | Bridge | **宿主机 Chrome** | COLLECTION_MODE=agent，dispatch 到 agent-1 |
 | 8 | Docker | 边缘节点 | CDP | **宿主机 Chrome** | API 切换 cdp，同一容器无重启 |
+| 9 | Docker | 本地 | Bridge | **容器内置 Chrome**（-chrome 镜像） | 无需宿主机 Chrome，Chromium+Xvfb+daemon 内置 |
+| 10 | Docker | 本地 | CDP | **容器内置 Chrome**（-chrome 镜像） | CDP 连接容器内 Chromium，完全自包含 |
 
 > **关键原则**：bridge ↔ cdp 模式切换始终通过 `PATCH /api/v1/workers/chrome-pool/{ep}/mode` 完成，agent 容器/进程无需重启。COLLECTION_MODE（local/agent）是系统级配置，修改后需重启 API。
 
@@ -870,6 +872,98 @@ curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1
 
 ---
 
+### Docker 内置 Chrome 测试（Tests 9–10）
+
+这两个 test 验证 `-chrome` 镜像变体（含 Chromium + Xvfb + Bridge Daemon）是否真正自包含，**不依赖宿主机 Chrome**。
+
+#### 准备：切换 agent-1 为 -chrome 镜像
+
+```bash
+# 停止当前 agent-1 容器
+docker stop agent-1 && docker rm agent-1
+
+# 用 -chrome 镜像启动（AGENT_MODE=bridge，内置 Chromium 和 daemon）
+docker run -d \
+  --name agent-1-chrome \
+  --restart unless-stopped \
+  --add-host=host.docker.internal:host-gateway \
+  -e CENTRAL_API_URL=http://host.docker.internal:8031 \
+  -e AGENT_ADVERTISE_URL=http://host.docker.internal:19824 \
+  -e AGENT_PORT=19824 \
+  -e AGENT_MODE=bridge \
+  -e AGENT_DEPLOY_TYPE=docker \
+  -e AGENT_LABEL=agent-1-chrome \
+  -e AGENT_REGISTER=http \
+  -p 19824:19824 \
+  xjh1994/opencli-admin-agent:0.3.2-chrome
+
+sleep 20
+# 确认节点注册（应有 label=agent-1-chrome, node_type=docker, mode=bridge）
+curl -s http://localhost:8031/api/v1/nodes
+```
+
+---
+
+#### Test 9 — Docker + 内置Chrome + Bridge
+
+```bash
+BASE=$BASE_DOCKER
+
+# 1. 确认 pool 里有 agent-1-chrome，mode=bridge
+curl -s $BASE/api/v1/workers/chrome-pool
+
+# 2. 确认 COLLECTION_MODE=local（若不是，切换并重启 API）
+curl -s $BASE/api/v1/system/config
+
+# 3. 创建数据源，指定 chrome_endpoint 为 agent-1-chrome
+CHROME_EP="http://host.docker.internal:19824"
+SOURCE_ID=$(curl -s -X POST $BASE/api/v1/sources \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"Test9-Docker-Chrome-Bridge\",\"channel_type\":\"opencli\",
+       \"channel_config\":{\"site\":\"v2ex\",\"command\":\"hot\",\"args\":{},\"format\":\"json\"},
+       \"enabled\":true}" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+TASK_ID=$(curl -s -X POST $BASE/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 20
+curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1 | python3 -m json.tool
+```
+
+**预期**：`status=completed`，`records_collected > 0`。容器日志显示内置 Chromium 启动，`bridge | daemon=127.0.0.1:19825`。宿主机可关闭 Chrome，采集仍成功。
+
+```bash
+docker logs agent-1-chrome --tail=30
+```
+
+---
+
+#### Test 10 — Docker + 内置Chrome + CDP
+
+```bash
+BASE=$BASE_DOCKER
+
+# 1. 切换 agent-1-chrome 到 CDP 模式（不重启容器）
+EP_B64=$(python3 -c "import base64; print(base64.urlsafe_b64encode(b'http://host.docker.internal:19824').decode())")
+curl -s -X PATCH $BASE/api/v1/workers/chrome-pool/$EP_B64/mode \
+  -H "Content-Type: application/json" -d '{"mode":"cdp"}'
+
+# 2. 复用 Test9 数据源，触发
+TASK_ID=$(curl -s -X POST $BASE/api/v1/tasks/trigger \
+  -H "Content-Type: application/json" \
+  -d "{\"source_id\":\"$SOURCE_ID\",\"trigger_type\":\"manual\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['task_id'])")
+
+sleep 20
+curl -s $BASE/api/v1/tasks/$TASK_ID/runs?limit=1 | python3 -m json.tool
+```
+
+**预期**：`status=completed`，容器日志显示 `cdp | cmd=opencli v2ex hot -f json cdp=http://localhost:9222`（连接容器内部 Chromium CDP）。
+
+---
+
 ### 结果验证
 
 每个 test 完成后，检查以下指标：
@@ -898,7 +992,8 @@ docker logs agent-1 --tail=20
 - **重复数据返回 0 条**：同一来源的数据通过 `content_hash` 去重，重复触发同一数据源时 `records_collected=0` 但 `status=completed` 是正常现象。
 - **`browser: false` 的站点（v2ex hot、HN 等）不区分 bridge/cdp**：这类站点直接调用公开 HTTP API，不使用浏览器，两种模式效果相同。需要验证 bridge 与 CDP 真实差异请使用需要浏览器的站点（如 linux-do、zhihu 等）。
 - **COLLECTION_MODE 切换需重启 API**：这是系统级配置，对应用户修改 `.env` 后执行 `docker compose up -d api` 的正常运维操作。bridge/cdp 模式切换则无需重启，通过 `PATCH /mode` 接口实时生效。
-- **Docker 测试前需在宿主机启动 Chrome**：agent 镜像默认使用无 Chrome 变体（约 200 MB），Tests 5-8 依赖宿主机 Chrome 通过 `host.docker.internal` 提供浏览器能力。如需完全自包含，在 `.env` 中设置 `INSTALL_CHROME=true` 和 `CHROME_SUFFIX=-chrome`，重启后会拉取 `-chrome` 变体（约 1.2 GB）。
+- **Docker 测试前需在宿主机启动 Chrome**：agent 镜像默认使用无 Chrome 变体（约 400 MB），Tests 5-8 依赖宿主机 Chrome 通过 `host.docker.internal` 提供浏览器能力。如需完全自包含，在 `.env` 中设置 `INSTALL_CHROME=true` 和 `CHROME_SUFFIX=-chrome`，重启后会拉取 `-chrome` 变体（约 1.2 GB）。
+- **切换 agent 容器后需清理旧节点**：手动 `docker stop/rm` 旧 agent 后，旧 endpoint 仍残留在 in-memory pool 中（节点 DB 也未清理）。切换前需通过 `DELETE /api/v1/nodes/{id}` 主动删除旧节点，或重启 API 让新 agent 重新注册后再清理。Tests 9-10 中切换到 `-chrome` 镜像时需先删除旧 `agent-1` 节点。
 
 ## License
 
