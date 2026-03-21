@@ -182,26 +182,29 @@ async def _collect_via_ws_agent(
 
 
 async def _check_bridge_ready(daemon_host: str, daemon_port: int) -> str | None:
-    """Return an error string if the bridge daemon/extension is not ready, else None."""
+    """Return an error string if the bridge extension is not ready, else None.
+
+    The opencli daemon auto-starts on first use, so a missing daemon is not an
+    error here — we only block when the daemon IS running but the extension is
+    not yet connected (user needs to install the browser extension).
+    """
     import httpx
     status_url = f"http://{daemon_host}:{daemon_port}/status"
     try:
         async with httpx.AsyncClient(timeout=3) as client:
             resp = await client.get(status_url)
             data = resp.json()
-    except Exception as exc:
-        return (
-            f"opencli daemon not reachable at {daemon_host}:{daemon_port} ({exc}). "
-            "Start the daemon with: opencli setup"
-        )
-    if not data.get("ok"):
-        return f"opencli daemon returned unexpected status: {data}"
+    except Exception:
+        # Daemon not running yet — opencli will start it automatically; not a blocker
+        return None
     if not data.get("extensionConnected"):
         return (
-            "opencli Browser Bridge extension is not connected. "
-            "Install steps: 1) Download from GitHub Releases  "
+            "opencli Browser Bridge extension is not connected to the daemon. "
+            "Install steps: "
+            "1) Download the extension from GitHub Releases  "
             "2) Open chrome://extensions/ → Enable Developer Mode  "
-            "3) Click 'Load unpacked' → select the extension folder"
+            "3) Click 'Load unpacked' → select the extension folder  "
+            "Or switch the data source to CDP mode if you have a Chrome CDP endpoint available."
         )
     return None
 
