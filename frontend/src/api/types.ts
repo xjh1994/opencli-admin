@@ -215,3 +215,15 @@ export interface DashboardStats {
     created_at: string
   }>
 }
+
+export interface DailyActivity {
+  date: string
+  total_runs: number
+  success_runs: number
+  failed_runs: number
+  new_records: number
+}
+
+export interface DashboardActivity {
+  daily: DailyActivity[]
+}

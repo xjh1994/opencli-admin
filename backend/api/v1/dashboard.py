@@ -1,10 +1,10 @@
 """Dashboard statistics endpoint."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -154,3 +154,70 @@ async def get_stats(
             ],
         }
     )
+
+
+@router.get("/activity", response_model=ApiResponse[dict])
+async def get_activity(
+    days: int = Query(7, ge=1, le=30, description="Number of past days to include"),
+    tz_offset: int = Query(8, ge=-12, le=14, description="Client UTC offset in hours (default: +8 CST)"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """Return per-day task run and record counts for the past N days.
+
+    Uses the client's UTC offset so that day boundaries align with local time.
+    """
+    now_utc = datetime.now(timezone.utc)
+    tz_delta = timedelta(hours=tz_offset)
+    now_local = now_utc + tz_delta
+    today_local = now_local.date()
+
+    # Build list of dates from (today - days + 1) to today
+    date_range = [today_local - timedelta(days=i) for i in range(days - 1, -1, -1)]
+    since_utc = datetime.combine(date_range[0], datetime.min.time()) - tz_delta
+    since_utc = since_utc.replace(tzinfo=timezone.utc)
+
+    # ── Task runs grouped by local date ──────────────────────────────────────
+    # Shift created_at to local time before truncating to date
+    local_date_expr = func.date(
+        func.datetime(TaskRun.created_at, f"{'+' if tz_offset >= 0 else ''}{tz_offset} hours")
+    )
+    runs_q = (
+        select(
+            local_date_expr.label("day"),
+            func.count().label("total_runs"),
+            func.sum(case((TaskRun.status == "completed", 1), else_=0)).label("success_runs"),
+            func.sum(case((TaskRun.status == "failed", 1), else_=0)).label("failed_runs"),
+        )
+        .where(TaskRun.created_at >= since_utc)
+        .group_by("day")
+    )
+    runs_rows = {str(row.day): row for row in (await db.execute(runs_q)).all()}
+
+    # ── Records grouped by local date ─────────────────────────────────────────
+    local_rec_date_expr = func.date(
+        func.datetime(CollectedRecord.created_at, f"{'+' if tz_offset >= 0 else ''}{tz_offset} hours")
+    )
+    recs_q = (
+        select(
+            local_rec_date_expr.label("day"),
+            func.count().label("new_records"),
+        )
+        .where(CollectedRecord.created_at >= since_utc)
+        .group_by("day")
+    )
+    recs_rows = {str(row.day): row.new_records for row in (await db.execute(recs_q)).all()}
+
+    # ── Merge into ordered list ───────────────────────────────────────────────
+    daily = []
+    for d in date_range:
+        key = str(d)
+        run = runs_rows.get(key)
+        daily.append({
+            "date": key,
+            "total_runs": int(run.total_runs) if run else 0,
+            "success_runs": int(run.success_runs) if run else 0,
+            "failed_runs": int(run.failed_runs) if run else 0,
+            "new_records": recs_rows.get(key, 0),
+        })
+
+    return ApiResponse.ok({"daily": daily})

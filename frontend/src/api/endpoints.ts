@@ -9,6 +9,7 @@ import type {
   CollectionTask,
   CronSchedule,
   DataSource,
+  DashboardActivity,
   DashboardStats,
   EdgeNode,
   EdgeNodeEvent,
@@ -23,6 +24,9 @@ import type {
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 export const getDashboardStats = (params?: { range?: string; start?: string; end?: string }) =>
   apiClient.get<ApiResponse<DashboardStats>>('/dashboard/stats', { params }).then((r) => r.data.data)
+
+export const getDashboardActivity = (params?: { days?: number; tz_offset?: number }) =>
+  apiClient.get<ApiResponse<DashboardActivity>>('/dashboard/activity', { params }).then((r) => r.data.data)
 
 // ── Sources ────────────────────────────────────────────────────────────────────
 export const listSources = (params?: { page?: number; limit?: number; enabled?: boolean }) =>
