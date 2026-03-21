@@ -90,15 +90,15 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 # Ensure pip is available (may be absent on some distros)
-if ! python -m pip --version &>/dev/null 2>&1; then
+if ! $PYTHON -m pip --version &>/dev/null 2>&1; then
   info "pip not found, installing via ensurepip..."
-  python -m ensurepip --upgrade
+  $PYTHON -m ensurepip --upgrade
 fi
 ok "venv active"
 
 # ── Install Python deps ───────────────────────────────────────────────────────
 info "Checking backend dependencies..."
-python -m pip install -q -e . 2>&1 | tail -1
+$PYTHON -m pip install -q -e . 2>&1 | tail -1
 ok "Backend deps ready"
 
 # ── Check opencli ─────────────────────────────────────────────────────────────
