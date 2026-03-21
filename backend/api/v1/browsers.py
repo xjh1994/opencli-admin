@@ -65,7 +65,9 @@ def _project_name() -> str:
     return os.environ.get("COMPOSE_PROJECT_NAME", "opencli-admin")
 
 
-def _update_env_file(key: str, value: str, path: str = "/app/.env") -> None:
+def _update_env_file(key: str, value: str, path: str = "") -> None:
+    if not path:
+        path = os.environ.get("ENV_FILE_PATH", "/app/.env")
     """Update or append KEY=value in the .env file."""
     try:
         with open(path) as f:

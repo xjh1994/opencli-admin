@@ -143,8 +143,8 @@ async def register_node(
     url = body.agent_url.rstrip("/")
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="agent_url must be an http/https URL")
-    if body.mode not in ("bridge", "cdp"):
-        raise HTTPException(status_code=400, detail="mode must be 'bridge' or 'cdp'")
+    if body.mode not in ("bridge", "cdp", "shell"):
+        raise HTTPException(status_code=400, detail="mode must be 'bridge', 'cdp', or 'shell'")
     if body.agent_protocol not in ("http", "ws"):
         raise HTTPException(status_code=400, detail="agent_protocol must be 'http' or 'ws'")
 
@@ -449,8 +449,8 @@ async def node_ws_endpoint(ws: WebSocket) -> None:
         if not agent_url.startswith("http"):
             await ws.close(code=1008, reason="agent_url must be an http/https URL")
             return
-        if mode not in ("bridge", "cdp"):
-            await ws.close(code=1008, reason="mode must be 'bridge' or 'cdp'")
+        if mode not in ("bridge", "cdp", "shell"):
+            await ws.close(code=1008, reason="mode must be 'bridge', 'cdp', or 'shell'")
             return
 
         # ── 2. Upsert node + write event ──────────────────────────────────

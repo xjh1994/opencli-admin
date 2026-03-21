@@ -11,7 +11,7 @@ from backend.schemas.common import ApiResponse
 
 router = APIRouter(prefix="/system", tags=["system"])
 
-_ENV_PATH = "/app/.env"
+_ENV_PATH = os.environ.get("ENV_FILE_PATH", "/app/.env")
 
 
 def _update_env_file(key: str, value: str) -> None:
