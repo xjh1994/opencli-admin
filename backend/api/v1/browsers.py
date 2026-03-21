@@ -285,7 +285,8 @@ async def update_instance_config(
     from backend.browser_pool import get_pool, LocalBrowserPool
 
     try:
-        endpoint = base64.urlsafe_b64decode(endpoint_b64.encode()).decode()
+        padded = endpoint_b64 + "=" * (-len(endpoint_b64) % 4)
+        endpoint = base64.urlsafe_b64decode(padded.encode()).decode()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid endpoint encoding")
 
@@ -339,7 +340,8 @@ async def remove_instance(
     from backend.models.browser import BrowserInstance
 
     try:
-        endpoint = base64.urlsafe_b64decode(endpoint_b64.encode()).decode()
+        padded = endpoint_b64 + "=" * (-len(endpoint_b64) % 4)
+        endpoint = base64.urlsafe_b64decode(padded.encode()).decode()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid endpoint encoding")
 
