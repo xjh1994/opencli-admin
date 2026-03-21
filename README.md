@@ -107,8 +107,8 @@ cp .env.example .env
 
 | 服务 | 地址 |
 |------|------|
-| 管理界面 | http://localhost:5173 |
-| API 文档 | http://localhost:8000/docs |
+| 管理界面 | http://localhost:8030 |
+| API 文档 | http://localhost:8031/docs |
 
 脚本自动创建 venv、安装依赖、初始化数据库、启动 Chrome CDP、后端热重载、前端 HMR。
 
