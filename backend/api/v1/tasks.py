@@ -89,3 +89,32 @@ async def list_task_runs(
         data=[TaskRunRead.model_validate(r) for r in runs],
         meta=PaginationMeta(total=total, page=page, limit=limit, pages=max(1, -(-total // limit))),
     )
+
+
+@router.get("/{task_id}/runs/{run_id}/events", response_model=ApiResponse[list[dict]])
+async def list_run_events(
+    task_id: str,
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    from backend.models.task import TaskRunEvent
+    from sqlalchemy import select
+    result = await db.execute(
+        select(TaskRunEvent)
+        .where(TaskRunEvent.run_id == run_id)
+        .order_by(TaskRunEvent.created_at)
+    )
+    events_list = result.scalars().all()
+    return ApiResponse.ok([
+        {
+            "id": e.id,
+            "run_id": e.run_id,
+            "level": e.level,
+            "step": e.step,
+            "message": e.message,
+            "detail": e.detail,
+            "elapsed_ms": e.elapsed_ms,
+            "created_at": e.created_at.isoformat(),
+        }
+        for e in events_list
+    ])

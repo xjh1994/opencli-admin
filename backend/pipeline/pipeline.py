@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.models.source import DataSource
+from backend.pipeline import events
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ async def run_pipeline(
     enable_ai: bool = True,
     enable_notifications: bool = True,
     agent_config: dict[str, Any] | None = None,
+    run_id: str | None = None,
 ) -> PipelineResult:
     """Execute the full collection pipeline. Each write step uses its own
     short-lived session so no write lock is held during long-running I/O."""
@@ -55,22 +57,59 @@ async def run_pipeline(
     # Step 1: Collect
     logger.info("[task:%s] step1/collect start | source=%s channel=%s params=%s",
                 task_id, source.name, source.channel_type, params)
+    step1_start = datetime.now(timezone.utc)
+
+    if run_id:
+        await events.emit(
+            run_id, "collect",
+            f"开始采集 | 渠道={source.channel_type} 数据源={source.name}",
+            detail={"channel_type": source.channel_type, "params": params},
+        )
+
     try:
         channel_result = await collector.collect(source, params)
     except Exception as exc:
         logger.exception("[task:%s] step1/collect exception | %s", task_id, exc)
+        if run_id:
+            await events.emit(
+                run_id, "collect",
+                f"采集失败: {exc}",
+                level="error",
+                detail={"error": str(exc)},
+            )
         return PipelineResult(success=False, source_id=source.id, error=str(exc))
 
     if not channel_result.success:
         logger.error("[task:%s] step1/collect failed | error=%s", task_id, channel_result.error)
+        if run_id:
+            await events.emit(
+                run_id, "collect",
+                f"采集失败: {channel_result.error}",
+                level="error",
+                detail={"error": channel_result.error},
+            )
         return PipelineResult(success=False, source_id=source.id, error=channel_result.error)
 
+    step1_elapsed = int((datetime.now(timezone.utc) - step1_start).total_seconds() * 1000)
     logger.info("[task:%s] step1/collect done | count=%d metadata=%s",
                 task_id, channel_result.count, channel_result.metadata)
+    if run_id:
+        await events.emit(
+            run_id, "collect",
+            f"采集完成 | 获取 {channel_result.count} 条",
+            detail={"count": channel_result.count, "metadata": channel_result.metadata},
+            elapsed_ms=step1_elapsed,
+        )
 
     # Step 2: Normalize
     triples = normalizer.normalize_items(channel_result.items, source.id)
     logger.info("[task:%s] step2/normalize done | items=%d", task_id, len(triples))
+    if run_id:
+        await events.emit(
+            run_id, "normalize",
+            f"归一化完成 | {len(triples)} 条",
+            detail={"items": len(triples)},
+        )
 
     # Step 3: Store
     logger.info("[task:%s] step3/store start | items=%d", task_id, len(triples))
@@ -88,6 +127,12 @@ async def run_pipeline(
         )
     logger.info("[task:%s] step3/store done | new=%d skipped=%d",
                 task_id, len(new_records), skipped)
+    if run_id:
+        await events.emit(
+            run_id, "store",
+            f"入库完成 | 新增 {len(new_records)} 条，跳过 {skipped} 条（重复）",
+            detail={"new": len(new_records), "skipped": skipped},
+        )
 
     # Step 4: AI processing
     effective_ai_config = agent_config or source.ai_config
@@ -118,10 +163,24 @@ async def run_pipeline(
                 await session.commit()
             ai_count = len(new_records)
             logger.info("[task:%s] step4/ai done | processed=%d", task_id, ai_count)
+            if run_id:
+                await events.emit(
+                    run_id, "ai_process",
+                    f"AI 处理完成 | {ai_count} 条",
+                    detail={"processed": ai_count},
+                )
         except Exception as exc:
             logger.warning("[task:%s] step4/ai failed | %s", task_id, exc)
+            if run_id:
+                await events.emit(
+                    run_id, "ai_process",
+                    f"AI 处理失败: {exc}",
+                    level="warning",
+                )
     elif enable_ai and not effective_ai_config:
         logger.debug("[task:%s] step4/ai skipped | no ai_config", task_id)
+        if run_id:
+            await events.emit(run_id, "ai_process", "跳过 AI 处理（未配置）")
 
     # Step 5: Notify
     if enable_notifications and new_records:
@@ -131,10 +190,30 @@ async def run_pipeline(
                 await notifier_dispatch.dispatch_notifications(session, source.id, new_records)
                 await session.commit()
             logger.info("[task:%s] step5/notify done", task_id)
+            if run_id:
+                await events.emit(run_id, "notify", "通知发送完成")
         except Exception as exc:
             logger.warning("[task:%s] step5/notify failed | %s", task_id, exc)
+            if run_id:
+                await events.emit(
+                    run_id, "notify",
+                    f"通知发送失败: {exc}",
+                    level="warning",
+                )
 
     duration_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+
+    if run_id:
+        await events.emit(
+            run_id, "complete",
+            f"任务完成 | 总耗时 {duration_ms}ms | 采集 {channel_result.count} 新增 {len(new_records)} 跳过 {skipped}",
+            detail={
+                "duration_ms": duration_ms,
+                "collected": channel_result.count,
+                "stored": len(new_records),
+                "skipped": skipped,
+            },
+        )
 
     return PipelineResult(
         success=True,

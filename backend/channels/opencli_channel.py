@@ -181,6 +181,34 @@ async def _collect_via_ws_agent(
     return ChannelResult.ok(items, site=site, command=command, node_url=agent_url)
 
 
+async def _check_bridge_ready(daemon_host: str, daemon_port: int) -> str | None:
+    """Return an error string if the bridge extension is not ready, else None.
+
+    The opencli daemon auto-starts on first use, so a missing daemon is not an
+    error here — we only block when the daemon IS running but the extension is
+    not yet connected (user needs to install the browser extension).
+    """
+    import httpx
+    status_url = f"http://{daemon_host}:{daemon_port}/status"
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get(status_url)
+            data = resp.json()
+    except Exception:
+        # Daemon not running yet — opencli will start it automatically; not a blocker
+        return None
+    if not data.get("extensionConnected"):
+        return (
+            "opencli Browser Bridge extension is not connected to the daemon. "
+            "Install steps: "
+            "1) Download the extension from GitHub Releases  "
+            "2) Open chrome://extensions/ → Enable Developer Mode  "
+            "3) Click 'Load unpacked' → select the extension folder  "
+            "Or switch the data source to CDP mode if you have a Chrome CDP endpoint available."
+        )
+    return None
+
+
 async def _cleanup_cdp_tabs(cdp_endpoint: str) -> None:
     """Close any navigated tabs left open in Chrome after a CDP collect.
 
@@ -319,6 +347,10 @@ class OpenCLIChannel(AbstractChannel):
                 env["OPENCLI_DAEMON_HOST"] = daemon_host
                 env["OPENCLI_DAEMON_PORT"] = str(_DAEMON_PORT)
                 logger.info("opencli bridge | cmd=%s daemon=%s:%s", " ".join(cmd), daemon_host, _DAEMON_PORT)
+                bridge_err = await _check_bridge_ready(daemon_host, _DAEMON_PORT)
+                if bridge_err:
+                    logger.error("bridge not ready: %s", bridge_err)
+                    return ChannelResult.fail(bridge_err)
             else:
                 env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
                 logger.info("opencli cdp | cmd=%s cdp=%s", " ".join(cmd), cdp_endpoint)
@@ -372,4 +404,7 @@ class OpenCLIChannel(AbstractChannel):
         return errors
 
     async def health_check(self) -> bool:
-        return shutil.which(_OPENCLI_BIN) is not None or os.path.isfile(_OPENCLI_BIN)
+        if not (shutil.which(_OPENCLI_BIN) or os.path.isfile(_OPENCLI_BIN)):
+            return False
+        # Binary found; extension connectivity is mode-dependent, not a hard failure here
+        return True

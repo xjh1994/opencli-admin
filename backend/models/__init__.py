@@ -7,7 +7,7 @@ from backend.models.provider import ModelProvider
 from backend.models.record import CollectedRecord
 from backend.models.schedule import CronSchedule
 from backend.models.source import DataSource
-from backend.models.task import CollectionTask, TaskRun
+from backend.models.task import CollectionTask, TaskRun, TaskRunEvent
 from backend.models.worker import WorkerNode
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     "DataSource",
     "CollectionTask",
     "TaskRun",
+    "TaskRunEvent",
     "CollectedRecord",
     "CronSchedule",
     "NotificationRule",

@@ -84,6 +84,47 @@ def _update_env_file(key: str, value: str, path: str = "") -> None:
         f.write(content)
 
 
+class CdpEndpointRequest(BaseModel):
+    url: str
+    mode: str = "cdp"
+
+
+@router.post("/cdp-endpoint", response_model=ApiResponse[dict])
+async def add_cdp_endpoint(
+    body: CdpEndpointRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """Register an arbitrary CDP endpoint (e.g. http://localhost:9222) into the pool.
+
+    Use this when Chrome is already running locally with --remote-debugging-port
+    or when pointing to any accessible CDP URL.
+    """
+    from backend.browser_pool import get_pool, LocalBrowserPool
+    from backend.models.browser import BrowserInstance
+
+    url = body.url.rstrip("/")
+    if not url.startswith("http"):
+        raise HTTPException(status_code=400, detail="url must start with http/https")
+    mode = body.mode if body.mode in ("bridge", "cdp") else "cdp"
+
+    pool = get_pool()
+    if isinstance(pool, LocalBrowserPool):
+        if url not in pool.endpoints:
+            pool.add_endpoint(url)
+        pool.set_mode(url, mode)
+
+    result = await db.execute(select(BrowserInstance).where(BrowserInstance.endpoint == url))
+    inst = result.scalar_one_or_none()
+    if inst:
+        inst.mode = mode
+    else:
+        inst = BrowserInstance(endpoint=url, mode=mode)
+        db.add(inst)
+    await db.commit()
+
+    return ApiResponse(success=True, data={"endpoint": url, "mode": mode})
+
+
 @router.post("/chrome-instances", response_model=ApiResponse[dict])
 async def add_chrome_instance(
     count: int = 1,
@@ -285,7 +326,8 @@ async def update_instance_config(
     from backend.browser_pool import get_pool, LocalBrowserPool
 
     try:
-        endpoint = base64.urlsafe_b64decode(endpoint_b64.encode()).decode()
+        padded = endpoint_b64 + "=" * (-len(endpoint_b64) % 4)
+        endpoint = base64.urlsafe_b64decode(padded.encode()).decode()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid endpoint encoding")
 
@@ -339,7 +381,8 @@ async def remove_instance(
     from backend.models.browser import BrowserInstance
 
     try:
-        endpoint = base64.urlsafe_b64decode(endpoint_b64.encode()).decode()
+        padded = endpoint_b64 + "=" * (-len(endpoint_b64) % 4)
+        endpoint = base64.urlsafe_b64decode(padded.encode()).decode()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid endpoint encoding")
 
