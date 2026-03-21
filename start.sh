@@ -105,8 +105,13 @@ ok "Backend deps ready"
 if command -v opencli &>/dev/null; then
   ok "opencli: $(opencli --version 2>/dev/null | head -1 || echo 'found')"
 else
-  warn "opencli not found — opencli channel will be unavailable"
-  warn "  Install: npm install -g @jackwener/opencli"
+  read -r -p "opencli not found. Install now via npm? [Y/n] " _reply
+  if [[ "${_reply:-Y}" =~ ^[Yy]$ ]]; then
+    npm install -g @jackwener/opencli
+    ok "opencli: $(opencli --version 2>/dev/null | head -1 || echo 'installed')"
+  else
+    warn "Skipped — opencli channel will be unavailable"
+  fi
 fi
 
 # ── Find Chrome binary ────────────────────────────────────────────────────────
