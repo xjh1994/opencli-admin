@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python deps into a prefix so we can copy them cleanly
 COPY pyproject.toml .
-RUN pip install --upgrade pip && \
-    pip install --prefix=/install .
+RUN pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ && \
+    pip install --prefix=/install . -i https://mirrors.aliyun.com/pypi/simple/
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 ARG REGISTRY=

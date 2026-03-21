@@ -5,14 +5,24 @@ FROM ${REGISTRY}python:3.13-slim
 RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
     sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
 
-# System deps: headless Chrome + virtual display + opencli runtime
+# Base system deps (always installed)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium xvfb \
-    fonts-noto-cjk \
     curl ca-certificates procps \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# ── Optional: headless Chrome + virtual display ───────────────────────────────
+# Set INSTALL_CHROME=true at build time to embed Chrome in the image.
+# Default: false — connect to Chrome running on the host machine instead.
+# With Chrome:    ~1.2 GB image, self-contained (no host Chrome required)
+# Without Chrome: ~200 MB image, host provides Chrome via OPENCLI_CDP_ENDPOINT
+ARG INSTALL_CHROME=false
+RUN if [ "$INSTALL_CHROME" = "true" ]; then \
+    apt-get update && apt-get install -y --no-install-recommends \
+        chromium xvfb fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*; \
+fi
 
 # Install opencli globally — available as 'opencli' on PATH
 ARG OPENCLI_VERSION=1.1.0
@@ -27,7 +37,9 @@ RUN pip install --no-cache-dir \
     pyyaml \
     websockets
 
-# Browser Bridge extension (same as chrome image)
+# Browser Bridge extension — only useful when Chrome runs inside the container
+# Copied unconditionally so the image can be promoted to INSTALL_CHROME=true
+# via a simple rebuild without changing the layer structure.
 COPY chrome/extension-src/manifest.json /home/agent/extension/manifest.json
 COPY chrome/extension-src/icons/         /home/agent/extension/icons/
 COPY chrome/extension-src/dist/background.js /home/agent/extension/dist/background.js
@@ -47,10 +59,7 @@ RUN useradd -m -u 1000 agent \
 ENV PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # Chrome runs inside this container — always localhost
-    OPENCLI_CDP_ENDPOINT=http://localhost:9222 \
-    # Bridge daemon is local too
-    OPENCLI_DAEMON_HOST=127.0.0.1 \
+    # Bridge daemon port (used when Chrome is embedded OR daemon runs on host)
     OPENCLI_DAEMON_PORT=19825
 
 USER agent

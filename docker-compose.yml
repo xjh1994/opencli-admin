@@ -1,6 +1,6 @@
 # Shared backend config (DRY)
 x-backend-common: &backend-common
-  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.3.1}
+  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.3.2}
   env_file:
     - path: .env
       required: false
@@ -124,25 +124,38 @@ services:
       api:
         condition: service_healthy
 
-  # ── Built-in agent sidecar (Chrome + agent_server in one container) ─────────
+  # ── Built-in agent sidecar ────────────────────────────────────────────────────
   # Default single instance — always started (local collection mode uses this).
-  # Chrome is embedded in the agent image; agent_server registers with the API on startup.
+  # Chrome is NOT embedded in the image (~200 MB). The agent connects to Chrome
+  # running on the Docker host via host.docker.internal.
+  #
+  # Before starting, ensure Chrome is running on the host with CDP enabled:
+  #   • macOS/Linux: open -a "Google Chrome" --args --remote-debugging-port=9222
+  #   • Or start the Bridge daemon: node $(npm root -g)/@jackwener/opencli/dist/daemon.js
   agent-1:
     container_name: agent-1
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.1}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.2}${CHROME_SUFFIX:-}
     environment:
       CENTRAL_API_URL: http://api:8000
       # Use container name so the API can reach this agent by DNS within the Docker network
       AGENT_ADVERTISE_URL: http://agent-1:19823
       AGENT_PORT: 19823
-      # Chrome connection mode for this sidecar (bridge | cdp).
-      # Override via AGENT_MODE env var in .env if needed.
+      # Chrome connection mode: bridge | cdp (override in .env)
       AGENT_MODE: ${AGENT_MODE:-bridge}
       AGENT_DEPLOY_TYPE: docker
       AGENT_LABEL: agent-1
+      # Host Chrome endpoints — agent connects to Chrome running on the Docker host
+      # bridge mode: daemon on host
+      OPENCLI_DAEMON_HOST: host.docker.internal
+      OPENCLI_DAEMON_PORT: ${OPENCLI_DAEMON_PORT:-19825}
+      # cdp mode: Chrome DevTools Protocol on host
+      OPENCLI_CDP_ENDPOINT: ${OPENCLI_CDP_ENDPOINT:-http://host.docker.internal:9222}
       OPENCLI_TIMEOUT: ${OPENCLI_TIMEOUT:-120}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
+    extra_hosts:
+      # Make host.docker.internal resolve to the host on Linux (already works on macOS/Windows)
+      - "host.docker.internal:host-gateway"
     volumes:
       - agent_profile_1:/home/agent/.config/chromium
     ports:
@@ -169,7 +182,7 @@ services:
   #   docker compose --profile agent up agent
   agent:
     profiles: ["agent"]
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.1}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.2}${CHROME_SUFFIX:-}
     environment:
       CENTRAL_API_URL: ${CENTRAL_API_URL:-}
       AGENT_ADVERTISE_URL: ${AGENT_ADVERTISE_URL:-}
@@ -188,7 +201,7 @@ services:
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.3.1}
+    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.3.2}
     ports:
       - "${FRONTEND_PORT:-8030}:80"
     depends_on:

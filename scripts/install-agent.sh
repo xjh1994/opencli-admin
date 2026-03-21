@@ -7,16 +7,19 @@
 #   curl -fsSL http://<center>:8031/api/v1/nodes/install/agent.sh | bash
 #
 # Manual usage:
-#   CENTRAL_API_URL=http://192.168.1.1:8031 bash install-agent.sh [docker|python]
+#   CENTRAL_API_URL=http://192.168.1.1:8031 bash install-agent.sh [docker|python] [--install-chrome]
 #
 # Environment variables (override at runtime):
 #   CENTRAL_API_URL    Center API base URL (required)
 #   AGENT_REGISTER     Registration mode: http | ws (default: ws)
 #   AGENT_PORT         Agent HTTP port (default: 19823)
 #   AGENT_LABEL        Human-readable label (default: hostname)
+#   INSTALL_CHROME     Embed Chromium in container: true | false (default: false)
+#                      true  → uses image tag suffix "-chrome" (~1.2 GB, self-contained)
+#                      false → uses base image (~200 MB), connect to host Chrome via CDP
 #   HTTP_PROXY         HTTP proxy for agent → center (optional)
 #   HTTPS_PROXY        HTTPS proxy for agent → center (optional)
-#   IMAGE_TAG          Docker image tag (default: 0.1.0)
+#   IMAGE_TAG          Docker image tag (default: 0.3.2)
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -28,8 +31,25 @@ CENTRAL_API_URL="${CENTRAL_API_URL:-__CENTRAL_API_URL__}"
 AGENT_REGISTER="${AGENT_REGISTER:-ws}"
 AGENT_PORT="${AGENT_PORT:-19823}"
 AGENT_LABEL="${AGENT_LABEL:-$(hostname)}"
-IMAGE_TAG="${IMAGE_TAG:-0.1.0}"
+IMAGE_TAG="${IMAGE_TAG:-0.3.2}"
+INSTALL_CHROME="${INSTALL_CHROME:-false}"
 INSTALL_MODE="${1:-docker}"
+
+# Parse --install-chrome flag from any positional argument
+for arg in "$@"; do
+  case "$arg" in
+    --install-chrome) INSTALL_CHROME=true ;;
+    --no-chrome)      INSTALL_CHROME=false ;;
+  esac
+done
+
+# Select image tag suffix based on Chrome preference
+if [[ "$INSTALL_CHROME" == "true" ]]; then
+  CHROME_SUFFIX="-chrome"
+else
+  CHROME_SUFFIX=""
+fi
+AGENT_IMAGE="xjh1994/opencli-admin-agent:${IMAGE_TAG}${CHROME_SUFFIX}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -40,11 +60,13 @@ die()   { printf '\e[31m[ERROR]\e[0m %s\n' "$*" >&2; exit 1; }
 [[ -z "$CENTRAL_API_URL" ]] && die "CENTRAL_API_URL is required"
 
 info "OpenCLI Agent Installer"
-info "  Center:    $CENTRAL_API_URL"
-info "  Register:  $AGENT_REGISTER"
-info "  Port:      $AGENT_PORT"
-info "  Label:     $AGENT_LABEL"
-info "  Mode:      $INSTALL_MODE"
+info "  Center:        $CENTRAL_API_URL"
+info "  Register:      $AGENT_REGISTER"
+info "  Port:          $AGENT_PORT"
+info "  Label:         $AGENT_LABEL"
+info "  Mode:          $INSTALL_MODE"
+info "  Install Chrome: $INSTALL_CHROME"
+info "  Image:         $AGENT_IMAGE"
 echo
 
 # ── Docker install ─────────────────────────────────────────────────────────────
@@ -89,7 +111,7 @@ install_docker() {
     -e AGENT_MODE="cdp" \
     $PROXY_ARGS \
     -p "${AGENT_PORT}:${AGENT_PORT}" \
-    "xjh1994/opencli-admin-agent:${IMAGE_TAG}"
+    "$AGENT_IMAGE"
 
   info "Container started. Waiting for registration..."
   sleep 3

@@ -12,6 +12,15 @@ x-backend-build: &backend-build
     context: .
     dockerfile: Dockerfile
 
+x-agent-build: &agent-build
+  build:
+    context: .
+    dockerfile: agent/Dockerfile
+    # INSTALL_CHROME=false (default) — ~200 MB image, connects to host Chrome.
+    # Set INSTALL_CHROME=true to embed Chromium + Xvfb (~1.2 GB), fully self-contained.
+    args:
+      INSTALL_CHROME: ${INSTALL_CHROME:-false}
+
 services:
   api:
     <<: *backend-build
@@ -23,18 +32,13 @@ services:
     <<: *backend-build
 
   agent-1:
-    build:
-      context: .
-      dockerfile: agent/Dockerfile
+    <<: *agent-build
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
 
-  # All-in-one edge agent: Chrome + Bridge + opencli + agent_server in one container.
-  # Run standalone on any machine that can reach the center API.
+  # Remote edge agent — same image, same default (no embedded Chrome).
   agent:
-    build:
-      context: .
-      dockerfile: agent/Dockerfile
+    <<: *agent-build

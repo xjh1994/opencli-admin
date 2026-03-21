@@ -1,6 +1,6 @@
 # OpenCLI Admin
 
-[![Docker](https://img.shields.io/badge/Docker%20Hub-0.3.1-blue?logo=docker)](https://hub.docker.com/u/xjh1994)
+[![Docker](https://img.shields.io/badge/Docker%20Hub-0.3.2-blue?logo=docker)](https://hub.docker.com/u/xjh1994)
 
 多渠道数据采集管理平台。通过可视化界面统一管理数据源、定时计划、采集任务和通知规则，底层接入 [opencli](https://github.com/jackwener/opencli) CLI 工具采集国内外主流平台内容。
 
@@ -135,7 +135,25 @@ cp .env.example .env
 
 ### 方式二：Docker
 
-**前置要求**：Docker & Docker Compose
+**前置要求**：Docker & Docker Compose、宿主机已安装并运行 Chrome
+
+> **Agent 镜像有两个变体**：
+> - `opencli-admin-agent:0.3.2` — **默认，约 200 MB**，不含 Chrome，通过 `host.docker.internal` 连接宿主机 Chrome
+> - `opencli-admin-agent:0.3.2-chrome` — **约 1.2 GB**，内置 Chromium + Xvfb，完全自包含，无需宿主机 Chrome
+>
+> 使用含 Chrome 变体：在 `.env` 中设置 `INSTALL_CHROME=true` 和 `CHROME_SUFFIX=-chrome`，重启即可拉取对应镜像。
+
+**启动宿主机 Chrome**（必须在 `docker compose up` 前完成）：
+
+```bash
+# macOS — 开启 CDP 调试端口
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+    --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 \
+    --no-first-run --no-default-browser-check &
+
+# 启动 Bridge Daemon（bridge 模式采集必须，cdp 模式可跳过）
+node $(npm root -g)/@jackwener/opencli/dist/daemon.js &
+```
 
 ```bash
 # 1. 复制配置文件
@@ -153,7 +171,7 @@ docker compose up -d
 | API 文档 | http://localhost:8031/docs |
 | Agent noVNC | http://localhost:3010 |
 
-预构建镜像发布在 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.3.1`），无需本地 build 即可启动。如需从源码构建：
+预构建镜像发布在 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.3.2`），无需本地 build 即可启动。如需从源码构建：
 
 ```bash
 # 本地构建模式
@@ -163,7 +181,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
 切换版本：
 
 ```bash
-IMAGE_TAG=0.3.1 docker compose up -d
+IMAGE_TAG=0.3.2 docker compose up -d
 ```
 
 **停止**
@@ -203,6 +221,12 @@ opencli 渠道依赖浏览器登录态，首次使用需手动登录各平台账
 
 **Docker 安装（推荐）**
 
+> **镜像选择**：
+> - `xjh1994/opencli-admin-agent:0.3.2` — 默认，约 200 MB，需宿主机提供 Chrome（通过 `host.docker.internal`）
+> - `xjh1994/opencli-admin-agent:0.3.2-chrome` — 约 1.2 GB，内置 Chromium，无需宿主机 Chrome
+>
+> 安装命令中将镜像名替换为对应变体即可，或使用 `--install-chrome` 参数（见下方脚本安装）。
+
 ```bash
 # WS 模式（NAT / 跨网）
 docker run -d \
@@ -214,7 +238,7 @@ docker run -d \
   -e AGENT_MODE=bridge \
   -e AGENT_DEPLOY_TYPE=docker \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.3.1
+  xjh1994/opencli-admin-agent:0.3.2        # 无 Chrome；含 Chrome 用 :0.3.2-chrome
 
 # HTTP 模式（局域网）
 docker run -d \
@@ -226,7 +250,7 @@ docker run -d \
   -e AGENT_MODE=bridge \
   -e AGENT_DEPLOY_TYPE=docker \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.3.1
+  xjh1994/opencli-admin-agent:0.3.2
 
 # Host 网络模式（Linux，API 运行在宿主机而非 Docker 时使用）
 docker run -d \
@@ -237,19 +261,21 @@ docker run -d \
   -e AGENT_REGISTER=http \
   -e AGENT_MODE=bridge \
   -e AGENT_DEPLOY_TYPE=docker \
-  xjh1994/opencli-admin-agent:0.3.1
+  xjh1994/opencli-admin-agent:0.3.2
 ```
 
-**Shell 脚本安装（无 Docker 环境）**
+**一键脚本安装**
 
 ```bash
-# WS 模式
-curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
-  AGENT_REGISTER=ws AGENT_MODE=bridge AGENT_DEPLOY_TYPE=shell bash
+# Docker 安装（默认，无 Chrome 镜像）
+curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | bash
 
-# HTTP 模式
+# Docker 安装，使用含 Chrome 镜像（~1.2 GB，无需宿主机 Chrome）
+curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | bash -s -- docker --install-chrome
+
+# Shell 安装（无 Docker 环境，Python 原生运行）
 curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
-  AGENT_REGISTER=http AGENT_MODE=bridge AGENT_DEPLOY_TYPE=shell bash
+  AGENT_REGISTER=ws AGENT_MODE=bridge bash -s -- python
 ```
 
 脚本自动安装 Python 依赖（支持 `--user` / venv 双路径），无 systemd 时后台运行。
@@ -514,16 +540,16 @@ AI 智能体处理（可选）
 
 ### 两个维度 × 两种模式 = 8 种组合
 
-| # | 部署方式 | 采集目标 | Chrome 连接模式 | 关键验证点 |
-|---|----------|----------|-----------------|-----------|
-| 1 | Shell | 本地 | Bridge | API 直接驱动 opencli，bridge daemon 连接 Chrome |
-| 2 | Shell | 本地 | CDP | 同上，模式切换通过 API 完成，无需重启 |
-| 3 | Shell | 边缘节点 | Bridge | HTTP dispatch 到 shell 部署的 agent，bridge 模式 |
-| 4 | Shell | 边缘节点 | CDP | 同一 agent，通过 API 切换为 cdp 模式 |
-| 5 | Docker | 本地 | Bridge | Docker 内置 agent-1，COLLECTION_MODE=local |
-| 6 | Docker | 本地 | CDP | 同上，API 切换模式，无需重启 agent-1 容器 |
-| 7 | Docker | 边缘节点 | Bridge | COLLECTION_MODE=agent，dispatch 到 agent-1 |
-| 8 | Docker | 边缘节点 | CDP | 同一 agent-1 容器，API 切换为 cdp，无重启 |
+| # | 部署方式 | 采集目标 | Chrome 连接模式 | Chrome 来源 | 关键验证点 |
+|---|----------|----------|-----------------|-------------|-----------|
+| 1 | Shell | 本地 | Bridge | 宿主机原生 | API 直接驱动 opencli，bridge daemon 连接本地 Chrome |
+| 2 | Shell | 本地 | CDP | 宿主机原生 | 通过 API 切换模式，无需重启 |
+| 3 | Shell | 边缘节点 | Bridge | 宿主机原生 | HTTP dispatch 到 shell 部署的 agent |
+| 4 | Shell | 边缘节点 | CDP | 宿主机原生 | API 切换为 cdp，无需重启 agent |
+| 5 | Docker | 本地 | Bridge | **宿主机 Chrome**（host.docker.internal） | agent 镜像 ~200MB，COLLECTION_MODE=local |
+| 6 | Docker | 本地 | CDP | **宿主机 Chrome** | API 切换模式，无需重启 agent-1 容器 |
+| 7 | Docker | 边缘节点 | Bridge | **宿主机 Chrome** | COLLECTION_MODE=agent，dispatch 到 agent-1 |
+| 8 | Docker | 边缘节点 | CDP | **宿主机 Chrome** | API 切换 cdp，同一容器无重启 |
 
 > **关键原则**：bridge ↔ cdp 模式切换始终通过 `PATCH /api/v1/workers/chrome-pool/{ep}/mode` 完成，agent 容器/进程无需重启。COLLECTION_MODE（local/agent）是系统级配置，修改后需重启 API。
 
@@ -697,19 +723,27 @@ curl -s $BASE_SHELL/api/v1/tasks/$TASK_ID/runs?limit=1
 
 ### Docker 部署测试（Tests 5–8）
 
-Docker 部署 = API 和 Agent 均以 Docker 容器运行。
+Docker 部署 = API 和 Agent 均以 Docker 容器运行。**Agent 镜像不含 Chrome**，连接宿主机 Chrome。
 
-#### 准备：构建并启动 Docker API（COLLECTION_MODE=local）
+#### 准备：启动宿主机 Chrome + 构建启动 Docker 服务
 
 ```bash
-# 构建本地镜像
+# ── 1. 宿主机启动 Chrome（监听所有网卡，容器可通过 host.docker.internal 访问）
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+    --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 \
+    --no-first-run --no-default-browser-check &
+
+# Bridge daemon（bridge 模式必须；cdp 模式可跳过）
+node $(npm root -g)/@jackwener/opencli/dist/daemon.js &
+
+# ── 2. 构建镜像（默认 INSTALL_CHROME=false，约 200 MB）
 docker compose -f docker-compose.yml -f docker-compose.build.yml build api agent-1
 
-# 启动 API（COLLECTION_MODE=local，pool 预加载 agent-1）
+# ── 3. 启动 API（COLLECTION_MODE=local，pool 预加载 agent-1）
 COLLECTION_MODE=local \
     docker compose -f docker-compose.yml -f docker-compose.build.yml up -d api
 
-# 启动 agent-1 sidecar（默认 bridge 模式），等待注册
+# ── 4. 启动 agent-1 sidecar（bridge 模式，连接宿主机 Chrome）
 AGENT_MODE=bridge \
     docker compose -f docker-compose.yml -f docker-compose.build.yml up -d agent-1
 
@@ -864,6 +898,7 @@ docker logs agent-1 --tail=20
 - **重复数据返回 0 条**：同一来源的数据通过 `content_hash` 去重，重复触发同一数据源时 `records_collected=0` 但 `status=completed` 是正常现象。
 - **`browser: false` 的站点（v2ex hot、HN 等）不区分 bridge/cdp**：这类站点直接调用公开 HTTP API，不使用浏览器，两种模式效果相同。需要验证 bridge 与 CDP 真实差异请使用需要浏览器的站点（如 linux-do、zhihu 等）。
 - **COLLECTION_MODE 切换需重启 API**：这是系统级配置，对应用户修改 `.env` 后执行 `docker compose up -d api` 的正常运维操作。bridge/cdp 模式切换则无需重启，通过 `PATCH /mode` 接口实时生效。
+- **Docker 测试前需在宿主机启动 Chrome**：agent 镜像默认使用无 Chrome 变体（约 200 MB），Tests 5-8 依赖宿主机 Chrome 通过 `host.docker.internal` 提供浏览器能力。如需完全自包含，在 `.env` 中设置 `INSTALL_CHROME=true` 和 `CHROME_SUFFIX=-chrome`，重启后会拉取 `-chrome` 变体（约 1.2 GB）。
 
 ## License
 
