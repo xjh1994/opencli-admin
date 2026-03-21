@@ -453,7 +453,7 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
 
 // ── Instance card ─────────────────────────────────────────────────────────────
 
-function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSuccess: () => void }) {
+function ModeToggle({ endpoint, onSuccess, isDockerEndpoint }: { endpoint: ChromeEndpoint; onSuccess: () => void; isDockerEndpoint: boolean }) {
   const { t } = useTranslation()
   const [optimisticMode, setOptimisticMode] = useState<'bridge' | 'cdp' | null>(null)
   const mode = optimisticMode ?? endpoint.mode
@@ -465,26 +465,35 @@ function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSucce
     onError: () => setOptimisticMode(null),
   })
 
+  const showCdpWarning = !isDockerEndpoint && mode === 'cdp'
+
   return (
-    <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
-      {(['bridge', 'cdp']).map((m) => (
-        <button
-          key={m}
-          title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
-          disabled={mutation.isPending}
-          onClick={() => mode !== m && mutation.mutate(m as 'bridge' | 'cdp')}
-          className={[
-            'px-2.5 py-1 transition-colors',
-            mode === m
-              ? m === 'bridge'
-                ? 'bg-blue-600 text-white'
-                : 'bg-amber-500 text-white'
-              : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
-          ].join(' ')}
-        >
-          {t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
-        </button>
-      ))}
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
+        {(['bridge', 'cdp']).map((m) => (
+          <button
+            key={m}
+            title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
+            disabled={mutation.isPending}
+            onClick={() => mode !== m && mutation.mutate(m as 'bridge' | 'cdp')}
+            className={[
+              'px-2.5 py-1 transition-colors',
+              mode === m
+                ? m === 'bridge'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-amber-500 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
+            ].join(' ')}
+          >
+            {t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
+          </button>
+        ))}
+      </div>
+      {showCdpWarning && (
+        <span className="text-xs text-amber-600 dark:text-amber-400 whitespace-nowrap">
+          ⚠ CDP 会启动新 Chrome，本地请用 Bridge
+        </span>
+      )}
     </div>
   )
 }
@@ -523,24 +532,33 @@ function InstanceCard({
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
   const idx = instanceIndex(url)
-  const canRemove = idx !== null && idx > 1 && onRemove
+  const isDockerEndpoint = idx !== null
+  const canRemove = isDockerEndpoint && idx > 1 && onRemove
 
   return (
     <Card>
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
-        <StatusBadge containerStatus={containerStatus} available={available} isStarting={isStarting} />
+        {isDockerEndpoint
+          ? <StatusBadge containerStatus={containerStatus} available={available} isStarting={isStarting} />
+          : <span className={`inline-flex items-center gap-1 text-xs ${available ? 'text-green-500' : 'text-gray-400'}`}>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${available ? 'bg-green-500' : 'bg-gray-400'}`} />
+              {available ? '在线' : '空闲'}
+            </span>
+        }
         <span className="font-semibold text-sm dark:text-white">{label}</span>
-        <a
-          href={novncUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono"
-        >
-          :{novncPort}
-          <ExternalLink size={11} />
-        </a>
+        {isDockerEndpoint && (
+          <a
+            href={novncUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono"
+          >
+            :{novncPort}
+            <ExternalLink size={11} />
+          </a>
+        )}
         <div className="ml-auto flex items-center gap-2">
-          {wsConnected ? (
+          {endpoint.agent_protocol === 'ws' && (wsConnected ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
               <Wifi size={10} />
               {t('browsers.statusWsConnected')}
@@ -550,13 +568,13 @@ function InstanceCard({
               <WifiOff size={10} />
               {t('browsers.statusWsOffline')}
             </span>
-          )}
+          ))}
           {!!endpoint.agent_url && endpoint.agent_protocol === 'http' && (
             <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
               HTTP Agent
             </span>
           )}
-          <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} />
+          <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} isDockerEndpoint={isDockerEndpoint} />
           {canRemove && (
             <button
               onClick={onRemove}

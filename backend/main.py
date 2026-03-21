@@ -95,11 +95,15 @@ async def lifespan(app: FastAPI):
         db_endpoints: set[str] = set()
         for inst in result.scalars().all():
             db_endpoints.add(inst.endpoint)
-            if inst.endpoint in pool.endpoints:
+            if isinstance(pool, LocalBrowserPool):
+                # Re-add registered agent endpoints that may have been dropped on restart
+                if inst.endpoint not in pool.endpoints:
+                    pool.add_endpoint(inst.endpoint)
                 pool.set_mode(inst.endpoint, inst.mode)
-                if isinstance(pool, LocalBrowserPool):
-                    pool.set_agent_url(inst.endpoint, inst.agent_url)
-                    pool.set_agent_protocol(inst.endpoint, inst.agent_protocol)
+                pool.set_agent_url(inst.endpoint, inst.agent_url)
+                pool.set_agent_protocol(inst.endpoint, inst.agent_protocol)
+            elif inst.endpoint in pool.endpoints:
+                pool.set_mode(inst.endpoint, inst.mode)
 
         # The single fallback endpoint (no AGENT_POOL_ENDPOINTS) defaults to cdp mode.
         # Agent registration writes a DB record which takes priority above.

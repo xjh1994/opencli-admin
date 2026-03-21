@@ -141,7 +141,7 @@ async def _collect_via_agent(
 
     items = data.get("items", [])
     logger.info("agent done | site=%s cmd=%s items=%d", site, command, len(items))
-    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url)
+    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url, chrome_mode=mode)
 
 
 async def _collect_via_ws_agent(
@@ -178,7 +178,7 @@ async def _collect_via_ws_agent(
 
     items = result.get("items", [])
     logger.info("WS agent done | site=%s cmd=%s items=%d", site, command, len(items))
-    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url)
+    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url, chrome_mode=mode)
 
 
 async def _check_bridge_ready(daemon_host: str, daemon_port: int) -> str | None:
@@ -209,36 +209,42 @@ async def _check_bridge_ready(daemon_host: str, daemon_port: int) -> str | None:
     return None
 
 
-async def _cleanup_cdp_tabs(cdp_endpoint: str) -> None:
-    """Close any navigated tabs left open in Chrome after a CDP collect.
+async def _snapshot_tab_ids(cdp_endpoint: str) -> set[str]:
+    """Return the set of tab IDs currently open in Chrome."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{cdp_endpoint}/json/list")
+            return {t["id"] for t in resp.json() if "id" in t}
+    except Exception:
+        return set()
 
-    Called after every CDP collect (success or failure) so stale tabs cannot
-    block the next CDP connection attempt.  Only pages with http/https URLs
-    are closed; chrome:// and extension pages are left untouched.
 
-    After closing navigated tabs, ensures at least one blank page target
-    remains so subsequent CDP connections always have an inspectable target.
+async def _cleanup_cdp_tabs(cdp_endpoint: str, pre_existing_ids: set[str]) -> None:
+    """Close only tabs opened by opencli during collection.
+
+    Compares current tab list against pre_existing_ids (snapshotted before the
+    collect run) and closes only the new ones.  This prevents closing the user's
+    personal Chrome tabs when connecting to a local (non-container) Chrome.
+
+    After closing new tabs, ensures at least one blank page target remains so
+    subsequent CDP connections always find an inspectable target.
     """
     import httpx
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.get(f"{cdp_endpoint}/json/list")
             tabs = resp.json()
-            remaining_pages = 0
+            remaining_pages = sum(1 for t in tabs if t.get("type") == "page")
             for tab in tabs:
-                url = tab.get("url", "")
-                if tab.get("type") == "page":
-                    if url.startswith(("http://", "https://")):
-                        tab_id = tab["id"]
-                        try:
-                            await client.get(f"{cdp_endpoint}/json/close/{tab_id}")
-                            logger.info("cleanup: closed tab %s url=%s", tab_id, url[:80])
-                        except Exception:
-                            pass
-                    else:
-                        remaining_pages += 1
-            # Ensure at least one blank page exists so the next CDP collect
-            # always finds an inspectable target to attach to.
+                tab_id = tab.get("id", "")
+                if tab.get("type") == "page" and tab_id not in pre_existing_ids:
+                    try:
+                        await client.get(f"{cdp_endpoint}/json/close/{tab_id}")
+                        logger.info("cleanup: closed new tab %s url=%s", tab_id, tab.get("url", "")[:80])
+                        remaining_pages -= 1
+                    except Exception:
+                        pass
             if remaining_pages == 0:
                 try:
                     await client.put(f"{cdp_endpoint}/json/new")
@@ -355,12 +361,16 @@ class OpenCLIChannel(AbstractChannel):
                 env["OPENCLI_CDP_ENDPOINT"] = cdp_endpoint
                 logger.info("opencli cdp | cmd=%s cdp=%s", " ".join(cmd), cdp_endpoint)
 
+            pre_tab_ids: set[str] = set()
+            if mode == "cdp":
+                pre_tab_ids = await _snapshot_tab_ids(cdp_endpoint)
+
             try:
                 returncode, stdout_text, stderr_text = await _run_opencli(cmd, env)
             except asyncio.TimeoutError:
                 logger.error("opencli timeout | cmd=%s", " ".join(cmd))
                 if mode == "cdp":
-                    await _cleanup_cdp_tabs(cdp_endpoint)
+                    await _cleanup_cdp_tabs(cdp_endpoint, pre_tab_ids)
                 return ChannelResult.fail("opencli command timed out after 120s")
             except FileNotFoundError:
                 logger.error("opencli binary not found: %s", opencli_bin)
@@ -368,11 +378,11 @@ class OpenCLIChannel(AbstractChannel):
             except Exception as exc:
                 logger.exception("opencli subprocess error | %s", exc)
                 if mode == "cdp":
-                    await _cleanup_cdp_tabs(cdp_endpoint)
+                    await _cleanup_cdp_tabs(cdp_endpoint, pre_tab_ids)
                 return ChannelResult.fail(f"Failed to run opencli: {exc}")
 
             if mode == "cdp":
-                await _cleanup_cdp_tabs(cdp_endpoint)
+                await _cleanup_cdp_tabs(cdp_endpoint, pre_tab_ids)
 
             if stderr_text:
                 logger.warning("opencli stderr | %s", stderr_text[:500])
@@ -393,7 +403,7 @@ class OpenCLIChannel(AbstractChannel):
             return ChannelResult.fail(f"Failed to parse opencli {output_format} output: {exc}")
 
         logger.info("opencli done | site=%s cmd=%s mode=%s items=%d", site, command, mode, len(items))
-        return ChannelResult.ok(items, site=site, command=command)
+        return ChannelResult.ok(items, site=site, command=command, chrome_mode=mode)
 
     async def validate_config(self, config: dict[str, Any]) -> list[str]:
         errors: list[str] = []
