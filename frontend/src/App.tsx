@@ -11,6 +11,7 @@ import AgentsPage from './pages/AgentsPage'
 import ProvidersPage from './pages/ProvidersPage'
 import NodesPage from './pages/NodesPage'
 import BrowsersPage from './pages/BrowsersPage'
+// TODO: merge BrowsersPage into NodesPage with tabs (see PLAN_collection_nodes.md)
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="agents" element={<AgentsPage />} />
           <Route path="providers" element={<ProvidersPage />} />
           <Route path="browsers" element={<BrowsersPage />} />
+          <Route path="nodes" element={<NodesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
