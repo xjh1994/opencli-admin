@@ -19,7 +19,7 @@
 #                      false → uses base image (~200 MB), connect to host Chrome via CDP
 #   HTTP_PROXY         HTTP proxy for agent → center (optional)
 #   HTTPS_PROXY        HTTPS proxy for agent → center (optional)
-#   IMAGE_TAG          Docker image tag (default: 0.3.2)
+#   IMAGE_TAG          Docker image tag (default: injected by center API)
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -31,7 +31,7 @@ CENTRAL_API_URL="${CENTRAL_API_URL:-__CENTRAL_API_URL__}"
 AGENT_REGISTER="${AGENT_REGISTER:-ws}"
 AGENT_PORT="${AGENT_PORT:-19823}"
 AGENT_LABEL="${AGENT_LABEL:-$(hostname)}"
-IMAGE_TAG="${IMAGE_TAG:-0.3.2}"
+IMAGE_TAG="${IMAGE_TAG:-__IMAGE_TAG__}"
 INSTALL_CHROME="${INSTALL_CHROME:-false}"
 INSTALL_MODE="${1:-docker}"
 

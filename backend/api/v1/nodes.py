@@ -349,14 +349,15 @@ async def get_install_script(request: Request) -> PlainTextResponse:
         if candidate.exists():
             content = candidate.read_text()
             content = content.replace("__CENTRAL_API_URL__", base_url)
+            content = content.replace("__IMAGE_TAG__", settings.image_tag)
             return PlainTextResponse(content, media_type="text/plain")
 
     # Inline fallback (Docker: only ./backend is mounted)
-    content = _install_script_template(base_url)
+    content = _install_script_template(base_url, settings.image_tag)
     return PlainTextResponse(content, media_type="text/plain")
 
 
-def _install_script_template(central_url: str) -> str:
+def _install_script_template(central_url: str, image_tag: str = "latest") -> str:
     return f'''#!/usr/bin/env bash
 # OpenCLI Agent — one-line install
 # Usage: curl -fsSL {central_url}/api/v1/nodes/install/agent.sh | bash
@@ -367,7 +368,7 @@ CENTRAL_API_URL="${{CENTRAL_API_URL:-{central_url}}}"
 AGENT_REGISTER="${{AGENT_REGISTER:-ws}}"
 AGENT_PORT="${{AGENT_PORT:-19823}}"
 AGENT_LABEL="${{AGENT_LABEL:-$(hostname)}}"
-IMAGE_TAG="${{IMAGE_TAG:-{settings.image_tag}}}"
+IMAGE_TAG="${{IMAGE_TAG:-{image_tag}}}"
 INSTALL_MODE="${{1:-docker}}"
 
 info() {{ printf "\\e[32m[INFO]\\e[0m  %s\\n" "$*"; }}
