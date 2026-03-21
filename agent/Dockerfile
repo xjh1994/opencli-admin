@@ -25,7 +25,7 @@ RUN if [ "$INSTALL_CHROME" = "true" ]; then \
 fi
 
 # Install opencli globally — available as 'opencli' on PATH
-ARG OPENCLI_VERSION=1.1.0
+ARG OPENCLI_VERSION=1.1.1
 RUN npm install -g @jackwener/opencli@${OPENCLI_VERSION} \
     && rm -rf /root/.npm
 

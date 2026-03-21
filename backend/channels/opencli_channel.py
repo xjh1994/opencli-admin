@@ -21,6 +21,38 @@ _DAEMON_PORT = 19825
 # Binary to invoke. Override with OPENCLI_BIN env var if needed.
 _OPENCLI_BIN = os.environ.get("OPENCLI_BIN", "opencli")
 
+# Cache: (bin, site, command) → frozenset of accepted --option names (excluding builtins)
+_help_cache: dict[tuple[str, str, str], frozenset[str]] = {}
+
+
+async def _get_named_options(bin_path: str, site: str, command: str) -> frozenset[str]:
+    """Return the set of --option names accepted by `opencli <site> <command>`.
+
+    Runs `--help` once per (bin, site, command) triple and caches the result.
+    Falls back to an empty set on any error so the caller can still try running.
+    """
+    import re
+    key = (bin_path, site, command)
+    if key in _help_cache:
+        return _help_cache[key]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            bin_path, site, command, "--help",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        text = stdout.decode(errors="replace")
+        # Extract every --flag name; strip built-ins that aren't user-facing options
+        names = frozenset(re.findall(r"--([a-zA-Z][a-zA-Z0-9-]*)", text)) - {
+            "format", "verbose", "help"
+        }
+    except Exception as exc:
+        logger.debug("could not fetch --help for %s %s: %s", site, command, exc)
+        names = frozenset()
+    _help_cache[key] = names
+    return names
+
 
 def _resolve_bin(mode: str) -> str:  # noqa: ARG001 — mode unused, kept for call-site compat
     return _OPENCLI_BIN
@@ -295,8 +327,25 @@ class OpenCLIChannel(AbstractChannel):
 
         chrome_endpoint: str | None = parameters.get("chrome_endpoint") or None
         cli_params = {k: v for k, v in parameters.items() if k != "chrome_endpoint"}
-        args: dict = {**config.get("args", {}), **cli_params}
+        raw_args: dict = {**config.get("args", {}), **cli_params}
         positional_args: list[str] = [str(v) for v in config.get("positional_args", [])]
+
+        # Resolve which keys in raw_args are valid named --options for this command.
+        # Any key not recognised by the binary is passed as a positional arg instead,
+        # so configs written for older opencli versions continue to work after upgrades
+        # where args like `query` became positional.
+        opencli_bin_early = _resolve_bin("cdp")  # mode doesn't affect option names
+        named_options = await _get_named_options(opencli_bin_early, site, command)
+        args: dict = {}
+        extra_positional: list[str] = []
+        for k, v in raw_args.items():
+            if named_options and k not in named_options:
+                logger.debug("arg %r not a named option for %s/%s — passing as positional", k, site, command)
+                extra_positional.append(str(v))
+            else:
+                args[k] = v
+        # extra_positional goes first (before explicitly configured positional_args)
+        positional_args = extra_positional + positional_args
 
         env = os.environ.copy()
 

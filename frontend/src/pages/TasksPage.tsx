@@ -71,32 +71,49 @@ function RunEventTimeline({ taskId, runId }: { taskId: string; runId: string }) 
 
   return (
     <div className="px-6 py-3 space-y-1.5 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
-      {evts.map((e) => (
-        <div key={e.id} className="flex items-start gap-3 text-xs">
-          {/* colored dot + step label */}
-          <div className="flex items-center gap-1.5 w-24 shrink-0 pt-0.5">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${levelDot(e.level)}`} />
-            <span className="text-gray-500 dark:text-gray-400 truncate">
-              {STEP_LABELS[e.step] ?? e.step}
-            </span>
+      {evts.map((e) => {
+        const command = e.detail?.command as string | undefined
+        const metadata = e.detail?.metadata as Record<string, unknown> | undefined
+        const nodeUrl = (e.detail?.node_url ?? metadata?.node_url) as string | undefined
+        const chromeMode = (e.detail?.chrome_mode ?? metadata?.chrome_mode) as string | undefined
+        return (
+          <div key={e.id} className="flex items-start gap-3 text-xs">
+            {/* colored dot + step label */}
+            <div className="flex items-center gap-1.5 w-24 shrink-0 pt-0.5">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${levelDot(e.level)}`} />
+              <span className="text-gray-500 dark:text-gray-400 truncate">
+                {STEP_LABELS[e.step] ?? e.step}
+              </span>
+            </div>
+            {/* message + detail */}
+            <div className={`flex-1 min-w-0 leading-relaxed ${
+              e.level === 'error'   ? 'text-red-600 dark:text-red-400' :
+              e.level === 'warning' ? 'text-yellow-600 dark:text-yellow-400' :
+              'text-gray-700 dark:text-gray-300'
+            }`}>
+              <span>{e.message}</span>
+              {command && (
+                <div className="mt-1 font-mono text-[11px] bg-gray-900 dark:bg-gray-950 text-green-400 rounded px-2 py-1 break-all">
+                  $ {command}
+                </div>
+              )}
+              {(nodeUrl || chromeMode) && (
+                <div className="mt-0.5 flex items-center gap-2 text-gray-400 dark:text-gray-500">
+                  {nodeUrl && <span>节点: {nodeUrl}</span>}
+                  {chromeMode && <span>Chrome: {chromeMode}</span>}
+                </div>
+              )}
+            </div>
+            {/* timestamp + elapsed */}
+            <div className="flex items-center gap-2 shrink-0 text-gray-400 font-mono">
+              {e.elapsed_ms != null && (
+                <span className="text-gray-400">{formatElapsed(e.elapsed_ms)}</span>
+              )}
+              <span>{formatTime(e.created_at)}</span>
+            </div>
           </div>
-          {/* message */}
-          <span className={`flex-1 leading-relaxed ${
-            e.level === 'error'   ? 'text-red-600 dark:text-red-400' :
-            e.level === 'warning' ? 'text-yellow-600 dark:text-yellow-400' :
-            'text-gray-700 dark:text-gray-300'
-          }`}>
-            {e.message}
-          </span>
-          {/* timestamp + elapsed */}
-          <div className="flex items-center gap-2 shrink-0 text-gray-400 font-mono">
-            {e.elapsed_ms != null && (
-              <span className="text-gray-400">{formatElapsed(e.elapsed_ms)}</span>
-            )}
-            <span>{formatTime(e.created_at)}</span>
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

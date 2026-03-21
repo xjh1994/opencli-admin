@@ -60,10 +60,33 @@ async def run_pipeline(
     step1_start = datetime.now(timezone.utc)
 
     if run_id:
+        collect_detail: dict = {"channel_type": source.channel_type, "params": params}
+        if source.channel_type == "opencli":
+            from backend.channels.opencli_channel import _get_named_options, _OPENCLI_BIN
+            cfg = source.channel_config
+            _site = cfg.get("site", "")
+            _cmd = cfg.get("command", "")
+            _raw_args = {**cfg.get("args", {}), **{k: v for k, v in params.items() if k != "chrome_endpoint"}}
+            _pos = [str(v) for v in cfg.get("positional_args", [])]
+            _fmt = cfg.get("format", "json")
+            # Apply same positional-resolution logic as the channel
+            _named_opts = await _get_named_options(_OPENCLI_BIN, _site, _cmd)
+            _named_args, _extra_pos = {}, []
+            for k, v in _raw_args.items():
+                if _named_opts and k not in _named_opts:
+                    _extra_pos.append(str(v))
+                else:
+                    _named_args[k] = v
+            _all_pos = _extra_pos + _pos
+            _parts = ["opencli", _site, _cmd] + _all_pos
+            for k, v in _named_args.items():
+                _parts += [f"--{k}", str(v)]
+            _parts += ["-f", _fmt]
+            collect_detail["command"] = " ".join(_parts)
         await events.emit(
             run_id, "collect",
             f"开始采集 | 渠道={source.channel_type} 数据源={source.name}",
-            detail={"channel_type": source.channel_type, "params": params},
+            detail=collect_detail,
         )
 
     try:
