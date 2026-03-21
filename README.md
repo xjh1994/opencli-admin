@@ -138,8 +138,6 @@ cp .env.example .env
     --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 \
     --no-first-run --no-default-browser-check &
 
-# Bridge 模式额外需要启动 daemon
-node $(npm root -g)/@jackwener/opencli/dist/daemon.js &
 ```
 
 ```bash
