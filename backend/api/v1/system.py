@@ -11,12 +11,23 @@ from backend.schemas.common import ApiResponse
 
 router = APIRouter(prefix="/system", tags=["system"])
 
-_ENV_PATH = os.environ.get("ENV_FILE_PATH", "/app/.env")
+def _resolve_env_path() -> str:
+    if explicit := os.environ.get("ENV_FILE_PATH"):
+        return explicit
+    for candidate in [
+        "/app/.env",
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"),
+    ]:
+        if os.path.exists(candidate):
+            return candidate
+    # Fallback: project root .env (will be created if missing)
+    return os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")
 
 
 def _update_env_file(key: str, value: str) -> None:
+    path = _resolve_env_path()
     try:
-        with open(_ENV_PATH) as f:
+        with open(path) as f:
             content = f.read()
     except FileNotFoundError:
         content = ""
@@ -26,7 +37,7 @@ def _update_env_file(key: str, value: str) -> None:
         content = re.sub(pattern, new_line, content, flags=re.MULTILINE)
     else:
         content = content.rstrip("\n") + f"\n{new_line}\n"
-    with open(_ENV_PATH, "w") as f:
+    with open(path, "w") as f:
         f.write(content)
 
 
