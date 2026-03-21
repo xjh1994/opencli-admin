@@ -453,7 +453,7 @@ function SiteDropdown({ boundSites, onSelect, isPending }: SiteDropdownProps) {
 
 // ── Instance card ─────────────────────────────────────────────────────────────
 
-function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSuccess: () => void }) {
+function ModeToggle({ endpoint, onSuccess, isDockerEndpoint }: { endpoint: ChromeEndpoint; onSuccess: () => void; isDockerEndpoint: boolean }) {
   const { t } = useTranslation()
   const [optimisticMode, setOptimisticMode] = useState<'bridge' | 'cdp' | null>(null)
   const mode = optimisticMode ?? endpoint.mode
@@ -465,26 +465,35 @@ function ModeToggle({ endpoint, onSuccess }: { endpoint: ChromeEndpoint; onSucce
     onError: () => setOptimisticMode(null),
   })
 
+  const showCdpWarning = !isDockerEndpoint && mode === 'cdp'
+
   return (
-    <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
-      {(['bridge', 'cdp']).map((m) => (
-        <button
-          key={m}
-          title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
-          disabled={mutation.isPending}
-          onClick={() => mode !== m && mutation.mutate(m as 'bridge' | 'cdp')}
-          className={[
-            'px-2.5 py-1 transition-colors',
-            mode === m
-              ? m === 'bridge'
-                ? 'bg-blue-600 text-white'
-                : 'bg-amber-500 text-white'
-              : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
-          ].join(' ')}
-        >
-          {t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
-        </button>
-      ))}
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-xs font-medium">
+        {(['bridge', 'cdp']).map((m) => (
+          <button
+            key={m}
+            title={t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}Hint`)}
+            disabled={mutation.isPending}
+            onClick={() => mode !== m && mutation.mutate(m as 'bridge' | 'cdp')}
+            className={[
+              'px-2.5 py-1 transition-colors',
+              mode === m
+                ? m === 'bridge'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-amber-500 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700',
+            ].join(' ')}
+          >
+            {t(`workers.mode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
+          </button>
+        ))}
+      </div>
+      {showCdpWarning && (
+        <span className="text-xs text-amber-600 dark:text-amber-400 whitespace-nowrap">
+          ⚠ CDP 会启动新 Chrome，本地请用 Bridge
+        </span>
+      )}
     </div>
   )
 }
@@ -565,7 +574,7 @@ function InstanceCard({
               HTTP Agent
             </span>
           )}
-          <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} />
+          <ModeToggle endpoint={endpoint} onSuccess={onModeChanged} isDockerEndpoint={isDockerEndpoint} />
           {canRemove && (
             <button
               onClick={onRemove}
