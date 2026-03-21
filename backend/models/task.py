@@ -60,6 +60,8 @@ class TaskRun(TimestampMixin):
     records_collected: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_detail: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # URL of the edge node that executed this run (set when dispatched to a remote agent)
+    node_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     # Relationship
     task: Mapped["CollectionTask"] = relationship("CollectionTask", back_populates="runs")

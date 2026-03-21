@@ -141,7 +141,7 @@ async def _collect_via_agent(
 
     items = data.get("items", [])
     logger.info("agent done | site=%s cmd=%s items=%d", site, command, len(items))
-    return ChannelResult.ok(items, site=site, command=command)
+    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url)
 
 
 async def _collect_via_ws_agent(
@@ -178,7 +178,7 @@ async def _collect_via_ws_agent(
 
     items = result.get("items", [])
     logger.info("WS agent done | site=%s cmd=%s items=%d", site, command, len(items))
-    return ChannelResult.ok(items, site=site, command=command)
+    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url)
 
 
 async def _cleanup_cdp_tabs(cdp_endpoint: str) -> None:

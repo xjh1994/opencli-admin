@@ -190,9 +190,18 @@ export interface SystemConfig {
   task_executor: 'local' | 'celery'
 }
 
+export interface NodeStats {
+  total: number
+  success: number
+  failed: number
+  success_rate: number
+  records_collected: number
+}
+
 export interface DashboardStats {
   sources: { total: number; enabled: number; disabled: number }
   tasks: { total: number; running: number; failed: number }
+  runs: { total: number; success: number; failed: number; success_rate: number }
   records: { total: number; ai_processed: number }
   recent_runs: Array<{
     id: string

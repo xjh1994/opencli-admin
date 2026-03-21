@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { getDashboardStats } from '../api/endpoints'
@@ -7,7 +8,73 @@ import Card from '../components/Card'
 import StatusBadge from '../components/StatusBadge'
 import PageHeader from '../components/PageHeader'
 import { formatInTimeZone } from 'date-fns-tz'
-import { Database, Activity, FileText, Zap } from 'lucide-react'
+import { Database, Activity, FileText, Zap, CheckCircle, XCircle } from 'lucide-react'
+
+// ── Time range ────────────────────────────────────────────────────────────────
+
+type RangeKey = 'all' | 'today' | 'yesterday' | '7d' | '30d' | 'custom'
+
+const RANGE_LABELS: Record<RangeKey, string> = {
+  all: '全部',
+  today: '今天',
+  yesterday: '昨天',
+  '7d': '7 天内',
+  '30d': '30 天内',
+  custom: '自定义',
+}
+
+function TimeRangeBar({
+  range,
+  customStart,
+  customEnd,
+  onChange,
+  onCustomChange,
+}: {
+  range: RangeKey
+  customStart: string
+  customEnd: string
+  onChange: (r: RangeKey) => void
+  onCustomChange: (start: string, end: string) => void
+}) {
+  const keys: RangeKey[] = ['all', 'today', 'yesterday', '7d', '30d', 'custom']
+  return (
+    <div className="flex flex-wrap items-center gap-2 mb-5">
+      {keys.map((k) => (
+        <button
+          key={k}
+          onClick={() => onChange(k)}
+          className={[
+            'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+            range === k
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
+          ].join(' ')}
+        >
+          {RANGE_LABELS[k]}
+        </button>
+      ))}
+      {range === 'custom' && (
+        <div className="flex items-center gap-2">
+          <input
+            type="datetime-local"
+            value={customStart}
+            onChange={(e) => onCustomChange(e.target.value, customEnd)}
+            className="text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-700 dark:text-white"
+          />
+          <span className="text-xs text-gray-400">—</span>
+          <input
+            type="datetime-local"
+            value={customEnd}
+            onChange={(e) => onCustomChange(customStart, e.target.value)}
+            className="text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-700 dark:text-white"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Stat card ─────────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
@@ -17,7 +84,7 @@ function StatCard({
   color,
 }: {
   label: string
-  value: number
+  value: number | string
   sub?: string
   icon: React.ElementType
   color: string
@@ -38,12 +105,28 @@ function StatCard({
   )
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const { t } = useTranslation()
+  const [range, setRange] = useState<RangeKey>('all')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+
+  const queryParams = (() => {
+    if (range === 'custom') {
+      return {
+        range,
+        start: customStart ? new Date(customStart).toISOString() : undefined,
+        end: customEnd ? new Date(customEnd).toISOString() : undefined,
+      }
+    }
+    return { range }
+  })()
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: getDashboardStats,
+    queryKey: ['dashboard-stats', range, customStart, customEnd],
+    queryFn: () => getDashboardStats(queryParams),
     refetchInterval: 15_000,
   })
 
@@ -51,11 +134,22 @@ export default function DashboardPage() {
   if (error) return <ErrorAlert error={error as Error} onRetry={refetch} />
   if (!data) return null
 
+  const runs = data.runs ?? { total: 0, success: 0, failed: 0, success_rate: 0 }
+
   return (
     <div>
       <PageHeader title={t('dashboard.title')} description={t('dashboard.description')} />
 
-      <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4">
+      <TimeRangeBar
+        range={range}
+        customStart={customStart}
+        customEnd={customEnd}
+        onChange={setRange}
+        onCustomChange={(s, e) => { setCustomStart(s); setCustomEnd(e) }}
+      />
+
+      {/* Row 1: Sources + Tasks (global config, not time-filtered) */}
+      <div className="grid grid-cols-2 gap-4 mb-4 lg:grid-cols-4">
         <StatCard
           label={t('dashboard.totalSources')}
           value={data.sources.total}
@@ -83,6 +177,31 @@ export default function DashboardPage() {
           sub={t('dashboard.aiProcessed', { count: data.records.ai_processed })}
           icon={FileText}
           color="bg-purple-500"
+        />
+      </div>
+
+      {/* Row 2: Run stats (time-filtered) */}
+      <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-3">
+        <StatCard
+          label="成功执行次数"
+          value={runs.success}
+          sub={`共 ${runs.total} 次执行`}
+          icon={CheckCircle}
+          color="bg-emerald-500"
+        />
+        <StatCard
+          label="失败执行次数"
+          value={runs.failed}
+          sub={`共 ${runs.total} 次执行`}
+          icon={XCircle}
+          color="bg-orange-500"
+        />
+        <StatCard
+          label="成功率"
+          value={`${runs.success_rate}%`}
+          sub={runs.total > 0 ? `${runs.success} / ${runs.total}` : '暂无数据'}
+          icon={Activity}
+          color="bg-sky-500"
         />
       </div>
 

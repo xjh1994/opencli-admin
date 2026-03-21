@@ -8,12 +8,13 @@ reverse channel) register here and have their online/offline history tracked.
 import asyncio
 import logging
 import socket
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from pathlib import Path
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -199,6 +200,56 @@ async def list_nodes(db: AsyncSession = Depends(get_db)) -> ApiResponse:
             data = data.model_copy(update={"status": "online"})
         out.append(data)
     return ApiResponse.ok(out)
+
+
+@router.get("/{node_id}/stats", response_model=ApiResponse[dict])
+async def get_node_stats(
+    node_id: str,
+    range: str = Query("7d", description="Time range: all | today | yesterday | 7d | 30d | custom"),
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse:
+    """Return task run statistics for a specific edge node."""
+    from backend.models.edge_node import EdgeNode
+    from backend.models.task import TaskRun
+    from backend.api.v1.dashboard import _parse_time_range
+
+    result = await db.execute(select(EdgeNode).where(EdgeNode.id == node_id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    since, until = _parse_time_range(range, start, end)
+
+    base_q = select(func.count()).select_from(TaskRun).where(TaskRun.node_url == node.url)
+    if since:
+        base_q = base_q.where(TaskRun.created_at >= since)
+    if until:
+        base_q = base_q.where(TaskRun.created_at < until)
+
+    total = (await db.execute(base_q)).scalar_one()
+    success = (await db.execute(base_q.where(TaskRun.status == "completed"))).scalar_one()
+    failed = (await db.execute(base_q.where(TaskRun.status == "failed"))).scalar_one()
+
+    # Sum of records collected
+    rec_q = select(func.coalesce(func.sum(TaskRun.records_collected), 0)).where(
+        TaskRun.node_url == node.url
+    )
+    if since:
+        rec_q = rec_q.where(TaskRun.created_at >= since)
+    if until:
+        rec_q = rec_q.where(TaskRun.created_at < until)
+    records_collected = (await db.execute(rec_q)).scalar_one() or 0
+
+    finished = success + failed
+    return ApiResponse.ok({
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "success_rate": round(success / finished * 100, 1) if finished > 0 else 0.0,
+        "records_collected": int(records_collected),
+    })
 
 
 @router.get("/{node_id}/events", response_model=ApiResponse[list[EdgeNodeEventRead]])

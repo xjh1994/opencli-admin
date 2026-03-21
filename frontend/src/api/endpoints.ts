@@ -12,6 +12,7 @@ import type {
   DashboardStats,
   EdgeNode,
   EdgeNodeEvent,
+  NodeStats,
   NotificationLog,
   NotificationRule,
   SystemConfig,
@@ -20,8 +21,8 @@ import type {
 } from './types'
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
-export const getDashboardStats = () =>
-  apiClient.get<ApiResponse<DashboardStats>>('/dashboard/stats').then((r) => r.data.data)
+export const getDashboardStats = (params?: { range?: string; start?: string; end?: string }) =>
+  apiClient.get<ApiResponse<DashboardStats>>('/dashboard/stats', { params }).then((r) => r.data.data)
 
 // ── Sources ────────────────────────────────────────────────────────────────────
 export const listSources = (params?: { page?: number; limit?: number; enabled?: boolean }) =>
@@ -207,6 +208,9 @@ export const listNodes = () =>
 
 export const getNodeEvents = (id: string) =>
   apiClient.get<ApiResponse<EdgeNodeEvent[]>>(`/nodes/${id}/events`).then((r) => r.data)
+
+export const getNodeStats = (id: string, params?: { range?: string; start?: string; end?: string }) =>
+  apiClient.get<ApiResponse<NodeStats>>(`/nodes/${id}/stats`, { params }).then((r) => r.data.data)
 
 export const deleteNode = (id: string) =>
   apiClient.delete<ApiResponse<null>>(`/nodes/${id}`).then((r) => r.data)
