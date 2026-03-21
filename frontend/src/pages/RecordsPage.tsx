@@ -3,12 +3,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { listRecords, batchDeleteRecords, clearAllRecords } from '../api/endpoints'
-import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
 import StatusBadge from '../components/StatusBadge'
 import PageHeader from '../components/PageHeader'
+import { TableSkeleton } from '../components/SkeletonLoader'
+import EmptyState from '../components/EmptyState'
+import ConfirmDialog from '../components/ConfirmDialog'
+import Pagination from '../components/Pagination'
 import { formatInTimeZone } from 'date-fns-tz'
+import { FileText } from 'lucide-react'
 import type { CollectedRecord } from '../api/types'
 
 function JsonViewer({ data }: { data: Record<string, unknown> }) {
@@ -38,7 +42,7 @@ export default function RecordsPage() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [confirmClear, setConfirmClear] = useState(false)
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
 
   const STATUS_FILTERS = [
     { value: '',             label: t('records.filterAll') },
@@ -66,11 +70,16 @@ export default function RecordsPage() {
 
   const clearAll = useMutation({
     mutationFn: () => clearAllRecords(),
-    onSuccess: () => { invalidate(); setConfirmClear(false); toast.success('已清空') },
+    onSuccess: () => { invalidate(); setConfirmClearOpen(false); toast.success('已清空') },
     onError: (err) => toast.error(err instanceof Error ? err.message : '操作失败'),
   })
 
-  if (isLoading) return <PageLoader />
+  if (isLoading) return (
+    <div>
+      <PageHeader title={t('records.title')} description={t('records.description')} />
+      <Card padding={false}><TableSkeleton rows={8} /></Card>
+    </div>
+  )
   if (error) return <ErrorAlert error={error as Error} onRetry={refetch} />
 
   const records: CollectedRecord[] = data?.data ?? []
@@ -129,31 +138,12 @@ export default function RecordsPage() {
               {batchDelete.isPending ? '删除中…' : `删除已选 (${selected.size})`}
             </button>
           )}
-          {!confirmClear ? (
-            <button
-              onClick={() => setConfirmClear(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-            >
-              一键清空
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-red-600">确认清空全部？</span>
-              <button
-                onClick={() => clearAll.mutate()}
-                disabled={clearAll.isPending}
-                className="px-2 py-1 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {clearAll.isPending ? '清空中…' : '确认'}
-              </button>
-              <button
-                onClick={() => setConfirmClear(false)}
-                className="px-2 py-1 rounded text-xs font-medium border border-gray-200 hover:bg-gray-50"
-              >
-                取消
-              </button>
-            </div>
-          )}
+          <button
+            onClick={() => setConfirmClearOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+          >
+            一键清空
+          </button>
         </div>
       </div>
 
@@ -180,8 +170,12 @@ export default function RecordsPage() {
           <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
             {records.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-gray-400">
-                  {t('records.noRecords')}
+                <td colSpan={6}>
+                  <EmptyState
+                    icon={FileText}
+                    title="暂无采集记录"
+                    description="触发一次采集任务后，数据将在此展示"
+                  />
                 </td>
               </tr>
             ) : records.map((r) => (
@@ -255,20 +249,25 @@ export default function RecordsPage() {
         </table>
 
         {meta && (meta.pages > 1 || meta.total > 0) && (
-          <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-sm">
-            <span className="text-gray-500">{t('records.totalRecords', { count: meta.total })}</span>
-            {meta.pages > 1 && (
-              <div className="flex gap-2">
-                <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
-                  className="px-3 py-1 border rounded disabled:opacity-50">{t('common.prev')}</button>
-                <span className="px-3 py-1">{t('common.pageOf', { page, pages: meta.pages })}</span>
-                <button disabled={page >= meta.pages} onClick={() => setPage((p) => p + 1)}
-                  className="px-3 py-1 border rounded disabled:opacity-50">{t('common.next')}</button>
-              </div>
-            )}
-          </div>
+          <Pagination
+            page={page}
+            pages={meta.pages}
+            total={meta.total}
+            limit={20}
+            onChange={setPage}
+          />
         )}
       </Card>
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        onOpenChange={setConfirmClearOpen}
+        title="确认清空全部记录？"
+        description="此操作不可撤销，所有采集记录将被永久删除。"
+        confirmLabel={clearAll.isPending ? '清空中…' : '确认清空'}
+        variant="destructive"
+        onConfirm={() => clearAll.mutate()}
+      />
     </div>
   )
 }

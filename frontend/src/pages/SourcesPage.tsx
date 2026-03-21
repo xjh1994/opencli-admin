@@ -4,14 +4,17 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool, listBrowserBindings, getSystemConfig, getWsAgentStatus } from '../api/endpoints'
 import type { DataSource } from '../api/types'
-import { PageLoader } from '../components/LoadingSpinner'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
 import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import PageHeader from '../components/PageHeader'
 import ChannelConfigForm, { type ChannelType, PRESET_DEFAULT, SITE_LABELS, COMMANDS_BY_SITE } from '../components/ChannelConfigForm'
-import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Pencil } from 'lucide-react'
+import { TableSkeleton } from '../components/SkeletonLoader'
+import EmptyState from '../components/EmptyState'
+import ConfirmDialog from '../components/ConfirmDialog'
+import Pagination from '../components/Pagination'
+import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Pencil, Database } from 'lucide-react'
 import { formatInTimeZone } from 'date-fns-tz'
 
 /** Derive noVNC port from CDP URL using chrome-N hostname convention. */
@@ -460,6 +463,7 @@ export default function SourcesPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [editSource, setEditSource] = useState<DataSource | null>(null)
   const [triggerSource, setTriggerSource] = useState<DataSource | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DataSource | null>(null)
   const [page, setPage] = useState(1)
   const qc = useQueryClient()
 
@@ -517,7 +521,23 @@ export default function SourcesPage() {
     },
   })
 
-  if (isLoading) return <PageLoader />
+  if (isLoading) return (
+    <div>
+      <PageHeader
+        title={t('sources.title')}
+        description={t('sources.description')}
+        action={
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+          >
+            <Plus size={16} /> {t('sources.addSource')}
+          </button>
+        }
+      />
+      <Card padding={false}><TableSkeleton rows={6} /></Card>
+    </div>
+  )
   if (error) return <ErrorAlert error={error as Error} onRetry={refetch} />
 
   const sources = data?.data ?? []
@@ -543,6 +563,14 @@ export default function SourcesPage() {
           data={sources}
           keyFn={(s) => s.id}
           emptyMessage={t('sources.noSources')}
+          emptyComponent={
+            <EmptyState
+              icon={Database}
+              title="暂无数据源"
+              description="点击「新建数据源」开始配置第一个采集渠道"
+              action={{ label: '新建数据源', onClick: () => setShowAdd(true) }}
+            />
+          }
           columns={[
             {
               key: 'name',
@@ -621,9 +649,7 @@ export default function SourcesPage() {
                     <Pencil size={12} /> 编辑
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(t('sources.confirmDelete', { name: s.name }))) deleteMut.mutate(s.id)
-                    }}
+                    onClick={() => setDeleteTarget(s)}
                     className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
                   >
                     <Trash2 size={12} /> 删除
@@ -634,17 +660,14 @@ export default function SourcesPage() {
           ]}
         />
 
-        {meta && meta.pages > 1 && (
-          <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-sm">
-            <span className="text-gray-500">{t('sources.totalSources', { count: meta.total })}</span>
-            <div className="flex gap-2">
-              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
-                className="px-3 py-1 border rounded disabled:opacity-50">{t('common.prev')}</button>
-              <span className="px-3 py-1">{t('common.pageOf', { page, pages: meta.pages })}</span>
-              <button disabled={page >= meta.pages} onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1 border rounded disabled:opacity-50">{t('common.next')}</button>
-            </div>
-          </div>
+        {meta && (meta.pages > 1 || meta.total > 0) && (
+          <Pagination
+            page={page}
+            pages={meta.pages}
+            total={meta.total}
+            limit={20}
+            onChange={setPage}
+          />
         )}
       </Card>
 
@@ -673,6 +696,21 @@ export default function SourcesPage() {
           }
         />
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title={`确认删除「${deleteTarget?.name ?? ''}」？`}
+        description="此操作不可撤销，数据源将被永久删除。"
+        confirmLabel="确认删除"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMut.mutate(deleteTarget.id)
+            setDeleteTarget(null)
+          }
+        }}
+      />
     </div>
   )
 }

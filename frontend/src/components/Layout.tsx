@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import ErrorBoundary from './ErrorBoundary'
 import {
@@ -24,7 +24,17 @@ import { clsx } from 'clsx'
 export default function Layout() {
   const { t, i18n } = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
-  const [dark, setDark] = useState(false)
+  const [dark, setDark] = useState(() => {
+    return localStorage.getItem('theme') === 'dark'
+  })
+
+  useEffect(() => {
+    if (dark) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
 
   const NAV_ITEMS = [
     { to: '/dashboard',      label: t('nav.dashboard'),     icon: LayoutDashboard },
@@ -40,8 +50,16 @@ export default function Layout() {
   ]
 
   const toggleDark = () => {
-    setDark((d) => !d)
-    document.documentElement.classList.toggle('dark')
+    setDark((prev) => {
+      const next = !prev
+      localStorage.setItem('theme', next ? 'dark' : 'light')
+      if (next) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+      return next
+    })
   }
 
   const toggleLang = () => {

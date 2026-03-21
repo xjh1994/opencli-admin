@@ -10,9 +10,10 @@ interface Props<T> {
   data: T[]
   keyFn: (row: T) => string
   emptyMessage?: string
+  emptyComponent?: React.ReactNode
 }
 
-export default function DataTable<T>({ columns, data, keyFn, emptyMessage = 'No data' }: Props<T>) {
+export default function DataTable<T>({ columns, data, keyFn, emptyMessage = 'No data', emptyComponent }: Props<T>) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
@@ -32,11 +33,10 @@ export default function DataTable<T>({ columns, data, keyFn, emptyMessage = 'No 
         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
           {data.length === 0 ? (
             <tr>
-              <td
-                colSpan={columns.length}
-                className="px-4 py-8 text-center text-gray-400"
-              >
-                {emptyMessage}
+              <td colSpan={columns.length}>
+                {emptyComponent ?? (
+                  <div className="px-4 py-8 text-center text-gray-400">{emptyMessage}</div>
+                )}
               </td>
             </tr>
           ) : (
