@@ -43,6 +43,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 from contextlib import asynccontextmanager
@@ -69,6 +70,9 @@ _AGENT_ADVERTISE_URL = os.environ.get("AGENT_ADVERTISE_URL", "")
 _AGENT_MODE = os.environ.get("AGENT_MODE", "cdp")
 # Deployment/startup type reported to center: "docker" (running in container) | "shell" (native process)
 _AGENT_DEPLOY_TYPE = os.environ.get("AGENT_DEPLOY_TYPE", "docker")
+# True when the image was built with INSTALL_CHROME=true (Chrome bundled inside container).
+# False → Chrome runs on the host; localhost must be remapped to host.docker.internal.
+_AGENT_HAS_CHROME = os.environ.get("AGENT_HAS_CHROME", "false").lower() == "true"
 _AGENT_LABEL = os.environ.get("AGENT_LABEL", socket.gethostname())
 # Registration mode:
 #   http — LAN mode: agent POSTs its URL to center, center calls back via HTTP (default)
@@ -368,11 +372,24 @@ async def collect(req: CollectRequest) -> dict:
     env = os.environ.copy()
     if mode == "bridge":
         hostname = urlparse(cdp_ep).hostname or "localhost"
+        # When running in a Docker agent WITHOUT bundled Chrome, localhost refers
+        # to the container itself — remap to host.docker.internal so opencli
+        # reaches the Chrome bridge daemon on the host machine.
+        # Agents built with INSTALL_CHROME=true have their own Chrome and should
+        # keep localhost as-is.
+        if (_AGENT_DEPLOY_TYPE == "docker"
+                and not _AGENT_HAS_CHROME
+                and hostname in ("localhost", "127.0.0.1", "::1")):
+            hostname = "host.docker.internal"
         env.pop("OPENCLI_CDP_ENDPOINT", None)
         env["OPENCLI_DAEMON_HOST"] = hostname
         env["OPENCLI_DAEMON_PORT"] = str(_DAEMON_PORT)
         logger.info("bridge | cmd=%s daemon=%s:%s", " ".join(cmd), hostname, _DAEMON_PORT)
     else:
+        # Same logic for CDP: remap localhost to host.docker.internal only when
+        # running in Docker without bundled Chrome.
+        if _AGENT_DEPLOY_TYPE == "docker" and not _AGENT_HAS_CHROME:
+            cdp_ep = re.sub(r"(localhost|127\.0\.0\.1)", "host.docker.internal", cdp_ep)
         env["OPENCLI_CDP_ENDPOINT"] = cdp_ep
         logger.info("cdp | cmd=%s cdp=%s", " ".join(cmd), cdp_ep)
 

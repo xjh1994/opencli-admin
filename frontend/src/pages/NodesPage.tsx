@@ -72,56 +72,46 @@ const inputCls =
 
 // ── Install Wizard Modal ──────────────────────────────────────────────────────
 
-const AGENT_IMAGE_TAG = '0.3.4'
-
 type InstallMethod = 'docker' | 'shell'
 type RegisterMode = 'ws' | 'http'
 type AgentMode = 'bridge' | 'cdp'
 type DockerNetwork = 'bridge' | 'host'
-type ShellDeployType = 'docker' | 'python'
-
-function InstallWizardModal({ onClose }: { onClose: () => void }) {
+function InstallWizardModal({ onClose, agentImageTag }: { onClose: () => void; agentImageTag: string }) {
   const [method, setMethod] = useState<InstallMethod>('docker')
   const [regMode, setRegMode] = useState<RegisterMode>('ws')
   const [agentMode, setAgentMode] = useState<AgentMode>('bridge')
   const [dockerNetwork, setDockerNetwork] = useState<DockerNetwork>('bridge')
   const [installChrome, setInstallChrome] = useState(false)
-  const [shellDeployType, setShellDeployType] = useState<ShellDeployType>('docker')
   const [copied, setCopied] = useState(false)
 
   const origin = window.location.origin
-  const imageTag = installChrome ? `${AGENT_IMAGE_TAG}-chrome` : AGENT_IMAGE_TAG
+  const imageTag = installChrome ? `${agentImageTag}-chrome` : agentImageTag
 
   const cmd = (() => {
-    if (method === 'docker') {
-      const useHost = dockerNetwork === 'host'
-      const lines = [
-        'docker run -d \\',
-        '  --name opencli-agent \\',
-        '  --restart unless-stopped \\',
-      ]
-      if (useHost) {
-        lines.push('  --network host \\')
-      } else {
-        lines.push('  --add-host=host.docker.internal:host-gateway \\')
-      }
-      lines.push(`  -e CENTRAL_API_URL=${origin} \\`)
-      lines.push(`  -e AGENT_REGISTER=${regMode} \\`)
-      lines.push(`  -e AGENT_MODE=${agentMode} \\`)
-      lines.push('  -e AGENT_DEPLOY_TYPE=docker \\')
-      if (!useHost) {
-        lines.push('  -p 19823:19823 \\')
-      }
-      lines.push(`  xjh1994/opencli-admin-agent:${imageTag}`)
-      return lines.join('\n')
-    }
-    if (shellDeployType === 'docker') {
+    if (method === 'shell') {
       const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode}`
-      const chromeFlag = installChrome ? ' docker --install-chrome' : ' docker'
-      return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | \\\n  ${envPrefix} bash -s --${chromeFlag}`
+      return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | \\\n  ${envPrefix} bash -s -- python`
     }
-    const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode}`
-    return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | \\\n  ${envPrefix} bash -s -- python`
+    const useHost = dockerNetwork === 'host'
+    const lines = [
+      'docker run -d \\',
+      '  --name opencli-agent \\',
+      '  --restart unless-stopped \\',
+    ]
+    if (useHost) {
+      lines.push('  --network host \\')
+    } else {
+      lines.push('  --add-host=host.docker.internal:host-gateway \\')
+    }
+    lines.push(`  -e CENTRAL_API_URL=${origin} \\`)
+    lines.push(`  -e AGENT_REGISTER=${regMode} \\`)
+    lines.push(`  -e AGENT_MODE=${agentMode} \\`)
+    lines.push('  -e AGENT_DEPLOY_TYPE=docker \\')
+    if (!useHost) {
+      lines.push('  -p 19823:19823 \\')
+    }
+    lines.push(`  xjh1994/opencli-admin-agent:${imageTag}`)
+    return lines.join('\n')
   })()
 
   const regModeHint: Record<RegisterMode, string> = {
@@ -175,15 +165,6 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="p-5 space-y-4">
-          {method === 'shell' && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">部署方式</span>
-              <div className="flex gap-1.5">
-                <button className={btnCls(shellDeployType === 'docker')} onClick={() => { setShellDeployType('docker'); reset() }}>Docker</button>
-                <button className={btnCls(shellDeployType === 'python')} onClick={() => { setShellDeployType('python'); reset() }}>Python</button>
-              </div>
-            </div>
-          )}
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">注册模式</span>
             <div className="flex gap-1.5">
@@ -207,7 +188,7 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           )}
-          {(method === 'docker' || shellDeployType === 'docker') && (
+          {method === 'docker' && (
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">Chrome</span>
               <div className="flex gap-1.5">
@@ -222,14 +203,12 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
             {method === 'docker' && dockerNetwork === 'host' && (
               <p>Host 网络：容器直接使用宿主机网络，无需端口映射，适合 API 运行在宿主机（非 Docker）时使用。仅 Linux 支持。</p>
             )}
-            {installChrome
+            {method === 'docker' && (installChrome
               ? <p>内置 Chrome：镜像自包含 Chromium + Xvfb，无需宿主机提供 Chrome。</p>
-              : (method === 'docker' || shellDeployType === 'docker')
-                ? <p>宿主机 Chrome：使用轻量镜像（~100 MB），连接宿主机 Chrome（需提前启动并开启 CDP 端口 9222）。</p>
-                : null
-            }
-            {method === 'shell' && shellDeployType === 'python' && (
-              <p>Python 部署：无 Docker 环境时使用，脚本自动安装 Python 依赖，有 systemd 时注册为服务。</p>
+              : <p>宿主机 Chrome：使用轻量镜像（~100 MB），连接宿主机 Chrome（需提前启动并开启 CDP 端口 9222）。</p>
+            )}
+            {method === 'shell' && (
+              <p>Shell 脚本：无需 Docker，脚本自动安装 Python 依赖并启动 Agent，有 systemd 时注册为服务。</p>
             )}
           </div>
           <div className="relative">
@@ -1072,7 +1051,7 @@ export default function NodesPage() {
         </div>
       )}
 
-      {showWizard && <InstallWizardModal onClose={() => setShowWizard(false)} />}
+      {showWizard && <InstallWizardModal onClose={() => setShowWizard(false)} agentImageTag={sysConfig?.image_tag ?? 'latest'} />}
       {pendingMode && (
         <SwitchModeModal
           target={pendingMode}

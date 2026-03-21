@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install opencli globally — available as 'opencli' on PATH
 ARG OPENCLI_VERSION=1.1.1
+ARG IMAGE_TAG=latest
 RUN npm install -g @jackwener/opencli@${OPENCLI_VERSION} \
     && rm -rf /root/.npm
 
@@ -60,6 +61,9 @@ USER appuser
 ENV PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
+# Bake the image tag so the system config API can serve it to the frontend
+ARG IMAGE_TAG=latest
+ENV IMAGE_TAG=${IMAGE_TAG}
 
 EXPOSE 8000
 

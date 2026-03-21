@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     #         each agent runs opencli locally and returns results via HTTP or WS
     collection_mode: Literal["local", "agent"] = "local"
 
+    # Docker image tag used in agent install scripts / node wizard.
+    # Set IMAGE_TAG env var (or bake it in at build time) to match the deployed version.
+    image_tag: str = "latest"
+
     # Public-facing URL of this deployment (used in install scripts and invite links).
     # Set this to the URL your remote agents will use to reach the center API.
     # e.g. http://192.168.1.1:8031  or  https://admin.example.com

@@ -200,6 +200,7 @@ export interface EdgeNodeEvent {
 export interface SystemConfig {
   collection_mode: 'local' | 'agent'
   task_executor: 'local' | 'celery'
+  image_tag: string
 }
 
 export interface NodeStats {

@@ -52,6 +52,7 @@ async def get_config() -> ApiResponse:
         {
             "collection_mode": s.collection_mode,
             "task_executor": s.task_executor,
+            "image_tag": s.image_tag,
         }
     )
 
@@ -74,5 +75,6 @@ async def update_config(body: ConfigPatch) -> ApiResponse:
         {
             "collection_mode": s.collection_mode,
             "task_executor": s.task_executor,
+            "image_tag": s.image_tag,
         }
     )

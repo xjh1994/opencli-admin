@@ -1,6 +1,6 @@
 # OpenCLI Admin
 
-[![Docker](https://img.shields.io/badge/Docker%20Hub-0.3.4-blue?logo=docker)](https://hub.docker.com/u/xjh1994)
+[![Docker](https://img.shields.io/badge/Docker%20Hub-0.3.5-blue?logo=docker)](https://hub.docker.com/u/xjh1994)
 
 **现代化的数据采集系统** — 可视化管理多渠道数据采集，接入 [opencli](https://github.com/jackwener/opencli) 驱动国内外主流平台，支持 AI 处理、多节点分布式调度与实时通知推送。
 
@@ -127,8 +127,8 @@ cp .env.example .env
 **前置要求**：Docker & Docker Compose
 
 > **Agent 镜像两个变体**：
-> - `opencli-admin-agent:0.3.4` — 默认，约 100 MB，通过 `host.docker.internal` 连接宿主机 Chrome
-> - `opencli-admin-agent:0.3.4-chrome` — 约 450 MB，内置 Chromium，完全自包含
+> - `opencli-admin-agent:0.3.5` — 默认，约 100 MB，通过 `host.docker.internal` 连接宿主机 Chrome
+> - `opencli-admin-agent:0.3.5-chrome` — 约 450 MB，内置 Chromium，完全自包含
 
 **启动宿主机 Chrome**（若使用默认无 Chrome 变体）：
 
@@ -153,7 +153,7 @@ docker compose up -d
 | API 文档 | http://localhost:8031/docs |
 | Agent noVNC | http://localhost:3010 |
 
-镜像已发布至 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.3.4`），无需本地构建。从源码构建：
+镜像已发布至 Docker Hub（`xjh1994/opencli-admin-{api,frontend,agent}:0.3.5`），无需本地构建。从源码构建：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
@@ -199,7 +199,7 @@ docker run -d --name opencli-agent --restart unless-stopped \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=ws -e AGENT_MODE=bridge \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.3.4
+  xjh1994/opencli-admin-agent:0.3.5
 
 # HTTP 模式（局域网）
 docker run -d --name opencli-agent --restart unless-stopped \
@@ -207,7 +207,7 @@ docker run -d --name opencli-agent --restart unless-stopped \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=http -e AGENT_MODE=bridge \
   -p 19823:19823 \
-  xjh1994/opencli-admin-agent:0.3.4
+  xjh1994/opencli-admin-agent:0.3.5
 ```
 
 **一键脚本安装**
@@ -394,11 +394,12 @@ AI 处理（可选）— Claude · OpenAI · DeepSeek · Kimi · GLM · Ollama
 构建并推送 amd64 + arm64 多平台镜像（需要 `multiarch` buildx builder）：
 
 ```bash
-TAG=0.3.4
+TAG=0.3.5
 
-# API
+# API（将 IMAGE_TAG 烘焙进镜像，供安装脚本动态注入版本号）
 docker buildx build --builder multiarch \
   --platform linux/amd64,linux/arm64 \
+  --build-arg IMAGE_TAG=${TAG} \
   -t xjh1994/opencli-admin-api:${TAG} --push .
 
 # 前端
@@ -406,19 +407,35 @@ docker buildx build --builder multiarch \
   --platform linux/amd64,linux/arm64 \
   -t xjh1994/opencli-admin-frontend:${TAG} --push frontend/
 
-# Agent（含 Chrome）
+# Agent 基础版（~100 MB，通过宿主机 Chrome 连接）
 docker buildx build --builder multiarch \
   --platform linux/amd64,linux/arm64 \
-  -t xjh1994/opencli-admin-agent:${TAG}-chrome --push agent/
+  -f agent/Dockerfile \
+  -t xjh1994/opencli-admin-agent:${TAG} --push .
+
+# Agent 内置 Chrome 版（~450 MB，完全自包含）
+docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -f agent/Dockerfile \
+  --build-arg INSTALL_CHROME=true \
+  -t xjh1994/opencli-admin-agent:${TAG}-chrome --push .
 ```
 
-如需同时构建多个镜像，可并行执行（各自重定向日志）：
+如需并行构建所有镜像：
 
 ```bash
+TAG=0.3.5
 docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  --build-arg IMAGE_TAG=${TAG} \
   -t xjh1994/opencli-admin-api:${TAG} --push . > /tmp/build-api.log 2>&1 &
 docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
   -t xjh1994/opencli-admin-frontend:${TAG} --push frontend/ > /tmp/build-frontend.log 2>&1 &
+docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  -f agent/Dockerfile \
+  -t xjh1994/opencli-admin-agent:${TAG} --push . > /tmp/build-agent.log 2>&1 &
+docker buildx build --builder multiarch --platform linux/amd64,linux/arm64 \
+  -f agent/Dockerfile --build-arg INSTALL_CHROME=true \
+  -t xjh1994/opencli-admin-agent:${TAG}-chrome --push . > /tmp/build-agent-chrome.log 2>&1 &
 wait && echo "done"
 ```
 
