@@ -127,8 +127,8 @@ cp .env.example .env
 **前置要求**：Docker & Docker Compose
 
 > **Agent 镜像两个变体**：
-> - `opencli-admin-agent:0.3.4` — 默认，约 200 MB，通过 `host.docker.internal` 连接宿主机 Chrome
-> - `opencli-admin-agent:0.3.4-chrome` — 约 1.2 GB，内置 Chromium，完全自包含
+> - `opencli-admin-agent:0.3.4` — 默认，约 100 MB，通过 `host.docker.internal` 连接宿主机 Chrome
+> - `opencli-admin-agent:0.3.4-chrome` — 约 450 MB，内置 Chromium，完全自包含
 
 **启动宿主机 Chrome**（若使用默认无 Chrome 变体）：
 

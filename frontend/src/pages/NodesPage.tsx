@@ -72,7 +72,7 @@ const inputCls =
 
 // ── Install Wizard Modal ──────────────────────────────────────────────────────
 
-const AGENT_IMAGE_TAG = '0.3.2'
+const AGENT_IMAGE_TAG = '0.3.4'
 
 type InstallMethod = 'docker' | 'shell'
 type RegisterMode = 'ws' | 'http'
@@ -171,7 +171,7 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
             Docker 直接运行
           </button>
           <button className={tabCls(method === 'shell')} onClick={() => { setMethod('shell'); reset() }}>
-            一键脚本
+            Shell 脚本
           </button>
         </div>
         <div className="p-5 space-y-4">
@@ -211,8 +211,8 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">Chrome</span>
               <div className="flex gap-1.5">
-                <button className={btnCls(!installChrome)} onClick={() => { setInstallChrome(false); reset() }}>宿主机 Chrome（~400 MB）</button>
-                <button className={btnCls(installChrome)} onClick={() => { setInstallChrome(true); reset() }}>内置 Chrome（~1.2 GB）</button>
+                <button className={btnCls(!installChrome)} onClick={() => { setInstallChrome(false); reset() }}>宿主机 Chrome（~100 MB）</button>
+                <button className={btnCls(installChrome)} onClick={() => { setInstallChrome(true); reset() }}>内置 Chrome（~450 MB）</button>
               </div>
             </div>
           )}
@@ -225,7 +225,7 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
             {installChrome
               ? <p>内置 Chrome：镜像自包含 Chromium + Xvfb，无需宿主机提供 Chrome。</p>
               : (method === 'docker' || shellDeployType === 'docker')
-                ? <p>宿主机 Chrome：使用轻量镜像（~400 MB），连接宿主机 Chrome（需提前启动并开启 CDP 端口 9222）。</p>
+                ? <p>宿主机 Chrome：使用轻量镜像（~100 MB），连接宿主机 Chrome（需提前启动并开启 CDP 端口 9222）。</p>
                 : null
             }
             {method === 'shell' && shellDeployType === 'python' && (
