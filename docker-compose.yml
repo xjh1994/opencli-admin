@@ -1,6 +1,6 @@
 # Shared backend config (DRY)
 x-backend-common: &backend-common
-  image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.3.2}
+  image: ${DOCKER_REGISTRY:-mirror.huaweicloud.com/}xjh1994/opencli-admin-api:${IMAGE_TAG:-0.3.2}
   env_file:
     - path: .env
       required: false
@@ -13,7 +13,7 @@ services:
   # ── Infrastructure (only needed for TASK_EXECUTOR=celery) ─────────────────
   redis:
     profiles: ["celery"]
-    image: ${DOCKER_REGISTRY:-}redis:7-alpine
+    image: ${BASE_REGISTRY:-mirror.huaweicloud.com/library/}redis:7-alpine
     volumes:
       - redis_data:/data
     healthcheck:
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: ${DOCKER_REGISTRY:-}postgres:16-alpine
+    image: ${BASE_REGISTRY:-mirror.huaweicloud.com/library/}postgres:16-alpine
     profiles: ["postgres"]
     ports:
       - "5432:5432"
@@ -134,7 +134,7 @@ services:
   #   • Or start the Bridge daemon: node $(npm root -g)/@jackwener/opencli/dist/daemon.js
   agent-1:
     container_name: agent-1
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.2}${CHROME_SUFFIX:-}
+    image: ${DOCKER_REGISTRY:-mirror.huaweicloud.com/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.2}${CHROME_SUFFIX:-}
     environment:
       CENTRAL_API_URL: http://api:8000
       # Use container name so the API can reach this agent by DNS within the Docker network
@@ -182,7 +182,7 @@ services:
   #   docker compose --profile agent up agent
   agent:
     profiles: ["agent"]
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.2}${CHROME_SUFFIX:-}
+    image: ${DOCKER_REGISTRY:-mirror.huaweicloud.com/}xjh1994/opencli-admin-agent:${IMAGE_TAG:-0.3.2}${CHROME_SUFFIX:-}
     environment:
       CENTRAL_API_URL: ${CENTRAL_API_URL:-}
       AGENT_ADVERTISE_URL: ${AGENT_ADVERTISE_URL:-}
@@ -201,7 +201,7 @@ services:
 
   # ── Frontend (nginx + built React) — production ───────────────────────────
   frontend:
-    image: ${DOCKER_REGISTRY:-docker.io/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.3.2}
+    image: ${DOCKER_REGISTRY:-mirror.huaweicloud.com/}xjh1994/opencli-admin-frontend:${IMAGE_TAG:-0.3.2}
     ports:
       - "${FRONTEND_PORT:-8030}:80"
     depends_on:
@@ -212,7 +212,7 @@ services:
   # ── Frontend dev server (Vite HMR) — run with: docker compose --profile dev up frontend-dev
   frontend-dev:
     profiles: ["dev"]
-    image: ${DOCKER_REGISTRY:-}node:22-alpine
+    image: ${BASE_REGISTRY:-mirror.huaweicloud.com/library/}node:22-alpine
     working_dir: /app
     command: sh -c "npm ci --legacy-peer-deps && npm run dev -- --host"
     volumes:
