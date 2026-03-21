@@ -56,11 +56,16 @@ RUN useradd -m -u 1000 agent \
     && mkdir -p /home/agent/.config/chromium \
     && chown -R agent:agent /home/agent /app
 
+ARG INSTALL_CHROME=false
 ENV PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     # Bridge daemon port (used when Chrome is embedded OR daemon runs on host)
-    OPENCLI_DAEMON_PORT=19825
+    OPENCLI_DAEMON_PORT=19825 \
+    # Baked at build time so agent_server knows whether Chrome is bundled.
+    # true  → connect to container-local Chrome (localhost)
+    # false → connect to host Chrome (host.docker.internal)
+    AGENT_HAS_CHROME=${INSTALL_CHROME}
 
 USER agent
 
