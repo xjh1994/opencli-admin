@@ -4,8 +4,8 @@
 
 **现代化的数据采集系统** — 可视化管理多渠道数据采集，接入 [opencli](https://github.com/jackwener/opencli) 驱动国内外主流平台，支持 AI 处理、多节点分布式调度与实时通知推送。
 
-**多实例多账号同时采集**
-<img width="852" height="297" alt="566109092-d456fd3d-1d2d-4846-b38a-1a86cbbf298a" src="https://github.com/user-attachments/assets/205450a5-e0d8-495e-8d7b-0e05caa4af9a" />
+**仪表盘**
+<img width="1600" height="900" alt="dashboard" src="https://raw.githubusercontent.com/xjh1994/opencli-admin/develop/docs/dashboard.png" />
 
 **Agent 节点自动路由**
 <img width="949" height="726" alt="clipboard-image-1774003758" src="https://github.com/user-attachments/assets/2838af3b-2ecb-4d3b-8d8e-21c69db174fc" />
