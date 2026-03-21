@@ -80,6 +80,17 @@ export interface TaskRun {
   created_at: string
 }
 
+export interface TaskRunEvent {
+  id: string
+  run_id: string
+  level: 'info' | 'warning' | 'error'
+  step: string
+  message: string
+  detail?: Record<string, unknown>
+  elapsed_ms?: number
+  created_at: string
+}
+
 export interface CollectedRecord {
   id: string
   task_id: string

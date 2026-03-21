@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from backend.database import AsyncSessionLocal
 from backend.models.task import CollectionTask, TaskRun
+from backend.pipeline import events
 from backend.pipeline.pipeline import run_pipeline
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ async def run_collection_pipeline(
     source_id: str | None = None
     merged_params: dict = {}
     agent_id: str | None = None
+    trigger_type: str = "manual"
 
     async with AsyncSessionLocal() as session:
         task = await session.get(CollectionTask, task_id)
@@ -50,7 +52,17 @@ async def run_collection_pipeline(
         source_id = task.source_id
         merged_params = {**task.parameters, **parameters}
         agent_id = task.agent_id
+        trigger_type = task.trigger_type
         await session.commit()
+
+    # Emit trigger event after committing the run row
+    if run_id and source_id:
+        await events.emit(
+            run_id, "trigger",
+            f"任务触发 | 方式={trigger_type} 数据源ID={source_id}",
+            detail={"trigger_type": trigger_type, "source_id": source_id},
+        )
+
     logger.info("[task:%s] phase1 done | run_id=%s source_id=%s merged_params=%s",
                 task_id, run_id, source_id, merged_params)
 
@@ -105,6 +117,7 @@ async def run_collection_pipeline(
         source=source,
         parameters=merged_params,
         agent_config=agent_config,
+        run_id=run_id,
     )
 
     # ── Phase 4: persist final status ────────────────────────────────────────

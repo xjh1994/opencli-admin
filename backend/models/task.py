@@ -65,3 +65,26 @@ class TaskRun(TimestampMixin):
 
     # Relationship
     task: Mapped["CollectionTask"] = relationship("CollectionTask", back_populates="runs")
+    events: Mapped[list["TaskRunEvent"]] = relationship(
+        "TaskRunEvent", back_populates="run", cascade="all, delete-orphan",
+        order_by="TaskRunEvent.created_at"
+    )
+
+
+class TaskRunEvent(TimestampMixin):
+    """A single structured log event for a TaskRun execution trace."""
+
+    __tablename__ = "task_run_events"
+
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # info | warning | error
+    level: Mapped[str] = mapped_column(String(20), nullable=False, default="info")
+    # trigger | collect | normalize | store | ai_process | notify | complete | failed
+    step: Mapped[str] = mapped_column(String(50), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    elapsed_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    run: Mapped["TaskRun"] = relationship("TaskRun", back_populates="events")

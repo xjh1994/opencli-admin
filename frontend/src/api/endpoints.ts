@@ -18,6 +18,7 @@ import type {
   NotificationRule,
   SystemConfig,
   TaskRun,
+  TaskRunEvent,
   WorkerNode,
 } from './types'
 
@@ -76,11 +77,15 @@ export const getTask = (id: string) =>
 export const listTaskRuns = (task_id: string) =>
   apiClient.get<ApiResponse<TaskRun[]>>(`/tasks/${task_id}/runs`).then((r) => r.data)
 
+export const listRunEvents = (task_id: string, run_id: string) =>
+  apiClient.get<ApiResponse<TaskRunEvent[]>>(`/tasks/${task_id}/runs/${run_id}/events`).then((r) => r.data.data)
+
 // ── Records ────────────────────────────────────────────────────────────────────
 export const listRecords = (params?: {
   source_id?: string
   task_id?: string
   status?: string
+  search?: string
   page?: number
   limit?: number
 }) => apiClient.get<ApiResponse<CollectedRecord[]>>('/records', { params }).then((r) => r.data)
