@@ -39,13 +39,22 @@ def _read_chrome_endpoints() -> list[str]:
     `docker restart` reuses the env vars baked in at container creation time,
     so the env var value is stale after the chrome-pool API updates .env.
     Reading the file directly always gets the current value.
+
+    Checks multiple candidate paths so both Docker (/app/.env) and native
+    shell (project root .env) deployments work correctly.
     """
+    import os
+    candidates = [
+        "/app/.env",
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+    ]
     try:
         from dotenv import dotenv_values
-        env = dotenv_values("/app/.env")
-        raw = env.get("AGENT_POOL_ENDPOINTS", "").strip()
-        if raw:
-            return [ep.strip() for ep in raw.split(",") if ep.strip()]
+        for path in candidates:
+            env = dotenv_values(path)
+            raw = env.get("AGENT_POOL_ENDPOINTS", "").strip()
+            if raw:
+                return [ep.strip() for ep in raw.split(",") if ep.strip()]
     except Exception:
         pass
     return []
@@ -64,7 +73,8 @@ async def lifespan(app: FastAPI):
     # restart reuses the env vars injected at container creation time, so the
     # pydantic-settings value (which comes from those env vars) would be stale.
     from backend import browser_pool
-    endpoints = _read_chrome_endpoints() or settings.cdp_endpoints
+    from_env = _read_chrome_endpoints()
+    endpoints = from_env or settings.cdp_endpoints
     browser_pool.init_pool(
         endpoints=endpoints,
         use_redis=settings.task_executor == "celery",
@@ -72,7 +82,9 @@ async def lifespan(app: FastAPI):
     )
     await browser_pool.ensure_ready()
 
-    # Sync browser instance modes and agent_urls from DB into pool memory
+    # Sync browser instance modes and agent_urls from DB into pool memory.
+    # When using the single fallback endpoint (no AGENT_POOL_ENDPOINTS configured),
+    # apply opencli_pool_mode as its default unless the DB already has a record.
     from backend.database import AsyncSessionLocal
     from backend.models.browser import BrowserInstance
     from backend.browser_pool import LocalBrowserPool
@@ -80,12 +92,20 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(BrowserInstance))
         pool = browser_pool.get_pool()
+        db_endpoints: set[str] = set()
         for inst in result.scalars().all():
+            db_endpoints.add(inst.endpoint)
             if inst.endpoint in pool.endpoints:
                 pool.set_mode(inst.endpoint, inst.mode)
                 if isinstance(pool, LocalBrowserPool):
                     pool.set_agent_url(inst.endpoint, inst.agent_url)
                     pool.set_agent_protocol(inst.endpoint, inst.agent_protocol)
+
+        # Apply default mode for the fallback single endpoint when no DB record exists
+        if not from_env and isinstance(pool, LocalBrowserPool):
+            fallback = settings.opencli_cdp_endpoint
+            if fallback in pool.endpoints and fallback not in db_endpoints:
+                pool.set_mode(fallback, settings.opencli_pool_mode)
 
     # Mark stale pending/running tasks as failed (lost on previous restart)
     from backend.models.task import CollectionTask
