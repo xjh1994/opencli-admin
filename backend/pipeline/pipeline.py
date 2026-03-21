@@ -94,9 +94,11 @@ async def run_pipeline(
     logger.info("[task:%s] step1/collect done | count=%d metadata=%s",
                 task_id, channel_result.count, channel_result.metadata)
     if run_id:
+        chrome_mode = channel_result.metadata.get("chrome_mode")
+        mode_label = f" | Chrome={chrome_mode}" if chrome_mode else ""
         await events.emit(
             run_id, "collect",
-            f"采集完成 | 获取 {channel_result.count} 条",
+            f"采集完成 | 获取 {channel_result.count} 条{mode_label}",
             detail={"count": channel_result.count, "metadata": channel_result.metadata},
             elapsed_ms=step1_elapsed,
         )

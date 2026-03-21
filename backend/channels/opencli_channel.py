@@ -141,7 +141,7 @@ async def _collect_via_agent(
 
     items = data.get("items", [])
     logger.info("agent done | site=%s cmd=%s items=%d", site, command, len(items))
-    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url)
+    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url, chrome_mode=mode)
 
 
 async def _collect_via_ws_agent(
@@ -178,7 +178,7 @@ async def _collect_via_ws_agent(
 
     items = result.get("items", [])
     logger.info("WS agent done | site=%s cmd=%s items=%d", site, command, len(items))
-    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url)
+    return ChannelResult.ok(items, site=site, command=command, node_url=agent_url, chrome_mode=mode)
 
 
 async def _check_bridge_ready(daemon_host: str, daemon_port: int) -> str | None:
@@ -393,7 +393,7 @@ class OpenCLIChannel(AbstractChannel):
             return ChannelResult.fail(f"Failed to parse opencli {output_format} output: {exc}")
 
         logger.info("opencli done | site=%s cmd=%s mode=%s items=%d", site, command, mode, len(items))
-        return ChannelResult.ok(items, site=site, command=command)
+        return ChannelResult.ok(items, site=site, command=command, chrome_mode=mode)
 
     async def validate_config(self, config: dict[str, Any]) -> list[str]:
         errors: list[str] = []
