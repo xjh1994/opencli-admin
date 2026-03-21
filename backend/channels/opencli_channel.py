@@ -187,21 +187,36 @@ async def _cleanup_cdp_tabs(cdp_endpoint: str) -> None:
     Called after every CDP collect (success or failure) so stale tabs cannot
     block the next CDP connection attempt.  Only pages with http/https URLs
     are closed; chrome:// and extension pages are left untouched.
+
+    After closing navigated tabs, ensures at least one blank page target
+    remains so subsequent CDP connections always have an inspectable target.
     """
     import httpx
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.get(f"{cdp_endpoint}/json/list")
             tabs = resp.json()
+            remaining_pages = 0
             for tab in tabs:
                 url = tab.get("url", "")
-                if tab.get("type") == "page" and url.startswith(("http://", "https://")):
-                    tab_id = tab["id"]
-                    try:
-                        await client.get(f"{cdp_endpoint}/json/close/{tab_id}")
-                        logger.info("cleanup: closed tab %s url=%s", tab_id, url[:80])
-                    except Exception:
-                        pass
+                if tab.get("type") == "page":
+                    if url.startswith(("http://", "https://")):
+                        tab_id = tab["id"]
+                        try:
+                            await client.get(f"{cdp_endpoint}/json/close/{tab_id}")
+                            logger.info("cleanup: closed tab %s url=%s", tab_id, url[:80])
+                        except Exception:
+                            pass
+                    else:
+                        remaining_pages += 1
+            # Ensure at least one blank page exists so the next CDP collect
+            # always finds an inspectable target to attach to.
+            if remaining_pages == 0:
+                try:
+                    await client.put(f"{cdp_endpoint}/json/new")
+                    logger.info("cleanup: opened blank tab to keep CDP target available")
+                except Exception:
+                    pass
     except Exception as exc:
         logger.warning("cleanup: could not close CDP tabs at %s: %s", cdp_endpoint, exc)
 
