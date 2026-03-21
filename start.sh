@@ -98,7 +98,7 @@ ok "venv active"
 
 # ── Install Python deps ───────────────────────────────────────────────────────
 info "Checking backend dependencies..."
-$PYTHON -m pip install -q -e . 2>&1 | tail -1
+$PYTHON -m pip install -q -i https://mirrors.aliyun.com/pypi/simple/ -e . 2>&1 | tail -1
 ok "Backend deps ready"
 
 # ── Check opencli ─────────────────────────────────────────────────────────────
