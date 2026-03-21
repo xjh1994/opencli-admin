@@ -523,24 +523,33 @@ function InstanceCard({
   const novncUrl = `http://${window.location.hostname}:${novncPort}`
   const label = instanceLabel(url)
   const idx = instanceIndex(url)
-  const canRemove = idx !== null && idx > 1 && onRemove
+  const isDockerEndpoint = idx !== null
+  const canRemove = isDockerEndpoint && idx > 1 && onRemove
 
   return (
     <Card>
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
-        <StatusBadge containerStatus={containerStatus} available={available} isStarting={isStarting} />
+        {isDockerEndpoint
+          ? <StatusBadge containerStatus={containerStatus} available={available} isStarting={isStarting} />
+          : <span className={`inline-flex items-center gap-1 text-xs ${available ? 'text-green-500' : 'text-gray-400'}`}>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${available ? 'bg-green-500' : 'bg-gray-400'}`} />
+              {available ? '在线' : '空闲'}
+            </span>
+        }
         <span className="font-semibold text-sm dark:text-white">{label}</span>
-        <a
-          href={novncUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono"
-        >
-          :{novncPort}
-          <ExternalLink size={11} />
-        </a>
+        {isDockerEndpoint && (
+          <a
+            href={novncUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-blue-500 hover:underline font-mono"
+          >
+            :{novncPort}
+            <ExternalLink size={11} />
+          </a>
+        )}
         <div className="ml-auto flex items-center gap-2">
-          {wsConnected ? (
+          {endpoint.agent_protocol === 'ws' && (wsConnected ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
               <Wifi size={10} />
               {t('browsers.statusWsConnected')}
@@ -550,7 +559,7 @@ function InstanceCard({
               <WifiOff size={10} />
               {t('browsers.statusWsOffline')}
             </span>
-          )}
+          ))}
           {!!endpoint.agent_url && endpoint.agent_protocol === 'http' && (
             <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
               HTTP Agent
