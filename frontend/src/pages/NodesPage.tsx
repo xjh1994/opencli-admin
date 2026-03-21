@@ -42,35 +42,54 @@ const inputCls =
 
 type InstallMethod = 'docker' | 'shell'
 type RegisterMode = 'ws' | 'http'
+type AgentMode = 'bridge' | 'cdp' | 'shell'
+type DockerNetwork = 'bridge' | 'host'
 
 function InstallWizardModal({ onClose }: { onClose: () => void }) {
   const [method, setMethod] = useState<InstallMethod>('docker')
-  const [mode, setMode] = useState<RegisterMode>('ws')
+  const [regMode, setRegMode] = useState<RegisterMode>('ws')
+  const [agentMode, setAgentMode] = useState<AgentMode>('bridge')
+  const [dockerNetwork, setDockerNetwork] = useState<DockerNetwork>('bridge')
   const [copied, setCopied] = useState(false)
 
   const origin = window.location.origin
 
   const cmd = (() => {
     if (method === 'docker') {
-      return [
+      const useHost = dockerNetwork === 'host'
+      const lines = [
         'docker run -d \\',
         '  --name opencli-agent \\',
         '  --restart unless-stopped \\',
-        '  --add-host=host.docker.internal:host-gateway \\',
-        `  -e CENTRAL_API_URL=${origin} \\`,
-        `  -e AGENT_REGISTER=${mode} \\`,
-        '  -p 19823:19823 \\',
-        '  xjh1994/opencli-admin-agent:0.1.0',
-      ].join('\n')
+      ]
+      if (useHost) {
+        lines.push('  --network host \\')
+      } else {
+        lines.push('  --add-host=host.docker.internal:host-gateway \\')
+      }
+      lines.push(`  -e CENTRAL_API_URL=${origin} \\`)
+      lines.push(`  -e AGENT_REGISTER=${regMode} \\`)
+      lines.push(`  -e AGENT_MODE=${agentMode} \\`)
+      if (!useHost) {
+        lines.push('  -p 19823:19823 \\')
+      }
+      lines.push('  xjh1994/opencli-admin-agent:0.3.0')
+      return lines.join('\n')
     }
     // shell
-    const envPrefix = `AGENT_REGISTER=${mode}`
+    const envPrefix = `AGENT_REGISTER=${regMode} AGENT_MODE=${agentMode}`
     return `curl -fsSL ${origin}/api/v1/nodes/install/agent.sh | ${envPrefix} bash`
   })()
 
-  const modeHint: Record<RegisterMode, string> = {
+  const regModeHint: Record<RegisterMode, string> = {
     ws: 'WS 反向通道：Agent 主动连接中心，适合 NAT / 跨网场景，无需开放入站端口。',
     http: 'HTTP 直连：中心主动请求 Agent，适合局域网场景，Agent 需对中心可访问。',
+  }
+
+  const agentModeHint: Record<AgentMode, string> = {
+    bridge: 'Bridge（推荐）：opencli 通过 Daemon 连接 Chrome，速度快、稳定。',
+    cdp: 'CDP：opencli 通过 CDP 协议直连 Chrome，适合兼容性场景。',
+    shell: 'Shell：opencli 直接运行，无需 Chrome。适合仅需抓取纯文本/API 的场景。',
   }
 
   const handleCopy = () => {
@@ -88,7 +107,7 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
     ].join(' ')
 
-  const modeBtnCls = (active: boolean) =>
+  const btnCls = (active: boolean) =>
     [
       'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
       active
@@ -118,22 +137,57 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Register mode selector */}
+          {/* Register mode */}
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">注册模式</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">注册模式</span>
             <div className="flex gap-1.5">
-              <button className={modeBtnCls(mode === 'ws')} onClick={() => { setMode('ws'); setCopied(false) }}>
+              <button className={btnCls(regMode === 'ws')} onClick={() => { setRegMode('ws'); setCopied(false) }}>
                 WS 反向通道
               </button>
-              <button className={modeBtnCls(mode === 'http')} onClick={() => { setMode('http'); setCopied(false) }}>
+              <button className={btnCls(regMode === 'http')} onClick={() => { setRegMode('http'); setCopied(false) }}>
                 HTTP 直连
               </button>
             </div>
           </div>
 
-          {/* Hint */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-            {modeHint[mode]}
+          {/* Agent (collection) mode */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">采集模式</span>
+            <div className="flex gap-1.5">
+              <button className={btnCls(agentMode === 'bridge')} onClick={() => { setAgentMode('bridge'); setCopied(false) }}>
+                Bridge
+              </button>
+              <button className={btnCls(agentMode === 'cdp')} onClick={() => { setAgentMode('cdp'); setCopied(false) }}>
+                CDP
+              </button>
+              <button className={btnCls(agentMode === 'shell')} onClick={() => { setAgentMode('shell'); setCopied(false) }}>
+                Shell
+              </button>
+            </div>
+          </div>
+
+          {/* Docker network mode */}
+          {method === 'docker' && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">网络模式</span>
+              <div className="flex gap-1.5">
+                <button className={btnCls(dockerNetwork === 'bridge')} onClick={() => { setDockerNetwork('bridge'); setCopied(false) }}>
+                  Bridge（默认）
+                </button>
+                <button className={btnCls(dockerNetwork === 'host')} onClick={() => { setDockerNetwork('host'); setCopied(false) }}>
+                  Host（Linux）
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Hints */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2 text-xs text-blue-700 dark:text-blue-300 space-y-1">
+            <p>{regModeHint[regMode]}</p>
+            <p>{agentModeHint[agentMode]}</p>
+            {method === 'docker' && dockerNetwork === 'host' && (
+              <p>Host 网络：容器直接使用宿主机网络，无需端口映射，适合 API 运行在宿主机（非 Docker）时使用。仅 Linux 支持。</p>
+            )}
           </div>
 
           {/* Command block */}
@@ -150,11 +204,6 @@ function InstallWizardModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          {method === 'docker' && (
-            <p className="text-xs text-gray-400">
-              提示：若中心 URL 为 <code className="font-mono">localhost</code>，容器内会自动替换为 <code className="font-mono">host.docker.internal</code>。
-            </p>
-          )}
           {method === 'shell' && (
             <p className="text-xs text-gray-400">
               在目标机器上执行上述命令。需要 Python 3 环境；无 Docker 时自动安装依赖并后台运行。
@@ -338,7 +387,22 @@ function NodeCard({ node, wsConnectedSet, onDelete, isDeletePending }: NodeCardP
             </span>
           </div>
 
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {/* Node type badge (deployment) */}
+            <span className={[
+              'px-1.5 py-0.5 rounded text-xs font-medium',
+              node.node_type === 'shell'
+                ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+            ].join(' ')}>
+              {node.node_type === 'shell' ? 'Shell' : 'Chrome'}
+            </span>
+            {/* Chrome connection mode badge — only shown for chrome-type nodes */}
+            {node.node_type === 'chrome' && (
+              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+                {node.mode}
+              </span>
+            )}
             {node.ip && (
               <span className="text-xs text-gray-400 font-mono">{node.ip}</span>
             )}

@@ -49,6 +49,8 @@ class LocalBrowserPool:
         self._agent_urls: dict[str, str | None] = {ep: None for ep in endpoints}
         # agent_protocol per endpoint: "http" (LAN/proxy) or "ws" (NAT reverse channel, Phase 2)
         self._agent_protocols: dict[str, str | None] = {ep: None for ep in endpoints}
+        # node_type per endpoint: "chrome" (needs browser) | "shell" (runs opencli natively)
+        self._node_types: dict[str, str] = {ep: "chrome" for ep in endpoints}
         logger.info(
             "BrowserPool (local): %d Chrome instance(s): %s",
             self._total,
@@ -143,6 +145,15 @@ class LocalBrowserPool:
         self._agent_protocols[endpoint] = protocol
         logger.info("BrowserPool: endpoint %s agent_protocol set to %s", endpoint, protocol)
 
+    def get_node_type(self, endpoint: str) -> str:
+        """Return deployment type: 'chrome' (uses browser) or 'shell' (native opencli)."""
+        return self._node_types.get(endpoint, "chrome")
+
+    def set_node_type(self, endpoint: str, node_type: str) -> None:
+        """Update the node deployment type for an endpoint."""
+        self._node_types[endpoint] = node_type
+        logger.info("BrowserPool: endpoint %s node_type set to %s", endpoint, node_type)
+
     def add_endpoint(self, endpoint: str) -> None:
         """Hot-add a new Chrome instance to the pool without restarting."""
         if endpoint in self._slots:
@@ -153,6 +164,7 @@ class LocalBrowserPool:
         self._modes.setdefault(endpoint, "bridge")
         self._agent_urls.setdefault(endpoint, None)
         self._agent_protocols.setdefault(endpoint, None)
+        self._node_types.setdefault(endpoint, "chrome")
         self._total += 1
         logger.info("BrowserPool: added endpoint %s (total: %d)", endpoint, self._total)
 
@@ -164,6 +176,7 @@ class LocalBrowserPool:
         self._modes.pop(endpoint, None)
         self._agent_urls.pop(endpoint, None)
         self._agent_protocols.pop(endpoint, None)
+        self._node_types.pop(endpoint, None)
         self._total -= 1
         logger.info("BrowserPool: removed endpoint %s (total: %d)", endpoint, self._total)
 

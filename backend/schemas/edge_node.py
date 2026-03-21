@@ -10,6 +10,7 @@ class EdgeNodeRead(BaseModel):
     label: str
     protocol: str
     mode: str
+    node_type: str
     status: str
     last_seen_at: datetime | None
     ip: str | None

@@ -111,8 +111,11 @@ async def _register_with_center(advertise_url: str) -> None:
     import httpx
 
     url = f"{_CENTRAL_API_URL}/api/v1/nodes/register"
-    payload = {"agent_url": advertise_url, "mode": _AGENT_MODE, "label": _AGENT_LABEL,
-               "agent_protocol": "http"}
+    # node_type separates deployment type (shell/chrome) from Chrome connection mode (bridge/cdp)
+    _node_type = "shell" if _AGENT_MODE == "shell" else "chrome"
+    _chrome_mode = _AGENT_MODE if _AGENT_MODE in ("bridge", "cdp") else "bridge"
+    payload = {"agent_url": advertise_url, "mode": _chrome_mode, "node_type": _node_type,
+               "label": _AGENT_LABEL, "agent_protocol": "http"}
     proxies = _build_proxies()
 
     for attempt in range(1, 6):
@@ -186,10 +189,13 @@ async def _register_via_ws(advertise_url: str) -> None:
         + "/api/v1/nodes/ws"
     )
     _proxy = _HTTPS_PROXY or _HTTP_PROXY or None
+    _node_type = "shell" if _AGENT_MODE == "shell" else "chrome"
+    _chrome_mode = _AGENT_MODE if _AGENT_MODE in ("bridge", "cdp") else "bridge"
     register_payload = json.dumps({
         "type": "register",
         "agent_url": advertise_url,
-        "mode": _AGENT_MODE,
+        "mode": _chrome_mode,
+        "node_type": _node_type,
         "label": _AGENT_LABEL,
     })
 
@@ -347,7 +353,13 @@ async def collect(req: CollectRequest) -> dict:
     cmd.extend(["-f", req.format])
 
     env = os.environ.copy()
-    if mode == "bridge":
+    if mode == "shell":
+        # Shell mode: run opencli natively without any Chrome/browser
+        env.pop("OPENCLI_CDP_ENDPOINT", None)
+        env.pop("OPENCLI_DAEMON_HOST", None)
+        env.pop("OPENCLI_DAEMON_PORT", None)
+        logger.info("shell | cmd=%s", " ".join(cmd))
+    elif mode == "bridge":
         hostname = urlparse(cdp_ep).hostname or "localhost"
         env.pop("OPENCLI_CDP_ENDPOINT", None)
         env["OPENCLI_DAEMON_HOST"] = hostname

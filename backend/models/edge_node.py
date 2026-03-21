@@ -22,8 +22,11 @@ class EdgeNode(TimestampMixin):
     # "http" — center HTTP-POSTs to agent_url (LAN)
     # "ws"   — agent opened a reverse WS channel (NAT/firewall)
     protocol: Mapped[str] = mapped_column(String(10), nullable=False, default="http")
-    # "bridge" | "cdp"
+    # Chrome connection mode: "bridge" | "cdp"
+    # Only meaningful when node_type="chrome".
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="bridge")
+    # Deployment type: "chrome" (uses Chrome browser) | "shell" (runs opencli natively, no browser)
+    node_type: Mapped[str] = mapped_column(String(20), nullable=False, default="chrome")
     # "online" | "offline"
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="offline")
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(
