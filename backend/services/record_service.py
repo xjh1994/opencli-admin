@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import String, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.record import CollectedRecord
@@ -11,6 +11,7 @@ async def list_records(
     source_id: Optional[str] = None,
     task_id: Optional[str] = None,
     status: Optional[str] = None,
+    search: Optional[str] = None,
     page: int = 1,
     limit: int = 20,
 ) -> tuple[list[CollectedRecord], int]:
@@ -24,6 +25,14 @@ async def list_records(
         filters.append(CollectedRecord.task_id == task_id)
     if status:
         filters.append(CollectedRecord.status == status)
+    if search:
+        term = search.lower()
+        filters.append(
+            or_(
+                func.lower(func.cast(CollectedRecord.normalized_data, String)).contains(term),
+                func.lower(func.cast(CollectedRecord.raw_data, String)).contains(term),
+            )
+        )
 
     if filters:
         for f in filters:

@@ -21,6 +21,7 @@ async def list_records(
     source_id: Optional[str] = None,
     task_id: Optional[str] = None,
     status: Optional[str] = None,
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -30,6 +31,7 @@ async def list_records(
         source_id=source_id,
         task_id=task_id,
         status=status,
+        search=search,
         page=page,
         limit=limit,
     )

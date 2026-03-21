@@ -1,21 +1,32 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { listSources, createSource, updateSource, deleteSource, triggerTask, listAgents, getChromePool, listBrowserBindings, getSystemConfig, getWsAgentStatus } from '../api/endpoints'
+import {
+  listSources,
+  createSource,
+  updateSource,
+  deleteSource,
+  triggerTask,
+  listAgents,
+  getChromePool,
+  listBrowserBindings,
+  getSystemConfig,
+  getWsAgentStatus,
+  testSourceConnectivity,
+} from '../api/endpoints'
 import type { DataSource } from '../api/types'
 import ErrorAlert from '../components/ErrorAlert'
 import Card from '../components/Card'
-import DataTable from '../components/DataTable'
-import StatusBadge from '../components/StatusBadge'
+import { Badge } from '../components/ui/badge'
+import { Input } from '../components/ui/input'
 import PageHeader from '../components/PageHeader'
 import ChannelConfigForm, { type ChannelType, PRESET_DEFAULT, SITE_LABELS, COMMANDS_BY_SITE } from '../components/ChannelConfigForm'
 import { TableSkeleton } from '../components/SkeletonLoader'
 import EmptyState from '../components/EmptyState'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Pagination from '../components/Pagination'
-import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Pencil, Database } from 'lucide-react'
-import { formatInTimeZone } from 'date-fns-tz'
+import { Plus, Play, Trash2, Pencil, Database, Clock, Zap } from 'lucide-react'
 
 /** Derive noVNC port from CDP URL using chrome-N hostname convention. */
 function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
@@ -29,24 +40,25 @@ function chromeNovncPort(cdpUrl: string, basePort = 3010): number {
   }
 }
 
-const CHANNEL_COLORS: Record<string, string> = {
-  opencli:     'bg-indigo-100 text-indigo-700',
-  web_scraper: 'bg-orange-100 text-orange-700',
-  api:         'bg-teal-100 text-teal-700',
-  rss:         'bg-pink-100 text-pink-700',
-  cli:         'bg-yellow-100 text-yellow-700',
+const CHANNEL_BADGE_COLORS: Record<string, string> = {
+  opencli:     'bg-blue-100 text-blue-700 border-blue-200',
+  rss:         'bg-orange-100 text-orange-700 border-orange-200',
+  api:         'bg-green-100 text-green-700 border-green-200',
+  web_scraper: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  cli:         'bg-purple-100 text-purple-700 border-purple-200',
 }
 
-function ChannelBadge({ type }: { type: string }) {
-  const cls = CHANNEL_COLORS[type] ?? 'bg-gray-100 text-gray-700'
+function ChannelTypeBadge({ type }: { type: string }) {
+  const colorCls = CHANNEL_BADGE_COLORS[type] ?? 'bg-gray-100 text-gray-700 border-gray-200'
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cls}`}>
+    <Badge className={`text-xs font-medium border ${colorCls}`} variant="outline">
       {type}
-    </span>
+    </Badge>
   )
 }
 
 const CHANNEL_TYPES: ChannelType[] = ['opencli', 'rss', 'api', 'web_scraper', 'cli']
+type FilterType = 'all' | ChannelType
 
 const inputCls =
   'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -219,11 +231,8 @@ function TriggerModal({
   })
   const chromeEndpoints = chromePool?.endpoints ?? []
 
-  // agent mode: show endpoints with agent_url configured
   const agentEndpoints = isAgentMode ? chromeEndpoints.filter((ep) => ep.agent_url != null && ep.agent_url !== '') : []
   const showAgentSelector = isAgentMode && agentEndpoints.length > 0
-
-  // local mode: show Chrome instance selector
   const showChromeSelector = source.channel_type === 'opencli' && !isAgentMode && chromeEndpoints.length >= 1
 
   const { data: wsStatus } = useQuery({
@@ -247,7 +256,6 @@ function TriggerModal({
     endpointBoundSites[b.browser_endpoint].push(b.site)
   }
 
-  // Auto-select Chrome endpoint from binding or single-endpoint fallback
   useEffect(() => {
     if (isAgentMode) return
     const site = source.channel_config?.site as string | undefined
@@ -273,12 +281,10 @@ function TriggerModal({
     if (isAgentMode) {
       const endpoints = [...selectedAgentEndpoints]
       if (endpoints.length === 0) {
-        // auto: let the pool pick any agent
         onTrigger(agentId || undefined, undefined)
       } else if (endpoints.length === 1) {
         onTrigger(agentId || undefined, { chrome_endpoint: endpoints[0] })
       } else {
-        // multi: fire one task per selected agent, close immediately
         endpoints.forEach((ep) => onTrigger(agentId || undefined, { chrome_endpoint: ep }))
         onClose()
       }
@@ -458,6 +464,166 @@ function TriggerModal({
   )
 }
 
+type TestStatus = { state: 'idle' } | { state: 'loading' } | { state: 'ok' } | { state: 'err'; message: string }
+
+function SourceCard({
+  source,
+  triggerState,
+  onTrigger,
+  onEdit,
+  onDelete,
+  onToggle,
+}: {
+  source: DataSource
+  triggerState?: 'loading' | 'ok' | 'err'
+  onTrigger: () => void
+  onEdit: () => void
+  onDelete: () => void
+  onToggle: () => void
+}) {
+  const [testStatus, setTestStatus] = useState<TestStatus>({ state: 'idle' })
+
+  const handleTest = useCallback(async () => {
+    setTestStatus({ state: 'loading' })
+    try {
+      const result = await testSourceConnectivity(source.id)
+      if (result.connected) {
+        setTestStatus({ state: 'ok' })
+      } else {
+        const message = result.errors?.join(', ') || '连接失败'
+        setTestStatus({ state: 'err', message })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '测试失败'
+      setTestStatus({ state: 'err', message })
+    }
+    setTimeout(() => setTestStatus({ state: 'idle' }), 4000)
+  }, [source.id])
+
+  const site = source.channel_type === 'opencli' ? (source.channel_config?.site as string | undefined) : undefined
+  const command = source.channel_type === 'opencli' ? (source.channel_config?.command as string | undefined) : undefined
+  const siteLabel = site ? (SITE_LABELS[site] ?? site) : null
+
+  // DataSource does not expose last_run_at; fall back to showing "从未执行"
+  const lastRunDisplay = '从未执行'
+
+  return (
+    <Card className="flex flex-col gap-3">
+      {/* Header row */}
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="font-semibold text-sm truncate flex-1 dark:text-white" title={source.name}>
+          {source.name}
+        </span>
+        <ChannelTypeBadge type={source.channel_type} />
+        {/* Enable toggle */}
+        <button
+          onClick={onToggle}
+          title={source.enabled ? '点击禁用' : '点击启用'}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+            source.enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              source.enabled ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 space-y-1 min-h-[2rem]">
+        {source.description && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+            {source.description}
+          </p>
+        )}
+        {source.channel_type === 'opencli' && (siteLabel || command) && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+            {[siteLabel, command].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </div>
+
+      {/* Footer row */}
+      <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100 dark:border-gray-700">
+        {/* Last run time */}
+        <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 min-w-0">
+          <Clock size={12} className="shrink-0" />
+          <span className="truncate">{lastRunDisplay}</span>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Test connectivity button */}
+          <button
+            onClick={handleTest}
+            disabled={testStatus.state === 'loading'}
+            title="测试连通性"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors disabled:cursor-wait text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/30"
+          >
+            {testStatus.state === 'loading' ? (
+              <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+            ) : (
+              <Zap size={12} />
+            )}
+            {testStatus.state === 'ok' && <span className="text-green-600">✓ 可达</span>}
+            {testStatus.state === 'err' && (
+              <span className="text-red-500 max-w-[80px] truncate" title={testStatus.message}>
+                ✗ 失败
+              </span>
+            )}
+            {testStatus.state === 'idle' && <span>测试</span>}
+          </button>
+
+          {/* Trigger button */}
+          <button
+            onClick={onTrigger}
+            disabled={!!triggerState}
+            title="立即触发"
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors disabled:cursor-default ${
+              triggerState === 'ok'  ? 'text-green-600 bg-green-50 dark:bg-green-900/30' :
+              triggerState === 'err' ? 'text-red-500 bg-red-50 dark:bg-red-900/30' :
+              'hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600'
+            }`}
+          >
+            {triggerState === 'loading' ? (
+              <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+            ) : (
+              <Play size={12} />
+            )}
+          </button>
+
+          {/* Edit button */}
+          <button
+            onClick={onEdit}
+            title="编辑"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600"
+          >
+            <Pencil size={12} />
+          </button>
+
+          {/* Delete button */}
+          <button
+            onClick={onDelete}
+            title="删除"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* Inline test error detail */}
+      {testStatus.state === 'err' && testStatus.message && (
+        <p className="text-xs text-red-500 truncate" title={testStatus.message}>
+          {testStatus.message}
+        </p>
+      )}
+    </Card>
+  )
+}
+
 export default function SourcesPage() {
   const { t } = useTranslation()
   const [showAdd, setShowAdd] = useState(false)
@@ -465,6 +631,8 @@ export default function SourcesPage() {
   const [triggerSource, setTriggerSource] = useState<DataSource | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DataSource | null>(null)
   const [page, setPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [channelFilter, setChannelFilter] = useState<FilterType>('all')
   const qc = useQueryClient()
 
   const { data: sysConfig } = useQuery({
@@ -543,6 +711,22 @@ export default function SourcesPage() {
   const sources = data?.data ?? []
   const meta = data?.meta
 
+  // Client-side filtering
+  const filteredSources = sources.filter((s) => {
+    const matchesSearch = searchQuery === '' || s.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesType = channelFilter === 'all' || s.channel_type === channelFilter
+    return matchesSearch && matchesType
+  })
+
+  const filterChips: { label: string; value: FilterType }[] = [
+    { label: '全部', value: 'all' },
+    { label: 'opencli', value: 'opencli' },
+    { label: 'rss', value: 'rss' },
+    { label: 'api', value: 'api' },
+    { label: 'web_scraper', value: 'web_scraper' },
+    { label: 'cli', value: 'cli' },
+  ]
+
   return (
     <div>
       <PageHeader
@@ -558,109 +742,69 @@ export default function SourcesPage() {
         }
       />
 
-      <Card padding={false}>
-        <DataTable
-          data={sources}
-          keyFn={(s) => s.id}
-          emptyMessage={t('sources.noSources')}
-          emptyComponent={
-            <EmptyState
-              icon={Database}
-              title="暂无数据源"
-              description="点击「新建数据源」开始配置第一个采集渠道"
-              action={{ label: '新建数据源', onClick: () => setShowAdd(true) }}
-            />
-          }
-          columns={[
-            {
-              key: 'name',
-              header: t('common.name'),
-              width: '220px',
-              render: (s) => (
-                <div>
-                  <p className="font-medium">{s.name}</p>
-                  {s.description && <p className="text-xs text-gray-400">{s.description}</p>}
-                </div>
-              ),
-            },
-            {
-              key: 'type',
-              header: t('sources.channelType'),
-              render: (s) => <ChannelBadge type={s.channel_type} />,
-              width: '100px',
-            },
-            {
-              key: 'status',
-              header: t('common.status'),
-              render: (s) => <StatusBadge status={s.enabled ? 'online' : 'offline'} />,
-              width: '80px',
-            },
-            {
-              key: 'created_at',
-              header: t('common.createdAt'),
-              width: '120px',
-              render: (s) => (
-                <span className="text-xs text-gray-500">
-                  {formatInTimeZone(new Date(s.created_at), 'Asia/Shanghai', 'MM-dd HH:mm')}
-                </span>
-              ),
-            },
-            {
-              key: 'updated_at',
-              header: t('common.updatedAt'),
-              width: '120px',
-              render: (s) => (
-                <span className="text-xs text-gray-500">
-                  {formatInTimeZone(new Date(s.updated_at), 'Asia/Shanghai', 'MM-dd HH:mm')}
-                </span>
-              ),
-            },
-            {
-              key: 'actions',
-              header: t('common.actions'),
-              width: '210px',
-              render: (s) => (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setTriggerSource(s)}
-                    disabled={!!triggerStates[s.id]}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors disabled:cursor-default ${
-                      triggerStates[s.id] === 'ok'  ? 'text-green-600 bg-green-50 dark:bg-green-900/30' :
-                      triggerStates[s.id] === 'err' ? 'text-red-500 bg-red-50 dark:bg-red-900/30' :
-                      'hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600'
-                    }`}
-                  >
-                    {triggerStates[s.id] === 'loading' ? <><span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" /> 触发中</> :
-                     triggerStates[s.id] === 'ok'      ? <>✓ 已触发</> :
-                     triggerStates[s.id] === 'err'     ? <>✗ 失败</> :
-                     <><Play size={12} /> 触发</>}
-                  </button>
-                  <button
-                    onClick={() => toggleMut.mutate({ id: s.id, enabled: !s.enabled })}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
-                  >
-                    {s.enabled ? <ToggleRight size={12} /> : <ToggleLeft size={12} />}
-                    {s.enabled ? t('common.disable') : t('common.enable')}
-                  </button>
-                  <button
-                    onClick={() => setEditSource(s)}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600"
-                  >
-                    <Pencil size={12} /> 编辑
-                  </button>
-                  <button
-                    onClick={() => setDeleteTarget(s)}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
-                  >
-                    <Trash2 size={12} /> 删除
-                  </button>
-                </div>
-              ),
-            },
-          ]}
+      {/* Search bar */}
+      <div className="mb-4">
+        <Input
+          type="text"
+          placeholder="搜索数据源名称..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="max-w-sm"
         />
+      </div>
 
-        {meta && (meta.pages > 1 || meta.total > 0) && (
+      {/* Channel type filter chips */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {filterChips.map((chip) => (
+          <button
+            key={chip.value}
+            onClick={() => setChannelFilter(chip.value)}
+            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              channelFilter === chip.value
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400 hover:text-blue-600'
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Card grid or empty state */}
+      {filteredSources.length === 0 ? (
+        <EmptyState
+          icon={Database}
+          title="暂无数据源"
+          description={
+            searchQuery || channelFilter !== 'all'
+              ? '没有符合筛选条件的数据源'
+              : '点击「新建数据源」开始配置第一个采集渠道'
+          }
+          action={
+            !searchQuery && channelFilter === 'all'
+              ? { label: '新建数据源', onClick: () => setShowAdd(true) }
+              : undefined
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredSources.map((source) => (
+            <SourceCard
+              key={source.id}
+              source={source}
+              triggerState={triggerStates[source.id]}
+              onTrigger={() => setTriggerSource(source)}
+              onEdit={() => setEditSource(source)}
+              onDelete={() => setDeleteTarget(source)}
+              onToggle={() => toggleMut.mutate({ id: source.id, enabled: !source.enabled })}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {meta && (meta.pages > 1 || meta.total > 0) && (
+        <div className="mt-4">
           <Pagination
             page={page}
             pages={meta.pages}
@@ -668,8 +812,8 @@ export default function SourcesPage() {
             limit={20}
             onChange={setPage}
           />
-        )}
-      </Card>
+        </div>
+      )}
 
       {showAdd && (
         <SourceModal
