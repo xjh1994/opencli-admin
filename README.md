@@ -209,6 +209,8 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=ws \
+  -e AGENT_MODE=bridge \
+  -e AGENT_DEPLOY_TYPE=docker \
   -p 19823:19823 \
   xjh1994/opencli-admin-agent:0.3.0
 
@@ -219,7 +221,20 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   -e CENTRAL_API_URL=http://<center-ip>:8030 \
   -e AGENT_REGISTER=http \
+  -e AGENT_MODE=bridge \
+  -e AGENT_DEPLOY_TYPE=docker \
   -p 19823:19823 \
+  xjh1994/opencli-admin-agent:0.3.0
+
+# Host 网络模式（Linux，API 运行在宿主机而非 Docker 时使用）
+docker run -d \
+  --name opencli-agent \
+  --restart unless-stopped \
+  --network host \
+  -e CENTRAL_API_URL=http://127.0.0.1:8031 \
+  -e AGENT_REGISTER=http \
+  -e AGENT_MODE=bridge \
+  -e AGENT_DEPLOY_TYPE=docker \
   xjh1994/opencli-admin-agent:0.3.0
 ```
 
@@ -227,13 +242,28 @@ docker run -d \
 
 ```bash
 # WS 模式
-curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | AGENT_REGISTER=ws bash
+curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
+  AGENT_REGISTER=ws AGENT_MODE=bridge AGENT_DEPLOY_TYPE=shell bash
 
 # HTTP 模式
-curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | AGENT_REGISTER=http bash
+curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | \
+  AGENT_REGISTER=http AGENT_MODE=bridge AGENT_DEPLOY_TYPE=shell bash
 ```
 
 脚本自动安装 Python 依赖（支持 `--user` / venv 双路径），无 systemd 时后台运行。
+
+### 两个正交的模式概念
+
+边缘节点涉及两个完全独立的维度，**不可混淆**：
+
+| 维度 | 字段 | 值 | 含义 |
+|------|------|-----|------|
+| **Chrome 连接模式** | `AGENT_MODE` | `bridge`（推荐）| opencli 通过 Bridge Daemon 连接 Chrome，速度快、稳定 |
+| （采集时如何连 Chrome） | | `cdp` | opencli 通过 CDP 协议直连 Chrome |
+| **节点部署方式** | `AGENT_DEPLOY_TYPE` | `docker`（默认）| Agent 以 Docker 容器形式运行 |
+| （节点如何启动） | | `shell` | Agent 以原生 Shell 进程形式运行 |
+
+> **关键点**：无论 docker 还是 shell 部署，节点都需要 Chrome 浏览器；Chrome 连接模式（bridge/cdp）与部署方式（docker/shell）正交，可以任意组合。
 
 ### 常用环境变量
 
@@ -241,6 +271,8 @@ curl -fsSL http://<center>:8030/api/v1/nodes/install/agent.sh | AGENT_REGISTER=h
 |------|------|--------|
 | `CENTRAL_API_URL` | 中心 API 地址（必填） | — |
 | `AGENT_REGISTER` | 注册模式：`ws` \| `http` | `ws` |
+| `AGENT_MODE` | Chrome 连接模式：`bridge` \| `cdp` | `bridge` |
+| `AGENT_DEPLOY_TYPE` | 节点部署方式：`docker` \| `shell` | `docker` |
 | `AGENT_PORT` | Agent 监听端口（自动跳过冲突端口） | `19823` |
 | `AGENT_LABEL` | 可读标签 | 主机名 |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 出站代理 | — |
