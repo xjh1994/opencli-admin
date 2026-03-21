@@ -26,7 +26,8 @@ export default function App() {
           <Route path="workers" element={<WorkersPage />} />
           <Route path="agents" element={<AgentsPage />} />
           <Route path="providers" element={<ProvidersPage />} />
-          <Route path="browsers" element={<NodesPage />} />
+          <Route path="browsers" element={<Navigate to="/nodes" replace />} />
+          <Route path="nodes" element={<NodesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

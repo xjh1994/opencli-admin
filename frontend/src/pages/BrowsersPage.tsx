@@ -545,7 +545,12 @@ function InstanceCard({
               {available ? '在线' : '空闲'}
             </span>
         }
-        <span className="font-semibold text-sm dark:text-white">{label}</span>
+        <span className="font-semibold text-sm dark:text-white">
+          {isDockerEndpoint ? label : '本地 Chrome'}
+        </span>
+        {!isDockerEndpoint && (
+          <span className="text-xs text-gray-400 font-mono">{label}</span>
+        )}
         {isDockerEndpoint && (
           <a
             href={novncUrl}
@@ -854,35 +859,73 @@ export default function BrowsersPage() {
         )}
       </div>
 
-      {/* Instance cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {endpoints.map((ep) => {
-          const idx = instanceIndex(ep.url)
-          return (
-            <InstanceCard
-              key={ep.url}
-              endpoint={ep}
-              isStarting={startingEndpoints.has(ep.url)}
-              wsConnected={ep.agent_url ? wsConnectedSet.has(ep.agent_url) : false}
-              bindings={bindingsByEndpoint[ep.url] ?? []}
-              boundSites={boundSites}
-              onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
-              onUnbind={(id) => deleteMutation.mutate(id)}
-              onRemove={idx !== null ? () => setRemovingIdx(idx) : undefined}
-              isBindPending={addMutation.isPending}
-              isRemovePending={removeInstanceMutation.isPending}
-              onModeChanged={invalidatePool}
-              onConfigChanged={invalidatePool}
-            />
-          )
-        })}
-
-        {endpoints.length === 0 && (
-          <div className="col-span-full text-center py-12 text-gray-400 text-sm">
-            {t('browsers.noInstances')}
+      {/* Local Chrome endpoints (non-Docker) */}
+      {(() => {
+        const localEps = endpoints.filter((ep) => instanceIndex(ep.url) === null)
+        if (localEps.length === 0) return null
+        return (
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">本地浏览器</p>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {localEps.map((ep) => (
+                <InstanceCard
+                  key={ep.url}
+                  endpoint={ep}
+                  bindings={bindingsByEndpoint[ep.url] ?? []}
+                  boundSites={boundSites}
+                  onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
+                  onUnbind={(id) => deleteMutation.mutate(id)}
+                  isBindPending={addMutation.isPending}
+                  isRemovePending={false}
+                  onModeChanged={invalidatePool}
+                  onConfigChanged={invalidatePool}
+                />
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+        )
+      })()}
+
+      {/* Docker instance cards */}
+      {(() => {
+        const dockerEps = endpoints.filter((ep) => instanceIndex(ep.url) !== null)
+        if (dockerEps.length === 0 && endpoints.filter((ep) => instanceIndex(ep.url) === null).length > 0) return null
+        return (
+          <div>
+            {endpoints.some((ep) => instanceIndex(ep.url) !== null) && (
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Docker 实例</p>
+            )}
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {dockerEps.map((ep) => {
+                const idx = instanceIndex(ep.url)
+                return (
+                  <InstanceCard
+                    key={ep.url}
+                    endpoint={ep}
+                    isStarting={startingEndpoints.has(ep.url)}
+                    wsConnected={ep.agent_url ? wsConnectedSet.has(ep.agent_url) : false}
+                    bindings={bindingsByEndpoint[ep.url] ?? []}
+                    boundSites={boundSites}
+                    onBind={(site) => addMutation.mutate({ browser_endpoint: ep.url, site })}
+                    onUnbind={(id) => deleteMutation.mutate(id)}
+                    onRemove={idx !== null ? () => setRemovingIdx(idx) : undefined}
+                    isBindPending={addMutation.isPending}
+                    isRemovePending={removeInstanceMutation.isPending}
+                    onModeChanged={invalidatePool}
+                    onConfigChanged={invalidatePool}
+                  />
+                )
+              })}
+
+              {endpoints.length === 0 && (
+                <div className="col-span-full text-center py-12 text-gray-400 text-sm">
+                  {t('browsers.noInstances')}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Orphaned bindings */}
       {orphaned.length > 0 && (

@@ -10,13 +10,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 8030,
     // Allow requests from Docker containers (host.docker.internal) and any LAN IP
     // Dev-only: production uses nginx which doesn't have this restriction
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000',
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8031',
         changeOrigin: true,
         ws: true,
         configure: (proxy) => {

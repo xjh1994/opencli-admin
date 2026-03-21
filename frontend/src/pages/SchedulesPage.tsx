@@ -368,7 +368,10 @@ function AddScheduleModal({
 
           {showAgentSelector && (
             <div>
-              <label className={labelCls}>采集节点</label>
+              <div className="flex items-center gap-2 mb-1">
+                <label className={labelCls} style={{ marginBottom: 0 }}>采集节点</label>
+                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">Agent 模式</span>
+              </div>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer py-1">
                   <input
@@ -429,7 +432,10 @@ function AddScheduleModal({
 
           {showChromeSelector && (
             <div>
-              <label className={labelCls}>{t('channelConfig.chromeEndpoint')}</label>
+              <div className="flex items-center gap-2 mb-1">
+                <label className={labelCls} style={{ marginBottom: 0 }}>{t('channelConfig.chromeEndpoint')}</label>
+                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">本地模式</span>
+              </div>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer py-1">
                   <input

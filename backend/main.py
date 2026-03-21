@@ -96,9 +96,12 @@ async def lifespan(app: FastAPI):
         for inst in result.scalars().all():
             db_endpoints.add(inst.endpoint)
             if isinstance(pool, LocalBrowserPool):
-                # Re-add registered agent endpoints that may have been dropped on restart
                 if inst.endpoint not in pool.endpoints:
-                    pool.add_endpoint(inst.endpoint)
+                    # Only re-add registered agents (have agent_url); skip bare CDP records
+                    if inst.agent_url:
+                        pool.add_endpoint(inst.endpoint)
+                    else:
+                        continue
                 pool.set_mode(inst.endpoint, inst.mode)
                 pool.set_agent_url(inst.endpoint, inst.agent_url)
                 pool.set_agent_protocol(inst.endpoint, inst.agent_protocol)
