@@ -224,12 +224,12 @@ async def _check_bridge_ready(daemon_host: str, daemon_port: int) -> str | None:
     status_url = f"http://{daemon_host}:{daemon_port}/status"
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(status_url)
+            resp = await client.get(status_url, headers={"X-OpenCLI": "1"})
             data = resp.json()
     except Exception:
         # Daemon not running yet — opencli will start it automatically; not a blocker
         return None
-    if not data.get("extensionConnected"):
+    if not data.get("ok") or not data.get("extensionConnected"):
         return (
             "opencli Browser Bridge extension is not connected to the daemon. "
             "Install steps: "

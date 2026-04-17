@@ -107,7 +107,7 @@ if command -v opencli &>/dev/null; then
 else
   read -r -p "opencli not found. Install now via npm? [Y/n] " _reply
   if [[ "${_reply:-Y}" =~ ^[Yy]$ ]]; then
-    npm install -g @jackwener/opencli
+    npm install -g @jackwener/opencli@1.7.4
     ok "opencli: $(opencli --version 2>/dev/null | head -1 || echo 'installed')"
   else
     warn "Skipped — opencli channel will be unavailable"

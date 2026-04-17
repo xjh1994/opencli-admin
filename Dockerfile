@@ -28,15 +28,15 @@ WORKDIR /app
 RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
     sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
 
-# Runtime system deps (psycopg2 needs libpq, opencli needs Node.js 20+)
+# Runtime system deps (psycopg2 needs libpq, opencli needs Node.js 22+)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 curl ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Install opencli globally — available as 'opencli' on PATH
-ARG OPENCLI_VERSION=1.1.1
+ARG OPENCLI_VERSION=1.7.4
 ARG IMAGE_TAG=latest
 RUN npm install -g @jackwener/opencli@${OPENCLI_VERSION} \
     && rm -rf /root/.npm

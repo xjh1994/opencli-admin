@@ -71,6 +71,9 @@ packages = ["backend"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=80"
+markers = [
+    "live: tests that require a running API server and opencli daemon (deselect with -m 'not live')",
+]
 
 [tool.coverage.run]
 concurrency = ["greenlet", "thread"]
