@@ -6,13 +6,13 @@ RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/source
     sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
 
 # OPENCLI_VERSION: pin the opencli release; patch-opencli.js adds DAEMON_HOST/LISTEN env hooks
-ARG OPENCLI_VERSION=1.0.0
+ARG OPENCLI_VERSION=1.7.4
 COPY scripts/patch-opencli.js /tmp/patch-opencli.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium x11vnc xvfb novnc websockify procps nginx \
     fonts-noto-cjk gettext-base \
     curl ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @jackwener/opencli@${OPENCLI_VERSION} \
     && node /tmp/patch-opencli.js \

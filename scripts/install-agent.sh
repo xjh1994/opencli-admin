@@ -170,14 +170,14 @@ install_python() {
       info "opencli not found — installing via npm (non-interactive)..."
     fi
     if [[ "${_reply:-Y}" =~ ^[Yy]$ ]]; then
-      npm install -g @jackwener/opencli
+      npm install -g @jackwener/opencli@1.7.4
       info "opencli: $(opencli --version 2>/dev/null | head -1 || echo 'installed')"
     else
       warn "Skipped — opencli channel will be unavailable"
     fi
   else
     warn "npm not found — opencli channel will be unavailable"
-    warn "  Install Node.js from https://nodejs.org then run: npm install -g @jackwener/opencli"
+    warn "  Install Node.js 22+ from https://nodejs.org then run: npm install -g @jackwener/opencli@1.7.4"
   fi
 
   # ── Find Chrome binary ────────────────────────────────────────────────────

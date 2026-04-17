@@ -12,9 +12,11 @@
  *     Default: 127.0.0.1 — set to 0.0.0.0 so the API container can reach
  *     the daemon running inside the chrome-N container.
  *
- *   OPENCLI_DAEMON_HOST  (daemon-client.js + mcp.js)
+ *   OPENCLI_DAEMON_HOST  (daemon-client.js + browser/bridge.js)
  *     Default: 127.0.0.1 — set to chrome-1 (or chrome-N) so the CLI in the
  *     API container contacts the remote daemon instead of spawning one locally.
+ *
+ * v1.7.0 migration: mcp.js renamed to browser/bridge.js
  */
 
 'use strict';
@@ -43,6 +45,10 @@ function resolvePackageDir(prefixDir) {
 }
 
 function patch(filePath, search, replace, label) {
+  if (!fs.existsSync(filePath)) {
+    console.log('  [skip] ' + label + ': file not found ' + filePath);
+    return;
+  }
   let content = fs.readFileSync(filePath, 'utf8');
   if (content.includes(replace.slice(0, 40))) {
     console.log('  [skip] ' + label + ' already patched');
@@ -77,12 +83,16 @@ patch(
   'daemon-client.js: OPENCLI_DAEMON_HOST'
 );
 
-// ── 3. mcp.js: skip local auto-spawn when daemon is remote ───────────────────
+// ── 3. browser/bridge.js: skip local auto-spawn when daemon is remote ────────
+// v1.7.0+: _ensureDaemon moved from mcp.js to browser/bridge.js.
+// When OPENCLI_DAEMON_HOST is set to a remote address, we must NOT try to
+// spawn a local daemon process — throw immediately so the caller surfaces a
+// clear error rather than silently starting a useless local daemon.
 patch(
-  path.join(pkgDir, 'dist', 'browser', 'mcp.js'),
-  'async _ensureDaemon() {',
-  "async _ensureDaemon() {\n        const _dHost = process.env.OPENCLI_DAEMON_HOST;\n        if (_dHost && _dHost !== '127.0.0.1' && _dHost !== 'localhost') {\n            if (!await isDaemonRunning()) throw new Error('Remote Browser Bridge daemon at ' + _dHost + ' is not reachable. Ensure BROWSER_BRIDGE_ENABLED=true on the chrome container.');\n            return;\n        }",
-  'mcp.js: skip auto-spawn for remote daemon'
+  path.join(pkgDir, 'dist', 'browser', 'bridge.js'),
+  'const __dirname = path.dirname(fileURLToPath(import.meta.url));',
+  "const _dHost = process.env.OPENCLI_DAEMON_HOST;\n        if (_dHost && _dHost !== '127.0.0.1' && _dHost !== 'localhost') {\n            throw new Error('Remote Browser Bridge daemon at ' + _dHost + ' is not reachable. Ensure BROWSER_BRIDGE_ENABLED=true on the chrome container.');\n        }\n        const __dirname = path.dirname(fileURLToPath(import.meta.url));",
+  'browser/bridge.js: skip local spawn for remote daemon'
 );
 
 console.log('Done.');
