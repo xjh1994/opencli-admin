@@ -61,6 +61,36 @@ skip_no_opencli = pytest.mark.skipif(
 pytestmark = [pytest.mark.live, skip_no_server, skip_no_opencli]
 
 
+def _bridge_extension_connected() -> bool:
+    """Return True only if the opencli Browser Bridge extension is connected to the daemon.
+
+    Probes by calling `opencli browser tabs list` and checking whether the output
+    contains the known 'extension not connected' error string.
+    """
+    if not _server_reachable():
+        return False
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["opencli", "browser", "tabs", "list"],
+            capture_output=True, text=True, timeout=10,
+        )
+        not_connected = "extension is not connected" in (result.stderr + result.stdout).lower()
+        return not not_connected
+    except Exception:
+        return False
+
+
+skip_no_bridge = pytest.mark.skipif(
+    not _bridge_extension_connected(),
+    reason=(
+        "opencli Browser Bridge extension not connected to daemon. "
+        "Load the extension from chrome/extension-src/dist in chrome://extensions/ "
+        "then re-run."
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -132,6 +162,7 @@ async def cleanup_source(client: httpx.AsyncClient, source_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
+@skip_no_bridge
 async def test_weibo_hot_collection_bridge(live_client: httpx.AsyncClient):
     """Create a Weibo hot-list source and run a collection task (bridge mode)."""
     source_id = await create_source(
@@ -159,6 +190,7 @@ async def test_weibo_hot_collection_bridge(live_client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
+@skip_no_bridge
 async def test_zhihu_hot_collection_bridge(live_client: httpx.AsyncClient):
     """Create a Zhihu hot-list source and run a collection task (bridge mode)."""
     source_id = await create_source(
@@ -266,7 +298,21 @@ async def test_zhihu_hot_collection_cdp(live_client: httpx.AsyncClient):
 
 @pytest.mark.asyncio
 async def test_weibo_and_zhihu_concurrent(live_client: httpx.AsyncClient):
-    """Trigger Weibo and Zhihu collection concurrently and verify both complete."""
+    """Trigger Weibo and Zhihu collection concurrently in CDP mode and verify both complete.
+
+    Bridge mode serializes Chrome sessions via the extension daemon, so concurrent
+    bridge tasks race on the same session.  CDP mode is stateless and safe to parallelise.
+    """
+    import base64
+    cdp_endpoint = os.environ.get("CDP_ENDPOINT", "http://127.0.0.1:9222")
+    ep_b64 = base64.urlsafe_b64encode(cdp_endpoint.encode()).decode()
+
+    switch_resp = await live_client.patch(
+        f"/api/v1/workers/chrome-pool/{ep_b64}/mode",
+        json={"mode": "cdp"},
+    )
+    assert switch_resp.status_code == 200, f"mode switch to CDP failed: {switch_resp.text}"
+
     weibo_id = await create_source(live_client, "Live-Test-Concurrent-Weibo", "weibo", "hot")
     zhihu_id = await create_source(live_client, "Live-Test-Concurrent-Zhihu", "zhihu", "hot")
     try:
@@ -291,4 +337,8 @@ async def test_weibo_and_zhihu_concurrent(live_client: httpx.AsyncClient):
         await asyncio.gather(
             cleanup_source(live_client, weibo_id),
             cleanup_source(live_client, zhihu_id),
+        )
+        await live_client.patch(
+            f"/api/v1/workers/chrome-pool/{ep_b64}/mode",
+            json={"mode": "bridge"},
         )
