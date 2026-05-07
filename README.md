@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/xjh1994-opencli-admin-badge.png)](https://mseep.ai/app/xjh1994-opencli-admin)
+
 # OpenCLI Admin
 
 [![Docker](https://img.shields.io/badge/Docker%20Hub-0.3.6-blue?logo=docker)](https://hub.docker.com/u/xjh1994)
