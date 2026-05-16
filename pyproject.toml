@@ -84,6 +84,7 @@ omit = [
     "backend/processors/claude_processor.py",
     "backend/processors/openai_processor.py",
     "backend/processors/local_processor.py",
+    "backend/processors/external_processor.py",
     "backend/notifiers/email_notifier.py",
 ]
 

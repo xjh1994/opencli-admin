@@ -25,6 +25,7 @@ def list_processor_types() -> list[str]:
 def _load_all_processors() -> None:
     from backend.processors import (  # noqa: F401
         claude_processor,
+        external_processor,
         local_processor,
         openai_processor,
     )
