@@ -22,6 +22,7 @@ class ProcessRequest(BaseModel):
     prompt: str
     record: dict[str, Any] | None = None
     agent_id: str | None = None
+    trace_id: str | None = None
 
 
 @app.post("/process")
@@ -29,8 +30,8 @@ async def process(req: ProcessRequest) -> dict[str, Any]:
     """Echo a synthetic enrichment.
 
     Any JSON dict shape is acceptable; opencli-admin stores it verbatim.
-    A real agent (KohakuTerrarium creature, dify flow, custom LLM caller)
-    would render a prompt against its model and return tags/summary here.
+    A real agent (Pydantic AI, dify flow, custom LLM caller) would render
+    a prompt against its model and return tags/summary here.
     """
     title = (req.record or {}).get("title", "(no title)")
     return {
@@ -38,6 +39,12 @@ async def process(req: ProcessRequest) -> dict[str, Any]:
         "summary": f"Stub processed: {title[:80]}",
         "prompt_chars": len(req.prompt),
         "echo_agent_id": req.agent_id,
+        "_meta": {
+            "model": "stub",
+            "input_tokens": len(req.prompt),
+            "output_tokens": 0,
+            "trace_id": req.trace_id,
+        },
     }
 
 

@@ -67,3 +67,6 @@ celerybeat.pid
 # Ignore extension build intermediates; dist/background.js is committed
 chrome/extension-src/node_modules/
 chrome/extension-src/store-assets/
+
+# Local working artifacts (not for upstream)
+/PR-DESCRIPTION.md

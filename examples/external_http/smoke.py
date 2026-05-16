@@ -58,7 +58,10 @@ async def drive() -> None:
         assert "error" not in enr, f"record {i} returned error: {enr}"
         assert enr["echo_agent_id"] == "smoke-tagger"
         assert "Stub processed" in enr["summary"]
-        print(f"  [{i}] tags={enr['tags']} summary={enr['summary']!r} prompt_chars={enr['prompt_chars']}")
+        print(
+            f"  [{i}] tags={enr['tags']} summary={enr['summary']!r} "
+            f"prompt_chars={enr['prompt_chars']}"
+        )
 
 
 def main() -> int:
