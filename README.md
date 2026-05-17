@@ -7,7 +7,7 @@
 **OpenCLI WebUI** OpenCLI 可视化界面 [opencli-webui](https://github.com/xjh1994/opencli-webui)
 
 **仪表盘**
-<img width="1600" height="900" alt="dashboard" src="https://raw.githubusercontent.com/xjh1994/opencli-admin/develop/docs/dashboard.png" />
+<img width="1600" height="900" alt="dashboard" src="https://raw.githubusercontent.com/xjh1994/opencli-admin/main/docs/dashboard.png" />
 
 **Agent 节点自动路由**
 <img width="949" height="726" alt="clipboard-image-1774003758" src="https://github.com/user-attachments/assets/2838af3b-2ecb-4d3b-8d8e-21c69db174fc" />
@@ -388,6 +388,10 @@ AI 处理（可选）— Claude · OpenAI · DeepSeek · Kimi · GLM · Ollama
 ## 集成测试
 
 详见 [TESTING.md](TESTING.md)。
+
+## 数据模型
+
+`collected_records` 表结构、`normalized_data` JSON 字段语义、status 状态机、AI enrichment 形状以及下游查询的正确 SQL 姿势详见 [docs/schema.md](docs/schema.md)。下游消费者（自定义查询、外部 AI worker、数据导出）务必先看这份。
 
 ## 发布镜像
 
